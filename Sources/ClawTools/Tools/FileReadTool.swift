@@ -54,7 +54,7 @@ public struct FileReadTool: Tool {
       return errorPayload("file_read needs a non-empty \"path\" argument.")
     }
     guard let canonicalRoot = WorkspacePathContainment.canonicalPath(workspaceRoot.path) else {
-      return errorPayload("The workspace root is unavailable.")
+      return errorPayload(WorkspacePathContainment.rootUnavailableReason)
     }
     let canonicalTarget: String
     switch WorkspacePathContainment.resolveExisting(path: path, root: workspaceRoot.path) {

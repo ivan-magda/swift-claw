@@ -269,7 +269,7 @@ private extension ExecuteCodeTool {
 
   func authorizeAndLoad(paths: [String]) -> StageOutcome<[LoadedStage]> {
     guard WorkspacePathContainment.canonicalPath(workspaceRoot.path) != nil else {
-      return .failure("The workspace root is unavailable.")
+      return .failure(WorkspacePathContainment.rootUnavailableReason)
     }
 
     switch authorizeStages(paths) {
