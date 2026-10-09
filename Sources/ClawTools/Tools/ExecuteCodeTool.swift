@@ -591,13 +591,9 @@ private extension ExecuteCodeTool {
   ) -> StageOutcome<LoadedStage> {
     let liveRealpath: String
     switch WorkspacePathContainment.resolveExisting(path: record.path, root: workspaceRoot.path) {
-    case .refused:
-      return .failure("A staged path no longer resolves to its approved target; nothing ran.")
-    case .resolved(let resolved):
+    case .resolved(let resolved) where resolved == record.realpath:
       liveRealpath = resolved
-    }
-
-    guard liveRealpath == record.realpath else {
+    case .resolved, .refused:
       return .failure("A staged path no longer resolves to its approved target; nothing ran.")
     }
 
