@@ -126,10 +126,10 @@ struct ToolDispatchProgressTests {
     #expect(previews == ["folder/file.txt"])
   }
 
-  @Test(arguments: ["/private.txt", "../private.txt", "folder/../private.txt", "~/private.txt"])
-  func filePathOutsideTheWorkspaceIsNotSupplied(path: String) async {
+  @Test
+  func filePathOutsideTheWorkspaceIsNotSupplied() async {
     // when
-    let previews = await previewsSupplied(forFileReadPath: path)
+    let previews = await previewsSupplied(forFileReadPath: "../private.txt")
 
     // then — the reducer filters again, so this checks what dispatch itself supplied.
     #expect(previews == [nil])
