@@ -2381,11 +2381,20 @@ For an opaque value that needs to remain intact for review, such as a pinned ima
 `swiftlint:disable:next line_length` with a reason after `//`. Do not exempt a whole file or test
 suite to accommodate individual literals.
 
-Every local target in `Package.swift` enables Swift's `MemberImportVisibility` upcoming feature.
-A file must import the module that declares each extension member it uses; a member that leaks in
-through another file's import or a re-exporting dependency no longer compiles. A missing import,
-and the undeclared target dependency it can hide, therefore fails the build. The flag does not
-report unused imports, so reviewers still check import necessity.
+Every local target in `Package.swift` enables Swift's `MemberImportVisibility` upcoming feature
+on macOS. A file must import the module that declares each extension member it uses; a member that
+leaks in through another file's import or a re-exporting dependency no longer compiles. A missing
+import, and the undeclared target dependency it can hide, therefore fails the build. The flag does
+not report unused imports, so reviewers still check import necessity.
+
+Linux builds leave the feature off. The Swift 6.4 toolchain can credit glibc declarations such as
+`stat` and its fields to the `CDispatch` or `CoreFoundation` Clang module instead of Glibc,
+depending on which module loads the header first
+([swiftlang/swift#85229](https://github.com/swiftlang/swift/pull/85229)). The required import then
+changes with build mode and order, so a cached CI build can pass while a clean release build fails.
+The macOS build still checks every shared file; only code under `#if canImport(Glibc)` goes
+unchecked.
+Re-enable the feature on Linux once the pinned toolchain includes the Glibc modulemap fix.
 
 Passing tools verifies the automated subset, not every semantic rule. Reviews also check file
 responsibility/names, meaningful API and closure-parameter names, initialism spelling, overload
