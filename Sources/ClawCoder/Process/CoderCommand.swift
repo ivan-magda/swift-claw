@@ -17,10 +17,12 @@ extension CoderCommand {
   /// time to run.
   static func remainingTime(until deadline: ContinuousClock.Instant) throws -> Duration {
     try Task.checkCancellation()
+
     let remaining = ContinuousClock.now.duration(to: deadline)
     guard remaining > .zero else {
       throw CoderGitFailure.deadline
     }
+
     return remaining
   }
 }
