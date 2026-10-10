@@ -2315,6 +2315,12 @@ non-Swift file whose name or stem no other tracked file mentions.
 entry, or one that no longer matches a finding, also fails. Unused declarations and imports need
 an indexed build and stay outside this gate.
 
+Python scripts, in `scripts/` and in the agent skills, follow PEP 8 and PEP 257 as configured in
+`.ruff.toml`: the ruff formatter's 88-column layout, plus lint rules for naming, imports,
+docstrings, type annotations and likely bugs. They run on Python 3.9, which macOS ships with the
+Xcode tools. The lint gate does not run ruff; a changed script must pass `ruff format --check`
+and `ruff check` before review.
+
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
 which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses

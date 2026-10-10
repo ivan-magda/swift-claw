@@ -210,6 +210,11 @@ formatter-on-save integrations: invoking Apple swift-format alone can undo the f
 layout. Xcode users can run the saved-file command from a terminal or external-tool integration;
 `.editorconfig` by itself does not install an Xcode formatter.
 
+Python scripts follow `.ruff.toml`, as
+[architecture §19.2](ARCHITECTURE.md#192-source-formatting-and-lint) describes. An editor's ruff
+integration applies it; from a terminal, run `ruff format` and then `ruff check` on the changed
+scripts.
+
 ## Review the seven sections
 
 The existing tools cover mechanical layout. The following details remain manual review checks:

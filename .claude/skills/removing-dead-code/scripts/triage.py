@@ -3,229 +3,385 @@
 
 Usage (from the package root): python3 -I triage.py ALL_CSV PROD_CSV > report.md
 
-ALL_CSV is a scan with tests included; PROD_CSV ignores tests, so its extra rows are production
-declarations that only tests reach. The notes are hints from simple source reading. They point
-at the check to make; they never prove that a declaration is dead or alive.
+ALL_CSV is a scan with tests included; PROD_CSV ignores tests, so its extra rows are
+production declarations that only tests reach. The notes are hints from simple source
+reading. They point at the check to make; they never prove that a declaration is dead or
+alive.
 """
 
+from __future__ import annotations
+
+import argparse
 import collections
 import csv
+import functools
 import re
 import sys
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+from typing import NamedTuple
 
-TYPE_DECL = re.compile(r"^(\s*)(?:[\w@()]+\s+)*(struct|class|enum|actor|protocol|extension)\s+(\w+)([^{]*)")
+# How far above a declaration to look for its attributes and doc comment.
+MAX_ATTRIBUTE_LINES = 400
+
+TYPE_DECLARATION = re.compile(
+    r"^(?P<indent>\s*)(?:[\w@()]+\s+)*"
+    r"(?P<kind>struct|class|enum|actor|protocol|extension)\s+(?P<name>\w+)"
+    r"(?P<inheritance>[^{]*)"
+)
+FUNCTION_DECLARATION = re.compile(
+    r"^(?P<indent>\s*)(?:[\w@()]+\s+)*func\s+(?P<name>\w+)"
+)
+FUNCTION_START = re.compile(r"\s*(?:\w+\s+)*func\s")
+# The previous member's first line ends the attribute block above a declaration.
+MEMBER_START = re.compile(r"(?:\w+\s+)*(?:func|let|var|case)\s")
+TEST_SEAM_NAME = re.compile(r"For(?:Testing|Tests)\b")
+TEST_SEAM_COMMENT = re.compile(r"\b(?:tests?|seam)\b", re.IGNORECASE)
+
+# The default for tables without a "used only by flagged" note.
+NO_FUNCTIONS: frozenset[str] = frozenset()
+
+# Periphery hints that are not plain "unused".
+ASSIGN_ONLY = "assignOnlyProperty"
+REDUNDANT_PUBLIC = "redundantPublicAccessibility"
+
+NOTES_CAVEAT = """\
+Notes are hints for the check to make. A row without notes still needs every check.
+"""
+TEST_ONLY_CAVEAT = """\
+Seams, test conveniences and contracts live here. A removed production caller
+(`git log -S'<name>' -- Sources`) is what makes one a leftover.
+"""
+IMPORTS_CAVEAT = """\
+This list covers only modules Periphery indexed. Imports of package dependencies
+(GRDB, Logging, NIO...) are never reported, and some project imports are missed.
+"""
+PARAMETER_HINT = (
+    "check the signature it must match: protocol, override, closure or function type"
+)
 
 
-def read_rows(path):
-    with open(path, newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+class Finding(NamedTuple):
+    """One row of a Periphery CSV scan."""
+
+    kind: str
+    name: str
+    location: str  # path:line:column
+    ids: str
+    hints: str
+
+    @classmethod
+    def from_row(cls, row: dict[str, str]) -> Finding:
+        """Make a finding from a CSV row."""
+        return cls(row["Kind"], row["Name"], row["Location"], row["IDs"], row["Hints"])
+
+    @property
+    def path(self) -> str:
+        """The file that declares it."""
+        return self.location.rsplit(":", 2)[0]
+
+    @property
+    def line(self) -> int:
+        """The 1-based line of the declaration."""
+        return int(self.location.rsplit(":", 2)[1])
 
 
-class Source:
-    """Caches file lines so each finding can look at its neighborhood."""
+class TypeDeclaration(NamedTuple):
+    """A type or extension declaration line."""
 
-    def __init__(self):
-        self.cache = {}
-
-    def lines(self, path):
-        if path not in self.cache:
-            try:
-                with open(path, encoding="utf-8") as handle:
-                    self.cache[path] = handle.read().split("\n")
-            except OSError:
-                self.cache[path] = []
-        return self.cache[path]
+    kind: str  # struct, class, enum, actor, protocol or extension
+    name: str
+    inheritance: str  # the rest of the line up to the opening brace
 
 
-def split_location(location):
-    path, line, _ = location.rsplit(":", 2)
-    return path, int(line)
+class ParameterizedTest(NamedTuple):
+    """A @Test function that takes arguments; Swift Testing runs it with each one."""
+
+    first_line: int  # 0-based index of the func line
+    last_line: int  # 0-based index of the line with the opening brace
+    text: str  # its attributes and signature
 
 
-def attributes_above(lines, index):
-    """Returns the attribute and doc-comment block directly above a declaration line."""
-    block = []
-    cursor = index - 1
-    while cursor >= 0 and len(block) < 400:
-        text = lines[cursor].strip()
-        if not text or text == "}" or re.match(r"(?:\w+\s+)*(func|let|var|case)\s", text):
+def read_findings(path: str) -> list[Finding]:
+    """Read a Periphery CSV scan."""
+    with Path(path).open(newline="", encoding="utf-8") as scan:
+        return [Finding.from_row(row) for row in csv.DictReader(scan)]
+
+
+@functools.cache
+def source_lines(path: str) -> tuple[str, ...]:
+    """Return a file's lines, or none if it is gone. Each file is read once."""
+    try:
+        return tuple(Path(path).read_text(encoding="utf-8").split("\n"))
+    except OSError:
+        return ()
+
+
+def indentation(text: str) -> int:
+    """Return the width of a line's leading whitespace."""
+    return len(text) - len(text.lstrip())
+
+
+def attributes_above(lines: Sequence[str], index: int) -> str:
+    """Return the attribute and doc-comment block directly above a declaration line."""
+    block: list[str] = []
+    for line in reversed(lines[max(0, index - MAX_ATTRIBUTE_LINES) : index]):
+        text = line.strip()
+        if not text or text == "}" or MEMBER_START.match(text):
             break
         block.append(text)
-        cursor -= 1
     return "\n".join(reversed(block))
 
 
-def enclosing_type(lines, index):
-    indentation = len(lines[index]) - len(lines[index].lstrip())
-    for cursor in range(index - 1, -1, -1):
-        match = TYPE_DECL.match(lines[cursor])
-        if match and len(match.group(1)) < indentation:
-            return match.group(2), match.group(3), match.group(4)
+def is_parameterized_test(attributes: str) -> bool:
+    """Return whether these attributes mark a @Test that takes arguments."""
+    return "@Test" in attributes and "arguments" in attributes
+
+
+def enclosing_type(lines: Sequence[str], index: int) -> TypeDeclaration | None:
+    """Return the closest type declaration above that is indented less than the line."""
+    depth = indentation(lines[index])
+    for text in reversed(lines[:index]):
+        match = TYPE_DECLARATION.match(text)
+        if match and len(match["indent"]) < depth:
+            return TypeDeclaration(match["kind"], match["name"], match["inheritance"])
     return None
 
 
-def parameterized_signatures(lines):
-    """Signatures (with their attributes) of @Test functions that take arguments."""
-    signatures = []
+def enclosing_function(lines: Sequence[str], index: int) -> str | None:
+    """Return the name of the closest less-indented function above the line."""
+    depth = indentation(lines[index])
+    for text in reversed(lines[:index]):
+        match = FUNCTION_DECLARATION.match(text)
+        if match and len(match["indent"]) < depth:
+            return match["name"]
+    return None
+
+
+@functools.cache
+def parameterized_tests(path: str) -> tuple[ParameterizedTest, ...]:
+    """Return the parameterized @Test functions in a file."""
+    lines = source_lines(path)
+    tests: list[ParameterizedTest] = []
     for index, text in enumerate(lines):
-        if re.match(r"\s*(?:\w+\s+)*func\s", text):
-            above = attributes_above(lines, index)
-            if "@Test" in above and "arguments" in above:
-                signature = [text]
-                cursor = index
-                while "{" not in lines[cursor] and cursor + 1 < len(lines):
-                    cursor += 1
-                    signature.append(lines[cursor])
-                signatures.append((index, cursor, above + "\n" + "\n".join(signature)))
-    return signatures
+        if not FUNCTION_START.match(text):
+            continue
+        attributes = attributes_above(lines, index)
+        if not is_parameterized_test(attributes):
+            continue
+        last = index
+        while "{" not in lines[last] and last + 1 < len(lines):
+            last += 1
+        signature = "\n".join(lines[index : last + 1])
+        tests.append(ParameterizedTest(index, last, f"{attributes}\n{signature}"))
+    return tuple(tests)
 
 
-def conforms(lines, type_name, inheritance, protocols):
+def conforms_to(
+    lines: Sequence[str], declaration: TypeDeclaration, protocols: Iterable[str]
+) -> bool:
+    """Return whether the type adopts one of the protocols, here or in this file."""
     pattern = "|".join(protocols)
-    if re.search(rf"\b({pattern})\b", inheritance or ""):
+    if re.search(rf"\b({pattern})\b", declaration.inheritance):
         return True
-    extension = re.compile(rf"extension\s+{type_name}\s*:[^{{]*\b({pattern})\b")
+    extension = re.compile(rf"extension\s+{declaration.name}\s*:[^{{]*\b({pattern})\b")
     return any(extension.search(text) for text in lines)
 
 
-def enclosing_function(lines, index):
-    indentation = len(lines[index]) - len(lines[index].lstrip())
-    for cursor in range(index - 1, -1, -1):
-        match = re.match(r"^(\s*)(?:[\w@()]+\s+)*func\s+(\w+)", lines[cursor])
-        if match and len(match.group(1)) < indentation:
-            return match.group(2)
-    return None
-
-
-def notes_for(row, source, flagged_functions=frozenset()):
-    path, line = split_location(row["Location"])
-    lines = source.lines(path)
-    if not lines or line > len(lines):
-        return ["source not found at this location; rescan"]
-    index = line - 1
-    kind = row["Kind"]
-    name = row["Name"]
-    notes = []
-    above = attributes_above(lines, index)
-    signatures = parameterized_signatures(lines) if path.startswith("Tests/") else []
-
-    if kind.startswith("function") and "@Test" in above and "arguments" in above:
+def parameterized_test_notes(
+    finding: Finding, index: int, attributes: str
+) -> list[str]:
+    """Return hints that Swift Testing reaches the declaration at runtime."""
+    notes: list[str] = []
+    in_tests = finding.path.startswith("Tests/")
+    tests = parameterized_tests(finding.path) if in_tests else ()
+    if finding.kind.startswith("function") and is_parameterized_test(attributes):
         notes.append("parameterized @Test: Swift Testing runs it")
-    if kind == "enum" and any(re.search(rf"\b{name}\b", text) for _, _, text in signatures):
-        notes.append("argument type of a parameterized @Test")
-    if kind == "var.parameter" and any(start <= index <= end for start, end, _ in signatures):
-        notes.append("argument of a parameterized @Test")
-
-    enclosing = enclosing_type(lines, index)
-    if enclosing:
-        type_kind, type_name, inheritance = enclosing
-        if kind == "enumelement" and conforms(lines, type_name, inheritance, ["CaseIterable"]):
-            notes.append(f"{type_name} is CaseIterable: reachable through allCases")
-        if kind.startswith("var.instance"):
-            if conforms(lines, type_name, inheritance, ["Encodable", "Codable"]):
-                notes.append(f"{type_name} is Encodable: the field is serialized")
-            elif conforms(lines, type_name, inheritance, ["Equatable", "Hashable"]):
-                notes.append(f"{type_name} is Equatable/Hashable: the field takes part in ==")
-        if type_kind == "protocol":
-            notes.append("protocol requirement: check calls on conforming types and documented contracts")
-
-    if enclosing and kind.startswith("function") and enclosing[2].strip(" :"):
-        notes.append(f"may witness a requirement of: {enclosing[2].strip(' :')}")
-    if kind == "var.parameter" and not notes:
-        notes.append("check the signature it must match: protocol, override, closure or function type")
-    if path.startswith("Sources/") and (
-        re.search(r"For(Testing|Tests)\b", name) or re.search(r"\b(tests?|seam)\b", above, re.I)
+    if finding.kind == "enum":
+        name = re.compile(rf"\b{finding.name}\b")
+        if any(name.search(test.text) for test in tests):
+            notes.append("argument type of a parameterized @Test")
+    if finding.kind == "var.parameter" and any(
+        test.first_line <= index <= test.last_line for test in tests
     ):
-        notes.append("named or documented as a test seam")
-
-    bare = name.split("(")[0]
-    if kind != "var.parameter" and re.fullmatch(r"\w+", bare):
-        callers = {
-            enclosing_function(lines, other)
-            for other, text in enumerate(lines)
-            if other != index and re.search(rf"\b{bare}\b", text)
-        } - {None}
-        if callers and callers <= flagged_functions:
-            notes.append(f"used only by flagged {', '.join(sorted(callers))}: settle that first")
+        notes.append("argument of a parameterized @Test")
     return notes
 
 
-def table(rows, source, flagged_functions=frozenset(), extra_note=None):
-    output = ["| Location | Kind | Name | Notes |", "| --- | --- | --- | --- |"]
-    for row in rows:
-        notes = notes_for(row, source, flagged_functions)
-        if extra_note:
-            notes.append(extra_note)
-        output.append(
-            f"| {row['Location']} | {row['Kind']} | `{row['Name']}` | {'; '.join(notes) or '-'} |"
+def enclosing_type_notes(
+    finding: Finding, lines: Sequence[str], declaration: TypeDeclaration
+) -> list[str]:
+    """Return hints from the type that declares the finding."""
+    notes: list[str] = []
+    type_name = declaration.name
+    if finding.kind == "enumelement" and conforms_to(
+        lines, declaration, ["CaseIterable"]
+    ):
+        notes.append(f"{type_name} is CaseIterable: reachable through allCases")
+    if finding.kind.startswith("var.instance"):
+        if conforms_to(lines, declaration, ["Encodable", "Codable"]):
+            notes.append(f"{type_name} is Encodable: the field is serialized")
+        elif conforms_to(lines, declaration, ["Equatable", "Hashable"]):
+            notes.append(
+                f"{type_name} is Equatable/Hashable: the field takes part in =="
+            )
+    if declaration.kind == "protocol":
+        notes.append(
+            "protocol requirement: check calls on conforming types "
+            "and documented contracts"
         )
-    return "\n".join(output)
+    conformances = declaration.inheritance.strip(" :")
+    if finding.kind.startswith("function") and conformances:
+        notes.append(f"may witness a requirement of: {conformances}")
+    return notes
 
 
-def main():
-    all_rows = read_rows(sys.argv[1])
-    prod_rows = read_rows(sys.argv[2])
-    source = Source()
-    seen = {row["IDs"] for row in all_rows}
+def is_test_seam(name: str, attributes: str) -> bool:
+    """Return whether a declaration's name or doc comment says tests use it."""
+    return bool(TEST_SEAM_NAME.search(name) or TEST_SEAM_COMMENT.search(attributes))
 
-    imports = [row for row in all_rows if row["Kind"] == "module"]
-    assign_only = [row for row in all_rows if row["Hints"] == "assignOnlyProperty"]
-    redundant = [row for row in all_rows if row["Hints"] == "redundantPublicAccessibility"]
+
+def callers(finding: Finding, lines: Sequence[str], index: int) -> set[str]:
+    """Return the functions in the same file whose bodies mention the declaration."""
+    bare_name = finding.name.split("(")[0]
+    if finding.kind == "var.parameter" or not re.fullmatch(r"\w+", bare_name):
+        return set()
+    mention = re.compile(rf"\b{bare_name}\b")
+    names: set[str] = set()
+    for other, text in enumerate(lines):
+        if other != index and mention.search(text):
+            caller = enclosing_function(lines, other)
+            if caller:
+                names.add(caller)
+    return names
+
+
+def notes_for(
+    finding: Finding, flagged_functions: frozenset[str] = NO_FUNCTIONS
+) -> list[str]:
+    """Return hints about why Periphery may be wrong about this declaration."""
+    lines = source_lines(finding.path)
+    if not lines or finding.line > len(lines):
+        return ["source not found at this location; rescan"]
+
+    index = finding.line - 1
+    attributes = attributes_above(lines, index)
+    notes = parameterized_test_notes(finding, index, attributes)
+    declaration = enclosing_type(lines, index)
+    if declaration:
+        notes += enclosing_type_notes(finding, lines, declaration)
+    if finding.kind == "var.parameter" and not notes:
+        notes.append(PARAMETER_HINT)
+    if finding.path.startswith("Sources/") and is_test_seam(finding.name, attributes):
+        notes.append("named or documented as a test seam")
+    if flagged_functions:
+        users = callers(finding, lines, index)
+        if users and users <= flagged_functions:
+            notes.append(
+                f"used only by flagged {', '.join(sorted(users))}: settle that first"
+            )
+    return notes
+
+
+def markdown_table(
+    findings: Iterable[Finding], flagged_functions: frozenset[str] = NO_FUNCTIONS
+) -> str:
+    """Return the findings as a Markdown table with their notes."""
+    rows = ["| Location | Kind | Name | Notes |", "| --- | --- | --- | --- |"]
+    for finding in findings:
+        notes = "; ".join(notes_for(finding, flagged_functions)) or "-"
+        rows.append(
+            f"| {finding.location} | {finding.kind} | `{finding.name}` | {notes} |"
+        )
+    return "\n".join(rows)
+
+
+def print_unused_imports(imports: Iterable[Finding]) -> None:
+    """Print the unused imports grouped by file."""
+    print("## Unused imports reported by Periphery\n")
+    print(IMPORTS_CAVEAT)
+    by_file: collections.defaultdict[str, list[str]] = collections.defaultdict(list)
+    for finding in imports:
+        by_file[finding.path].append(f"{finding.name} (line {finding.line})")
+    for path in sorted(by_file):
+        print(f"- {path}: {', '.join(by_file[path])}")
+    print()
+
+
+def print_assign_only(properties: Iterable[Finding]) -> None:
+    """Print assign-only properties: counted when explained, listed when not."""
+    print("## Assign-only properties\n")
+    explained: collections.Counter[str] = collections.Counter()
+    unexplained: list[Finding] = []
+    for finding in properties:
+        notes = notes_for(finding)
+        if notes:
+            explained[notes[0]] += 1
+        else:
+            unexplained.append(finding)
+    for note, count in explained.most_common():
+        print(f"- {count} × {note}")  # noqa: RUF001 (a multiplication sign)
+    print(f"\n{len(unexplained)} without a structural explanation:\n")
+    print(markdown_table(unexplained))
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse the command line."""
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("all_csv", help="Periphery scan with tests included")
+    parser.add_argument("prod_csv", help="Periphery scan of production code only")
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Print the triage report."""
+    arguments = parse_arguments()
+    findings = read_findings(arguments.all_csv)
+    production_findings = read_findings(arguments.prod_csv)
+
+    imports = [f for f in findings if f.kind == "module"]
+    assign_only = [f for f in findings if f.hints == ASSIGN_ONLY]
+    redundant_public = [f for f in findings if f.hints == REDUNDANT_PUBLIC]
     unused = [
-        row
-        for row in all_rows
-        if row not in imports and row not in assign_only and row not in redundant
+        f
+        for f in findings
+        if f.kind != "module" and f.hints not in {ASSIGN_ONLY, REDUNDANT_PUBLIC}
     ]
+    # A declaration flagged without tests but not with them is one only tests reach.
+    flagged_with_tests = {f.ids for f in findings}
     test_only = [
-        row
-        for row in prod_rows
-        if row["IDs"] not in seen and row["Kind"] != "module" and row["Hints"] == "unused"
+        f
+        for f in production_findings
+        if f.ids not in flagged_with_tests
+        and f.kind != "module"
+        and f.hints == "unused"
     ]
 
     print("# Periphery triage\n")
     print(
         f"Unused declarations: {len(unused)}. Test-only production declarations: "
         f"{len(test_only)}. Unused imports: {len(imports)}. Assign-only properties: "
-        f"{len(assign_only)}. Redundant public (access level, not dead code): {len(redundant)}.\n"
+        f"{len(assign_only)}. Redundant public (access level, not dead code): "
+        f"{len(redundant_public)}.\n"
     )
-    print("Notes are hints for the check to make. A row without notes still needs every check.\n")
+    print(NOTES_CAVEAT)
 
     flagged_functions = frozenset(
-        row["Name"].split("(")[0] for row in unused if row["Kind"].startswith("function")
+        f.name.split("(")[0] for f in unused if f.kind.startswith("function")
     )
     print("## Unused declarations, tests included\n")
-    print(table(unused, source, flagged_functions) + "\n")
+    print(markdown_table(unused, flagged_functions) + "\n")
 
     print("## Production declarations that only tests reach\n")
-    print("Seams, test conveniences and contracts live here. A removed production caller")
-    print("(`git log -S'<name>' -- Sources`) is what makes one a leftover.\n")
-    print(table(test_only, source) + "\n")
+    print(TEST_ONLY_CAVEAT)
+    print(markdown_table(test_only) + "\n")
 
-    print("## Unused imports reported by Periphery\n")
-    print("This list covers only modules Periphery indexed. Imports of package dependencies")
-    print("(GRDB, Logging, NIO...) are never reported, and some project imports are missed.\n")
-    by_file = collections.defaultdict(list)
-    for row in imports:
-        path, line = split_location(row["Location"])
-        by_file[path].append(f"{row['Name']} (line {line})")
-    for path in sorted(by_file):
-        print(f"- {path}: {', '.join(by_file[path])}")
-    print()
-
-    print("## Assign-only properties\n")
-    explained = collections.Counter()
-    unexplained = []
-    for row in assign_only:
-        notes = notes_for(row, source)
-        if notes:
-            explained[notes[0]] += 1
-        else:
-            unexplained.append(row)
-    for note, count in explained.most_common():
-        print(f"- {count} × {note}")
-    print(f"\n{len(unexplained)} without a structural explanation:\n")
-    print(table(unexplained, source))
+    print_unused_imports(imports)
+    print_assign_only(assign_only)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
