@@ -133,12 +133,11 @@ if [[ "$(uname -s)" == Darwin ]]; then
   cmp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
 fi
 
-# given: a package whose target declares a dependency it never imports, and a file nothing names.
-dead_code="$scratch/dead-code"
-mkdir -p "$dead_code/scripts" "$dead_code/BuildTools" "$dead_code/Sources/App" \
-  "$dead_code/Sources/Kit" "$dead_code/docs"
-cp "$repository_root/scripts/check-dead-code.py" "$dead_code/scripts/"
-cat > "$dead_code/Package.swift" <<'MANIFEST'
+# given: the style repository becomes a package whose target never imports its dependency.
+mkdir -p Sources/App Sources/Kit
+printf 'struct App {}\n' > Sources/App/App.swift
+printf 'public struct Kit {}\n' > Sources/Kit/Kit.swift
+cat > Package.swift <<'MANIFEST'
 // swift-tools-version: 6.0
 import PackageDescription
 
@@ -147,48 +146,85 @@ let package = Package(
   targets: [.target(name: "App", dependencies: ["Kit"]), .target(name: "Kit")]
 )
 MANIFEST
+cp "$repository_root/scripts/check-dead-code.py" scripts/
+
+# when: the whole-repository check runs.
+if scripts/lint.sh > "$scratch/whole.log" 2>&1; then
+  fail 'whole-repository check accepted an orphaned dependency'
+fi
+
+# then: lint ran its dead-code stage, which reported the dependency.
+grep -q 'lint: Dead-code references' "$scratch/whole.log"
+grep -q 'App declares Kit, but no file in the target imports it' "$scratch/whole.log"
+
+# given: Python is missing from PATH.
+mkdir "$scratch/no-python"
+for executable in dirname swift swiftlint git; do
+  ln -s "$(command -v "$executable")" "$scratch/no-python/$executable"
+done
+
+# when / then: the whole-repository check stops before any stage and names the missing tool.
+if PATH="$scratch/no-python" /bin/bash scripts/lint.sh > "$scratch/no-python.log" 2>&1; then
+  fail 'whole-repository check ran without Python'
+fi
+grep -q 'python3 not found' "$scratch/no-python.log"
+
+# given: a separate package with the same orphaned dependency and a file nothing names.
+dead_code="$scratch/dead-code"
+mkdir -p "$dead_code/scripts" "$dead_code/BuildTools" "$dead_code/Sources/App" \
+  "$dead_code/Sources/Kit" "$dead_code/docs"
+cp "$repository_root/scripts/check-dead-code.py" "$dead_code/scripts/"
+cp Package.swift "$dead_code/"
 printf 'struct App {}\n' > "$dead_code/Sources/App/App.swift"
 printf 'public struct Kit {}\n' > "$dead_code/Sources/Kit/Kit.swift"
 printf 'diagram\n' > "$dead_code/docs/orphan-diagram.txt"
 printf 'Run scripts/check-dead-code.py\n' > "$dead_code/README.md"
 printf '.build/\n' > "$dead_code/.gitignore"
+allowlist="$dead_code/BuildTools/dead-code-allowlist.txt"
 check_dead_code() {
   (cd "$dead_code" && python3 -I scripts/check-dead-code.py) > "$scratch/dead-code.log" 2>&1
 }
 (cd "$dead_code" && git init --quiet && git add .)
 
-# when / then: both findings fail the check with the allowlist line that would accept them.
+# when / then: both findings fail with the allowlist line that would keep them.
 if check_dead_code; then
   fail 'dead-code check accepted an orphaned dependency and an unreferenced file'
 fi
-grep -q 'App declares Kit, but no file in the target imports it' "$scratch/dead-code.log"
+grep -q "add 'dependency App Kit  # reason'" "$scratch/dead-code.log"
 grep -q "add 'file docs/orphan-diagram.txt  # reason'" "$scratch/dead-code.log"
 
-# when: the target imports its dependency and the allowlist keeps the file with a reason.
-printf 'import Kit\n' > "$dead_code/Sources/App/App.swift"
-printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' \
-  > "$dead_code/BuildTools/dead-code-allowlist.txt"
+# when: both are kept with reasons, and an untracked scratch file appears.
+printf 'dependency App Kit  # kept for the fixture\n' > "$allowlist"
+printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' >> "$allowlist"
+printf 'scratch\n' > "$dead_code/docs/untracked-scratch.txt"
 
-# then: the check passes.
+# then: the check passes; an untracked file is not a finding.
 check_dead_code || {
   cat "$scratch/dead-code.log" >&2
-  fail 'dead-code check rejected an imported dependency or an allowlisted file'
+  fail 'dead-code check rejected allowlisted findings or an untracked file'
 }
 
-# when / then: an entry without a reason is rejected.
-printf 'file docs/orphan-diagram.txt\n' > "$dead_code/BuildTools/dead-code-allowlist.txt"
-if check_dead_code; then
-  fail 'dead-code check accepted an allowlist entry without a reason'
-fi
-
-# when / then: an entry whose file is gone is reported as stale.
-printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' \
-  > "$dead_code/BuildTools/dead-code-allowlist.txt"
-rm "$dead_code/docs/orphan-diagram.txt"
+# when / then: once App imports Kit, the dependency entry is stale.
+printf 'import Kit\n' > "$dead_code/Sources/App/App.swift"
 if check_dead_code; then
   fail 'dead-code check accepted a stale allowlist entry'
 fi
-grep -q 'no longer matches a finding' "$scratch/dead-code.log"
+grep -q "'dependency App Kit' no longer matches a finding" "$scratch/dead-code.log"
+
+# when / then: an entry without a reason is a parse error.
+printf 'file docs/orphan-diagram.txt\n' > "$allowlist"
+if check_dead_code; then
+  fail 'dead-code check accepted an allowlist entry without a reason'
+fi
+grep -q "expected 'file <path>  # reason'" "$scratch/dead-code.log"
+
+# when / then: the same entry twice is rejected.
+printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' > "$allowlist"
+printf 'file docs/orphan-diagram.txt  # kept twice\n' >> "$allowlist"
+if check_dead_code; then
+  fail 'dead-code check accepted a duplicate allowlist entry'
+fi
+grep -q 'duplicate entry' "$scratch/dead-code.log"
 
 printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight, '
 printf 'dead-code references)\n'

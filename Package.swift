@@ -270,7 +270,6 @@ let package = Package(
         "ClawSubprocess",
         "ClawTools",
         "ClawCoder",
-        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),

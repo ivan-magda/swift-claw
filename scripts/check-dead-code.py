@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Fail on target dependencies and files that nothing in the repository uses.
 
-Usage: python3 -I scripts/check-dead-code.py
+Usage: python3 -I scripts/check-dead-code.py [--report]
 
-Both checks are deterministic and need no build:
-  - a Package.swift target dependency that no Swift file in that target imports;
-  - a tracked non-Swift file whose name or stem no other file mentions.
+Both checks are deterministic. Neither builds the package; the first evaluates only the manifest.
+  - A Package.swift target dependency that no Swift file in that target imports. Untracked Swift
+    files count, because SwiftPM compiles them too.
+  - A tracked non-Swift file whose name, or stem of four or more characters, no other tracked
+    file mentions. Stage a new file to include it.
 
 Findings kept on purpose are listed in BuildTools/dead-code-allowlist.txt with a reason. The check
-also fails on an entry that no longer matches a finding, so the list cannot go stale. Unused
-declarations and imports need an indexed build; .claude/skills/removing-dead-code covers them.
+also fails on an entry that no longer matches a finding, so the list cannot go stale. --report
+prints every finding, allowlisted ones included, and exits 0: the leads for an audit.
+
+A product is matched by its name, or its module alias, against imported module names. A product
+whose module has another name needs an allowlist entry. Unused declarations and imports need an
+indexed build; .claude/skills/removing-dead-code covers them.
 """
 
 import json
@@ -19,8 +25,9 @@ import subprocess
 import sys
 
 ALLOWLIST = "BuildTools/dead-code-allowlist.txt"
+CHECKER = "scripts/check-dead-code.py"
 IMPORT = re.compile(
-    r"\s*(?:@[\w()]+\s+)*(?:public\s+|package\s+|internal\s+|private\s+|fileprivate\s+)?"
+    r"\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:public\s+|package\s+|internal\s+|private\s+|fileprivate\s+)?"
     r"import\s+(?:struct\s+|class\s+|enum\s+|protocol\s+|func\s+|var\s+|let\s+|typealias\s+)?"
     r"(\w+)"
 )
@@ -32,45 +39,77 @@ CONVENTIONAL_NAMES = {
     ".swiftlint.yml", "Package.resolved", "LICENSE", "README.md", "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md", "SECURITY.md", "AGENTS.md", "CLAUDE.md",
 }
+# Mentions here keep nothing alive: this script's own text, the allowlist, and dated research.
+NOT_REFERENCES = (CHECKER, ALLOWLIST)
+SOURCE_ROOTS = {
+    "test": ("Tests", "Sources", "Source", "src", "srcs"),
+    "plugin": ("Plugins",),
+}
+DEFAULT_SOURCE_ROOTS = ("Sources", "Source", "src", "srcs")
 
 
-def git(*arguments):
-    return subprocess.run(["git", *arguments], check=True, capture_output=True, text=True).stdout
-
-
-def repository_files():
-    listing = git("ls-files", "-z", "--cached", "--others", "--exclude-standard")
+def git_files(*options):
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", *options], check=True, capture_output=True, text=True
+    ).stdout
     return sorted(path for path in listing.split("\0") if path and os.path.isfile(path))
 
 
 def target_directory(target):
     if target.get("path"):
-        return target["path"].rstrip("/")
-    return ("Tests/" if target["type"] == "test" else "Sources/") + target["name"]
+        return os.path.normpath(target["path"])
+    for root in SOURCE_ROOTS.get(target["type"], DEFAULT_SOURCE_ROOTS):
+        candidate = os.path.join(root, target["name"])
+        if os.path.isdir(candidate):
+            return candidate
+    sys.exit(f"check-dead-code: cannot find the directory of target {target['name']}")
 
 
-def dependency_name(dependency):
-    for kind in ("byName", "target", "product"):
+def imported_modules(path):
+    """Top-level imports, ignoring lines inside block comments and multiline string literals."""
+    modules = set()
+    in_comment = in_string = False
+    with open(path, encoding="utf-8") as source:
+        for line in source:
+            if not in_comment and not in_string:
+                match = IMPORT.match(line)
+                if match:
+                    modules.add(match.group(1))
+            stripped = line.strip()
+            if in_comment:
+                in_comment = "*/" not in line
+            elif not in_string and stripped.startswith("/*"):
+                in_comment = "*/" not in stripped[2:]
+            elif line.count('"""') % 2 == 1:
+                in_string = not in_string
+    return modules
+
+
+def accepted_names(dependency):
+    """The import names that use this dependency: its own name and any module alias."""
+    for kind in ("byName", "target"):
         if kind in dependency:
-            return dependency[kind][0]
-    return None
+            return dependency[kind][0], {dependency[kind][0]}
+    if "product" in dependency:
+        name, _, aliases = dependency["product"][:3]
+        return name, {name, *(aliases or {}).values()}
+    return None, set()
 
 
-def orphaned_dependencies(files):
+def orphaned_dependencies(swift_files):
     manifest = subprocess.run(
         ["swift", "package", "dump-package"], check=True, capture_output=True, text=True
     ).stdout
     findings = set()
     for target in json.loads(manifest)["targets"]:
-        directory = target_directory(target) + "/"
+        directory = target_directory(target) + os.sep
         imported = set()
-        for path in files:
-            if path.startswith(directory) and path.endswith(".swift"):
-                with open(path, encoding="utf-8") as source:
-                    imported.update(m.group(1) for m in map(IMPORT.match, source) if m)
+        for path in swift_files:
+            if path.startswith(directory):
+                imported |= imported_modules(path)
         for dependency in target.get("dependencies", []):
-            name = dependency_name(dependency)
-            if name and name not in imported:
+            name, names = accepted_names(dependency)
+            if name and not names & imported:
                 findings.add(f"{target['name']} {name}")
     return findings
 
@@ -79,25 +118,25 @@ def is_conventional(path):
     return path.startswith(CONVENTIONAL_PREFIXES) or os.path.basename(path) in CONVENTIONAL_NAMES
 
 
-def mentioned(term, path):
-    # The allowlist names the files it keeps, so it never counts as a reference.
-    found = subprocess.run(
-        ["git", "grep", "--untracked", "-l", "-F", "-e", term, "--", ".",
-         f":(exclude){path}", f":(exclude){ALLOWLIST}"],
-        capture_output=True, text=True,
-    )
-    return bool(found.stdout.strip())
-
-
-def unreferenced_files(files):
+def unreferenced_files(tracked):
+    texts = {}
+    for path in tracked:
+        if path in NOT_REFERENCES or path.startswith("docs/research/"):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                texts[path] = handle.read()
+        except UnicodeDecodeError:
+            continue  # binary files mention nothing
     findings = set()
-    for path in files:
-        if path.endswith(".swift") or path == ALLOWLIST or is_conventional(path):
+    for path in tracked:
+        if path.endswith(".swift") or path in NOT_REFERENCES or is_conventional(path):
             continue
         name = os.path.basename(path)
         stem = name.split(".")[0]
-        # Code often builds a resource name from parts, such as "voice-note" plus "oga".
-        if not mentioned(name, path) and not (len(stem) >= 4 and mentioned(stem, path)):
+        # A stem covers code that builds a resource name from parts; it is a prefix of the name.
+        term = stem if len(stem) >= 4 else name
+        if not any(term in text for other, text in texts.items() if other != path):
             findings.add(path)
     return findings
 
@@ -118,18 +157,31 @@ def read_allowlist(errors):
                     "'dependency <target> <module>  # reason'"
                 )
                 continue
-            subject = " ".join(match.group(2).split())
-            entries[(match.group(1), subject)] = number
+            kind, subject = match.group(1), match.group(2)
+            if kind == "dependency":
+                subject = " ".join(subject.split())
+            if (kind, subject) in entries:
+                errors.append(f"{ALLOWLIST}:{number}:1: error: duplicate entry '{kind} {subject}'")
+                continue
+            entries[(kind, subject)] = number
     return entries
 
 
 def main():
+    report = sys.argv[1:] == ["--report"]
+    if sys.argv[1:] and not report:
+        sys.exit("usage: python3 -I scripts/check-dead-code.py [--report]")
     os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    files = repository_files()
     errors = []
     allowed = read_allowlist(errors)
-    findings = {("dependency", subject) for subject in orphaned_dependencies(files)}
-    findings |= {("file", subject) for subject in unreferenced_files(files)}
+    swift_files = [p for p in git_files("--cached", "--others", "--exclude-standard") if p.endswith(".swift")]
+    findings = {("dependency", subject) for subject in orphaned_dependencies(swift_files)}
+    findings |= {("file", subject) for subject in unreferenced_files(git_files("--cached"))}
+
+    if report:
+        for kind, subject in sorted(findings):
+            print(f"{kind} {subject}{'  (allowlisted)' if (kind, subject) in allowed else ''}")
+        return 0
 
     for kind, subject in sorted(findings - set(allowed)):
         if kind == "dependency":

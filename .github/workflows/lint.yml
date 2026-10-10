@@ -32,7 +32,7 @@ jobs:
           source BuildTools/lint-versions.env
 
           apt-get update
-          apt-get install --yes --no-install-recommends ca-certificates curl python3-minimal unzip
+          apt-get install --yes --no-install-recommends ca-certificates curl python3 unzip
 
           release_url="https://github.com/realm/SwiftLint/releases/download/${CLAW_LINT_SWIFTLINT_VERSION}"
           curl --fail --location --silent --show-error \

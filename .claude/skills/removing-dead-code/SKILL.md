@@ -29,8 +29,9 @@ time, never in parallel: two at once take longer than the same two in sequence. 
 
 ## Modes
 
-**Quick scan** (audit, "find dead code"): run `scripts/check-dead-code.py` and
-`periphery_scan.sh`, then report the triage grouped as in §2. No edits.
+**Quick scan** (audit, "find dead code"): run `scripts/check-dead-code.py --report`, which also
+lists allowlisted findings as leads, and `periphery_scan.sh`. Report the triage grouped as in §2.
+No edits.
 
 **Full cleanup** (remove): stages 1–6 below, on a feature branch.
 
