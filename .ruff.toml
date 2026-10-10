@@ -1,5 +1,6 @@
 # Python style for the repository's scripts: PEP 8 and PEP 257, formatted and checked by
-# ruff. The lint gate does not run it; see docs/ARCHITECTURE.md section 19.2.
+# ruff at the version in BuildTools/lint-versions.env. The lint gate does not run it; see
+# docs/ARCHITECTURE.md section 19.2.
 
 # Only scripts: Markdown code blocks quote other projects' code as is.
 include = ["*.py"]

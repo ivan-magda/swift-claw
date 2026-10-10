@@ -2319,14 +2319,14 @@ Python scripts, in `scripts/` and in the agent skills, follow PEP 8 and PEP 257 
 `.ruff.toml`: the ruff formatter's 88-column layout, plus lint rules for naming, imports,
 docstrings, type annotations and likely bugs. They run on Python 3.9, which macOS ships with the
 Xcode tools. The lint gate does not run ruff; a changed script must pass `ruff format --check`
-and `ruff check` before review.
+and `ruff check` at the pinned version before review.
 
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
 which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses
 `xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux; their `main`
 labels are not version pins. It checks SwiftLint and the locked BuildTools SwiftFormat executable
-against the shared pins. Actionlint, zizmor and ShellCheck use the same pins file.
+against the shared pins. Actionlint, zizmor, ShellCheck and ruff use the same pins file.
 CI validates the canonical lint pipeline on Linux; [CODE_STYLE.md](CODE_STYLE.md#setup)
 documents installation.
 

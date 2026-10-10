@@ -213,7 +213,7 @@ layout. Xcode users can run the saved-file command from a terminal or external-t
 Python scripts follow `.ruff.toml`, as
 [architecture §19.2](ARCHITECTURE.md#192-source-formatting-and-lint) describes. An editor's ruff
 integration applies it; from a terminal, run `ruff format` and then `ruff check` on the changed
-scripts.
+scripts, using the ruff version in `BuildTools/lint-versions.env`.
 
 ## Review the seven sections
 

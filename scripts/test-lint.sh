@@ -182,7 +182,7 @@ printf 'Run scripts/check-dead-code.py\n' > "$dead_code/README.md"
 printf '.build/\n' > "$dead_code/.gitignore"
 allowlist="$dead_code/BuildTools/dead-code-allowlist.txt"
 check_dead_code() {
-  (cd "$dead_code" && python3 -I scripts/check-dead-code.py) > "$scratch/dead-code.log" 2>&1
+  (cd "$dead_code" && python3 -I scripts/check-dead-code.py "$@") > "$scratch/dead-code.log" 2>&1
 }
 (cd "$dead_code" && git init --quiet && git add .)
 
@@ -192,6 +192,27 @@ if check_dead_code; then
 fi
 grep -q "add 'dependency App Kit  # reason'" "$scratch/dead-code.log"
 grep -q "add 'file docs/orphan-diagram.txt  # reason'" "$scratch/dead-code.log"
+
+# when: one finding is allowlisted and --report runs.
+printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' > "$allowlist"
+
+# then: it lists both findings, marks the allowlisted one, and exits 0.
+check_dead_code --report || {
+  cat "$scratch/dead-code.log" >&2
+  fail 'dead-code --report failed on a finding'
+}
+grep -qx 'dependency App Kit' "$scratch/dead-code.log"
+grep -qx 'file docs/orphan-diagram.txt  (allowlisted)' "$scratch/dead-code.log"
+
+# when: an untracked Swift file imports Kit.
+printf 'import Kit\n' > "$dead_code/Sources/App/Draft.swift"
+
+# then: the dependency counts as used, because SwiftPM compiles untracked files too.
+check_dead_code || {
+  cat "$scratch/dead-code.log" >&2
+  fail 'dead-code check ignored an import in an untracked Swift file'
+}
+rm "$dead_code/Sources/App/Draft.swift"
 
 # when: both are kept with reasons, and an untracked scratch file appears.
 printf 'dependency App Kit  # kept for the fixture\n' > "$allowlist"
@@ -225,6 +246,18 @@ if check_dead_code; then
   fail 'dead-code check accepted a duplicate allowlist entry'
 fi
 grep -q 'duplicate entry' "$scratch/dead-code.log"
+
+# when / then: a broken manifest fails with SwiftPM's diagnostic, not a Python traceback.
+cp "$dead_code/Package.swift" "$scratch/fixture-manifest.swift"
+printf 'let broken = (\n' >> "$dead_code/Package.swift"
+if check_dead_code; then
+  fail 'dead-code check accepted a broken manifest'
+fi
+grep -q 'Invalid manifest' "$scratch/dead-code.log"
+if grep -q 'Traceback' "$scratch/dead-code.log"; then
+  fail 'dead-code check hid the manifest error behind a Python traceback'
+fi
+cp "$scratch/fixture-manifest.swift" "$dead_code/Package.swift"
 
 printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight, '
 printf 'dead-code references)\n'

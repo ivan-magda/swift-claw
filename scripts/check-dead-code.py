@@ -100,8 +100,12 @@ class Finding(NamedTuple):
 
 
 def run(*command: str) -> str:
-    """Run a command and return its standard output; fail if the command fails."""
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    """Run a command and return its standard output; exit with its error if it fails."""
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        # Show the tool's own diagnostic, such as SwiftPM's manifest error.
+        failed = " ".join(command)
+        sys.exit(f"check-dead-code: `{failed}` failed\n{result.stderr.rstrip()}")
     output: str = result.stdout
     return output
 
