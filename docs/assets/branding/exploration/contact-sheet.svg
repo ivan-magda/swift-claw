@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1360" viewBox="0 0 1600 1360">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#111113" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="1360" fill="#F3F2EE"/>
+  <text x="72" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="13" font-weight="700" fill="#F05138" letter-spacing="2.3">SWIFT-CLAW / BRAND EXPLORATION</text>
+  <text x="72" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="48" font-weight="650" fill="#111113" letter-spacing="-1.6">Five product-first directions</text>
+  <text x="72" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="18" fill="#6E6E73">Premium restraint, local-first product proof, and one Swift-orange accent.</text>
+
+  <!-- 01 Quiet Utility -->
+  <g transform="translate(72 220)">
+    <rect width="700" height="330" rx="28" fill="#FFFFFF" stroke="#D8D7D2" filter="url(#shadow)"/>
+    <text x="32" y="42" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#F05138" letter-spacing="1.8">01 · QUIET UTILITY</text>
+    <path d="M77 72 A26 26 0 1 0 77 124" fill="none" stroke="#111113" stroke-width="7" stroke-linecap="round"/>
+    <path d="M75 84 L86 98 L75 112" fill="none" stroke="#F05138" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="112" y="108" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="43" font-weight="650" fill="#111113" letter-spacing="-1.4">swift-claw</text>
+    <text x="32" y="156" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="25" font-weight="560" fill="#111113">Personal AI,</text>
+    <text x="32" y="187" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="25" font-weight="560" fill="#111113">running locally.</text>
+    <text x="32" y="222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#6E6E73">A calm software appliance, not an AI mascot.</text>
+    <rect x="426" y="70" width="238" height="214" rx="22" fill="#F7F7F5" stroke="#D8D7D2"/>
+    <text x="448" y="106" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16" font-weight="700" fill="#111113">clawd</text>
+    <circle cx="636" cy="100" r="5" fill="#F05138"/>
+    <line x1="448" y1="126" x2="640" y2="126" stroke="#D8D7D2"/>
+    <text x="448" y="160" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#111113">Telegram</text><text x="640" y="160" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="13" fill="#6E6E73">connected</text>
+    <text x="448" y="195" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#111113">Memory</text><text x="640" y="195" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="13" fill="#6E6E73">ready</text>
+    <text x="448" y="230" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#111113">Policy</text><text x="640" y="230" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="13" fill="#6E6E73">default-deny</text>
+    <text x="32" y="292" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6E6E73">ONE OWNER · ONE DAEMON · ONE MACHINE</text>
+  </g>
+
+  <!-- 02 Product, Not Mascot -->
+  <g transform="translate(828 220)">
+    <rect width="700" height="330" rx="28" fill="#FFFFFF" stroke="#D8D7D2" filter="url(#shadow)"/>
+    <text x="32" y="42" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#F05138" letter-spacing="1.8">02 · PRODUCT, NOT MASCOT</text>
+    <text x="32" y="102" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="38" font-weight="650" fill="#111113" letter-spacing="-1.2">Show the product.</text>
+    <text x="32" y="138" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#6E6E73">Telegram is the interface.</text>
+    <text x="32" y="158" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#6E6E73">Your machine is the home.</text>
+    <rect x="370" y="58" width="292" height="230" rx="26" fill="#EEF3F6" stroke="#D8D7D2"/>
+    <rect x="392" y="82" width="180" height="52" rx="16" fill="#FFFFFF"/>
+    <text x="408" y="105" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" fill="#111113">Summarize my notes</text>
+    <text x="408" y="122" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="10" fill="#6E6E73">from this week.</text>
+    <rect x="438" y="150" width="202" height="90" rx="17" fill="#FFFFFF"/>
+    <circle cx="458" cy="173" r="7" fill="#F05138"/>
+    <text x="474" y="178" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" font-weight="600" fill="#111113">swift-claw</text>
+    <text x="458" y="203" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" fill="#6E6E73">I found 8 notes and prepared</text>
+    <text x="458" y="219" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" fill="#6E6E73">a concise weekly summary.</text>
+    <text x="32" y="220" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="18" font-weight="600" fill="#111113">Immediate comprehension</text>
+    <text x="32" y="248" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" fill="#6E6E73">A visitor sees what swift-claw does in seconds.</text>
+    <text x="32" y="292" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6E6E73">PRIVATE · LOCAL-FIRST · OWNER-CONTROLLED</text>
+  </g>
+
+  <!-- 03 Technical Editorial -->
+  <g transform="translate(72 600)">
+    <rect width="700" height="330" rx="28" fill="#FAFAF8" stroke="#D8D7D2"/>
+    <text x="32" y="42" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#F05138" letter-spacing="1.8">03 · TECHNICAL EDITORIAL</text>
+    <text x="32" y="95" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="34" font-weight="650" fill="#111113" letter-spacing="-1">One daemon. Legible architecture.</text>
+    <text x="32" y="129" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="15" fill="#6E6E73">An engineering-first identity for a GitHub audience.</text>
+    <line x1="108" y1="226" x2="584" y2="226" stroke="#C9C8C3" stroke-width="2"/>
+    <rect x="42" y="194" width="132" height="64" rx="16" fill="#FFFFFF" stroke="#D8D7D2"/>
+    <text x="108" y="232" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" fill="#111113">Telegram</text>
+    <rect x="264" y="180" width="172" height="92" rx="22" fill="#111113"/>
+    <circle cx="292" cy="207" r="6" fill="#F05138"/>
+    <text x="350" y="232" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" font-weight="700" fill="#FFFFFF">clawd</text>
+    <rect x="526" y="194" width="132" height="64" rx="16" fill="#FFFFFF" stroke="#D8D7D2"/>
+    <text x="592" y="232" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" fill="#111113">LLM</text>
+    <line x1="350" y1="272" x2="350" y2="298" stroke="#C9C8C3" stroke-width="2"/>
+    <text x="350" y="318" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6E6E73">SQLite · memory · policy</text>
+  </g>
+
+  <!-- 04 New Mark System -->
+  <g transform="translate(828 600)">
+    <rect width="700" height="330" rx="28" fill="#FFFFFF" stroke="#D8D7D2"/>
+    <text x="32" y="42" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#F05138" letter-spacing="1.8">04 · NEW MARK SYSTEM</text>
+    <text x="32" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="30" font-weight="650" fill="#111113">Three compact identity routes</text>
+    <g transform="translate(82 136)">
+      <circle cx="60" cy="60" r="58" fill="#F3F2EE"/>
+      <path d="M75 25 A38 38 0 1 0 75 95" fill="none" stroke="#111113" stroke-width="10" stroke-linecap="round"/>
+      <path d="M72 44 L88 60 L72 76" fill="none" stroke="#F05138" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="60" y="146" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" fill="#6E6E73">LOCAL LOOP</text>
+    </g>
+    <g transform="translate(290 136)">
+      <circle cx="60" cy="60" r="58" fill="#F3F2EE"/>
+      <path d="M28 35 C54 12 90 20 98 48" fill="none" stroke="#111113" stroke-width="10" stroke-linecap="round"/>
+      <path d="M24 61 C50 38 86 46 94 74" fill="none" stroke="#F05138" stroke-width="10" stroke-linecap="round"/>
+      <path d="M29 88 C54 67 84 73 92 98" fill="none" stroke="#111113" stroke-width="10" stroke-linecap="round"/>
+      <text x="60" y="146" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" fill="#6E6E73">APERTURE</text>
+    </g>
+    <g transform="translate(498 136)">
+      <circle cx="60" cy="60" r="58" fill="#111113"/>
+      <path d="M81 34 C69 20 40 24 36 43 C32 64 80 53 78 78 C76 99 43 101 31 85" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+      <path d="M91 40 A31 31 0 0 0 91 81" fill="none" stroke="#F05138" stroke-width="8" stroke-linecap="round"/>
+      <text x="60" y="146" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" fill="#6E6E73">SC MONOGRAM</text>
+    </g>
+  </g>
+
+  <!-- 05 Recommended Hybrid -->
+  <g transform="translate(72 980)">
+    <rect width="1456" height="300" rx="32" fill="#0B0B0D"/>
+    <text x="36" y="42" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#FF5A3D" letter-spacing="1.8">05 · RECOMMENDED HYBRID</text>
+    <path d="M82 73 A28 28 0 1 0 82 129" fill="none" stroke="#F7F7F5" stroke-width="8" stroke-linecap="round"/>
+    <path d="M79 87 L92 101 L79 115" fill="none" stroke="#FF5A3D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="126" y="116" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="49" font-weight="650" fill="#F7F7F5" letter-spacing="-1.5">swift-claw</text>
+    <text x="36" y="180" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="31" font-weight="570" fill="#F7F7F5">Your AI. Your machine. Always on.</text>
+    <text x="36" y="216" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="15" fill="#A1A1A6">Premium typography + Local Loop + a real owner-approval product surface.</text>
+    <rect x="850" y="36" width="564" height="228" rx="26" fill="#1D1D20" stroke="#303034"/>
+    <text x="880" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#FF5A3D" letter-spacing="1.4">ACTION REQUIRES APPROVAL</text>
+    <text x="880" y="112" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="23" font-weight="620" fill="#F7F7F5">Write status.md</text>
+    <text x="880" y="140" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#A1A1A6">~/workspace/status.md</text>
+    <line x1="880" y1="162" x2="1384" y2="162" stroke="#303034"/>
+    <rect x="880" y="185" width="234" height="48" rx="14" fill="#2A2A2E"/>
+    <text x="997" y="215" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" font-weight="600" fill="#F7F7F5">Deny</text>
+    <rect x="1150" y="185" width="234" height="48" rx="14" fill="#FF5A3D"/>
+    <text x="1267" y="215" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="14" font-weight="650" fill="#FFFFFF">Approve</text>
+  </g>
+</svg>
