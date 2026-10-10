@@ -1,5 +1,7 @@
+import ClawAgent
 import ClawCore
 import Foundation
+import Logging
 
 extension CommandHandlers {
   func stopDraft(_ stop: RawDraftStop, updateID: Int64) async throws(RoutingHalt) -> HandleOutcome {

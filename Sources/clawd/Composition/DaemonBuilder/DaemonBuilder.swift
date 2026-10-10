@@ -4,6 +4,7 @@ import ClawGateway
 import ClawLLM
 import ClawMCP
 import ClawTelegram
+import ClawTools
 import ClawWorkspace
 import Foundation
 import Logging

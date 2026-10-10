@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 import Testing
 
 /// A group transcript is a room, not a monologue: every stored line says who spoke it, and no

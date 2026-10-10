@@ -1,5 +1,7 @@
+import ClawAgent
 import ClawCore
 import Foundation
+import Logging
 
 extension LearningOperationRunner {
   /// The frozen algorithm's reflector ceiling, independent from the scheduled job's own cap.

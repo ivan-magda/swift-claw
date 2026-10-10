@@ -2366,6 +2366,12 @@ For an opaque value that needs to remain intact for review, such as a pinned ima
 `swiftlint:disable:next line_length` with a reason after `//`. Do not exempt a whole file or test
 suite to accommodate individual literals.
 
+Every local target in `Package.swift` enables Swift's `MemberImportVisibility` upcoming feature.
+A file must import the module that declares each extension member it uses; a member that leaks in
+through another file's import or a re-exporting dependency no longer compiles. A missing import,
+and the undeclared target dependency it can hide, therefore fails the build. The flag does not
+report unused imports, so reviewers still check import necessity.
+
 Passing tools verifies the automated subset, not every semantic rule. Reviews also check file
 responsibility/names, meaningful API and closure-parameter names, initialism spelling, overload
 grouping, import necessity, and documentation contracts. Preserve wire keys, stored formats,

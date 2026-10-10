@@ -1,4 +1,5 @@
 import AsyncHTTPClient
+import NIOHTTPCompression
 
 /// The egress posture for an AsyncHTTPClient-backed client.
 public enum HTTPClientProfile: Sendable, Equatable {

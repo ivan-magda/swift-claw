@@ -1,7 +1,9 @@
 import ClawCore
+import ClawData
 import ClawGateway
 import ClawWorkspace
 import Foundation
+import Logging
 
 // MARK: - Learning Loop
 

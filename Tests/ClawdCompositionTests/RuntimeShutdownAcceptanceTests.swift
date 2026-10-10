@@ -1,3 +1,4 @@
+import AsyncHTTPClient
 import ClawAgent
 import ClawCore
 import ClawData

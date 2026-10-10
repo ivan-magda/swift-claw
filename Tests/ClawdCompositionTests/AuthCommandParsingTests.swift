@@ -1,5 +1,6 @@
 import ArgumentParser
 import ClawAuth
+import ClawCore
 import Testing
 
 @testable import clawd

@@ -1,4 +1,6 @@
 import ClawCore
+import ClawData
+import ClawGateway
 import ClawTestSupport
 import Foundation
 import Testing

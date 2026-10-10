@@ -1,3 +1,4 @@
+import ClawAgent
 import Testing
 
 @testable import ClawGateway

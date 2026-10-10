@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import ClawData
 import ClawTestSupport

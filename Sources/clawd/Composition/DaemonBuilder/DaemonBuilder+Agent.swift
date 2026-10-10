@@ -1,10 +1,12 @@
 import ClawAgent
 import ClawCore
+import ClawData
 import ClawGateway
 import ClawTelegram
 import ClawTools
 import ClawWorkspace
 import Foundation
+import Logging
 
 // MARK: - Agent Stack Assembly
 
