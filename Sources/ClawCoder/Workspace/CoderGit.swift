@@ -9,11 +9,7 @@ struct CoderGit: Sendable {
 
   @discardableResult
   func run(_ arguments: [String], at directory: String) async throws -> Data {
-    try Task.checkCancellation()
-    let remaining = ContinuousClock.now.duration(to: deadline)
-    guard remaining > .zero else {
-      throw CoderGitFailure.deadline
-    }
+    let remaining = try CoderCommand.remainingTime(until: deadline)
     let output = GitOutput()
     let command = CoderCommand(
       executable: "/usr/bin/git",

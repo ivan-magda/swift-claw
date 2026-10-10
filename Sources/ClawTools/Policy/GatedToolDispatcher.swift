@@ -218,30 +218,7 @@ private extension GatedToolDispatcher {
         }
     case BuiltinToolNames.fileRead, BuiltinToolNames.fileWrite:
       selected = arguments["path"]?.stringValue.flatMap { path in
-        guard !path.hasPrefix("/"), !path.hasPrefix("~"), !path.contains("\\"),
-              !path.contains(":")
-        else {
-          return nil
-        }
-
-        let containsControlCharacters = path.unicodeScalars.contains { scalar in
-          CharacterSet.controlCharacters.contains(scalar)
-        }
-        guard !containsControlCharacters else {
-          return nil
-        }
-
-        let validPathComponents =
-          path
-          .split(separator: "/", omittingEmptySubsequences: false)
-          .allSatisfy { component in
-            !component.isEmpty && component != "." && component != ".."
-          }
-        guard validPathComponents else {
-          return nil
-        }
-
-        return path
+        ProgressText.isWorkspaceRelativePath(path) ? path : nil
       }
     default:
       selected = nil

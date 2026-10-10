@@ -10,6 +10,23 @@ struct CoderCommand: Sendable {
   let timeout: Duration
 }
 
+extension CoderCommand {
+  /// The time left before the job deadline, used as the next command's timeout.
+  ///
+  /// Throws when the task is cancelled or the deadline has passed, so no command starts without
+  /// time to run.
+  static func remainingTime(until deadline: ContinuousClock.Instant) throws -> Duration {
+    try Task.checkCancellation()
+
+    let remaining = ContinuousClock.now.duration(to: deadline)
+    guard remaining > .zero else {
+      throw CoderGitFailure.deadline
+    }
+
+    return remaining
+  }
+}
+
 struct CoderCommandResult: Sendable {
   let exitCode: Int32?
   let signal: Int32?

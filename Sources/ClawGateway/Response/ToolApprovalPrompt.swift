@@ -62,7 +62,7 @@ enum ToolApprovalPrompt {
       lines.append("⚠ \(warning)")
     }
 
-    lines.append("Tap Approve to allow this one action, or Deny to cancel.")
+    lines.append(instructionText)
 
     return lines.joined(separator: "\n")
   }
@@ -119,7 +119,7 @@ private extension ToolApprovalPrompt {
     if input.isGroup {
       blocks.append("Any member of this group can approve or deny this one action.")
     }
-    blocks.append("Tap Approve to allow this one action, or Deny to cancel.")
+    blocks.append(instructionText)
     return blocks.joined(separator: "\n\n")
   }
 
@@ -128,6 +128,9 @@ private extension ToolApprovalPrompt {
 
   static let privilegedFileBannerText =
     "⚠ PRIVILEGED FILE: this path feeds my system prompt / private-data tier."
+
+  /// The closing line of every approval prompt, plain or Coder card.
+  static let instructionText = "Tap Approve to allow this one action, or Deny to cancel."
 
   static func headline(tool: String, reason: ApprovalReason) -> String {
     switch reason {

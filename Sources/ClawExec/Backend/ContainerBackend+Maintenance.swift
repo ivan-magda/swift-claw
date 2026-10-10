@@ -78,7 +78,7 @@ private struct PrepareAbort: Error {
 private extension ContainerBackend {
   func refuseIfBusy() throws(PrepareAbort) {
     guard !shuttingDown else {
-      throw PrepareAbort(health: failedHealth(lastError: "sandbox backend is shutting down"))
+      throw PrepareAbort(health: failedHealth(lastError: Self.shuttingDownReason))
     }
     // New executions cannot be admitted while `preparedInitImage` is nil, so in-flight
     // work only needs this entry check; it cannot grow across prepare's awaits.
@@ -167,7 +167,7 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          lastError: "sandbox backend is shutting down"
+          lastError: Self.shuttingDownReason
         )
       )
     }
@@ -214,7 +214,7 @@ private extension ContainerBackend {
         engineVersion: engineVersion,
         versionOK: true,
         imageDigestOK: true,
-        lastError: "sandbox backend is shutting down"
+        lastError: Self.shuttingDownReason
       )
     }
 
@@ -233,7 +233,7 @@ private extension ContainerBackend {
         engineVersion: engineVersion,
         versionOK: true,
         imageDigestOK: true,
-        lastError: "sandbox backend is shutting down"
+        lastError: Self.shuttingDownReason
       )
     }
 

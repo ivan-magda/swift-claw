@@ -347,7 +347,7 @@ private extension DoctorCommand {
     #else
       guard let backend = SandboxBackendFactory.make(config: config, redactionValues: []) else {
         return SandboxHealthRows.rows(
-          for: .unavailable(reason: "sandbox backend is not configured")
+          for: .unavailable(reason: SandboxBootstrapper.backendNotConfiguredReason)
         )
       }
 

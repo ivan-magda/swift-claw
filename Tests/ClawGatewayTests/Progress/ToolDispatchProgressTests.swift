@@ -117,6 +117,24 @@ struct ToolDispatchProgressTests {
     #expect(await state.latest.steps.first?.preview == "swift.org/getting-started/")
   }
 
+  @Test
+  func workspaceRelativeFilePathIsSuppliedAsThePreview() async {
+    // when
+    let previews = await previewsSupplied(forFileReadPath: "folder/file.txt")
+
+    // then
+    #expect(previews == ["folder/file.txt"])
+  }
+
+  @Test
+  func filePathOutsideTheWorkspaceIsNotSupplied() async {
+    // when
+    let previews = await previewsSupplied(forFileReadPath: "../private.txt")
+
+    // then — the reducer filters again, so this checks what dispatch itself supplied.
+    #expect(previews == [nil])
+  }
+
   @Test(arguments: [false, true])
   func longFetchPreviewKeepsTheLeafAfterRedaction(longLeaf: Bool) async throws {
     // given
@@ -149,6 +167,29 @@ struct ToolDispatchProgressTests {
   }
 }
 
+// MARK: - File Previews
+
+private extension ToolDispatchProgressTests {
+  /// Dispatches one `file_read` call and returns every preview the dispatcher handed to progress.
+  func previewsSupplied(forFileReadPath path: String) async -> [String?] {
+    let tool = ProgressTestTool(name: BuiltinToolNames.fileRead)
+    let state = DispatchProgressState()
+    state.releaseIdentification.open()
+
+    _ = await progressDispatcher(tool: tool).dispatch(
+      call: ToolCall(
+        id: "step",
+        name: tool.definition.name,
+        argumentsJSON: "{\"path\":\"\(path)\"}"
+      ),
+      context: progressDispatchContext(),
+      progress: state.reporter
+    )
+
+    return await state.suppliedPreviews
+  }
+}
+
 private enum DispatchScenario {
   case allowed, denied, malformed, approval
 }
@@ -157,6 +198,7 @@ actor DispatchProgressState {
   nonisolated let identified = AsyncGate()
   nonisolated let releaseIdentification = AsyncGate()
   private(set) var history: [ToolProgressState] = []
+  private(set) var suppliedPreviews: [String?] = []
   private var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: [])
   private let id = TurnToolStepID(providerCallID: "round", toolCallID: "step")
 
@@ -180,6 +222,7 @@ actor DispatchProgressState {
 
 private extension DispatchProgressState {
   func identify(tool: ToolDefinition?, preview: String?) {
+    suppliedPreviews.append(preview)
     state.apply(.toolStarted(id: id, tool: tool, preview: preview))
   }
 

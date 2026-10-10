@@ -26,9 +26,7 @@ struct ContainerBackendProbeTests {
     let availability = await backend.probe()
 
     // then
-    #expect(
-      availability == .unavailable(reason: "execute_code requires macOS 26 or newer on arm64")
-    )
+    #expect(availability == .unavailable(reason: ContainerBackend.unsupportedHostReason))
     #expect(await runner.recorded().isEmpty)
   }
 
@@ -51,9 +49,7 @@ struct ContainerBackendProbeTests {
     let availability = await backend.versionAvailability()
 
     // then
-    #expect(
-      availability == .unavailable(reason: "execute_code requires macOS 26 or newer on arm64")
-    )
+    #expect(availability == .unavailable(reason: ContainerBackend.unsupportedHostReason))
     #expect(await runner.recorded().isEmpty)
   }
 

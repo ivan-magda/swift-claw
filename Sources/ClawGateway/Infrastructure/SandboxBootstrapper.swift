@@ -20,6 +20,10 @@ public struct SandboxBootstrapResult: Sendable {
 }
 
 public struct SandboxBootstrapper: Sendable {
+  /// Why code execution is off when it is enabled but no backend could be built for this host.
+  /// `clawd doctor` reports the same words without starting the daemon.
+  package static let backendNotConfiguredReason = "sandbox backend is not configured"
+
   private let enabled: Bool
   private let backend: (any ExecutionBackend)?
   private let maintenance: (any SandboxMaintenance)?
@@ -49,7 +53,7 @@ public struct SandboxBootstrapper: Sendable {
         backend: nil,
         maintenance: nil,
         health: nil,
-        unavailableReason: "sandbox backend is not configured"
+        unavailableReason: Self.backendNotConfiguredReason
       )
     }
 

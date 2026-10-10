@@ -43,10 +43,7 @@ public struct CoderCancelTool: Tool {
       return CoderToolOutput.missingContext
     }
     guard let id = CoderToolOutput.jobID(arguments) else {
-      return CoderToolOutput.failure(
-        CoderError.invalidRequest("Provide only job_id as a UUID string."),
-        redactor: redactor
-      )
+      return CoderToolOutput.invalidJobID(redactor: redactor)
     }
 
     do {

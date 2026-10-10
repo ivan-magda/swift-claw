@@ -293,19 +293,9 @@ struct StreamingStack {
   let chatID: Int64
 }
 
-struct AcceptanceWorkspace: WorkspaceReading {
-  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
-  func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
-}
-
 func makeAcceptanceContextBuilder(
   writer: any DatabaseWriter,
-  workspace: any WorkspaceReading = AcceptanceWorkspace()
+  workspace: any WorkspaceReading = EmptyWorkspace()
 ) -> ContextBuilder {
   ContextBuilder(
     systemPrompt: SystemPrompt.minimal,
@@ -326,7 +316,7 @@ func makeStack(
   outcome: RecordingProvider.Outcome,
   blocksFirstProviderCall: Bool = false,
   providerState: ProviderExchangeState? = nil,
-  workspace: any WorkspaceReading = AcceptanceWorkspace(),
+  workspace: any WorkspaceReading = EmptyWorkspace(),
   images: (any ImageMessageHandling)? = nil
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)

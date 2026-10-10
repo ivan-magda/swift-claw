@@ -9,11 +9,7 @@ struct CodexCommandContext: Sendable {
   let deadline: ContinuousClock.Instant
 
   func command(executable: String, arguments: [String], input: String = "") throws -> CoderCommand {
-    try Task.checkCancellation()
-    let remaining = ContinuousClock.now.duration(to: deadline)
-    guard remaining > .zero else {
-      throw CoderGitFailure.deadline
-    }
+    let remaining = try CoderCommand.remainingTime(until: deadline)
     return CoderCommand(
       executable: executable,
       arguments: arguments,

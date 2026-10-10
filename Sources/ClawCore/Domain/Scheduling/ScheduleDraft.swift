@@ -97,8 +97,13 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
   case onceInThePast
   case noUpcomingOccurrence
 
+  /// The general `/schedule` example. Field-specific problems below show a narrower one; the
+  /// gateway's parse-failure and empty-list replies reuse this.
+  package static let example =
+    "Example: /schedule every weekday at 07:00, summarize my unread items"
+
   public var ownerReply: String {
-    let example = "Example: /schedule every weekday at 07:00, summarize my unread items"
+    let example = Self.example
     switch self {
     case .emptyLabel:
       return """

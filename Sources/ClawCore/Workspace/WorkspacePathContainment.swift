@@ -15,6 +15,10 @@ public enum WorkspacePathContainment {
     case refused(reason: String)
   }
 
+  /// The refusal when the workspace root itself does not resolve. Tools that resolve the root
+  /// before asking for containment refuse with the same words.
+  package static let rootUnavailableReason = "The workspace root is unavailable."
+
   /// Resolves a workspace-relative path that must already exist: `realpath(3)` the joined path
   /// (symlinks and `..` fully resolved), then assert the canonical root contains the final
   /// target. Refusal copy matches `FileReadTool`'s pre-extraction strings exactly.
@@ -23,7 +27,7 @@ public enum WorkspacePathContainment {
       return .refused(reason: reason)
     }
     guard let canonicalRoot = canonicalPath(root) else {
-      return .refused(reason: "The workspace root is unavailable.")
+      return .refused(reason: rootUnavailableReason)
     }
 
     let joined = URL(fileURLWithPath: root).appendingPathComponent(path).path
@@ -46,7 +50,7 @@ public enum WorkspacePathContainment {
       return .refused(reason: reason)
     }
     guard let canonicalRoot = canonicalPath(root) else {
-      return .refused(reason: "The workspace root is unavailable.")
+      return .refused(reason: rootUnavailableReason)
     }
 
     let components = path.split(separator: "/").map(String.init)
@@ -71,7 +75,7 @@ public enum WorkspacePathContainment {
       }
 
       guard isContained(target: resolvedCandidate, root: canonicalRoot) else {
-        return .refused(reason: "That path resolves outside the workspace, so I can't write it.")
+        return .refused(reason: outsideWorkspaceWriteReason)
       }
 
       resolvedPrefix = resolvedCandidate
@@ -87,7 +91,7 @@ public enum WorkspacePathContainment {
     let remainder = components[index...].joined(separator: "/")
     let resolved = remainder.isEmpty ? resolvedPrefix : resolvedPrefix + "/" + remainder
     guard isContained(target: resolved, root: canonicalRoot) else {
-      return .refused(reason: "That path resolves outside the workspace, so I can't write it.")
+      return .refused(reason: outsideWorkspaceWriteReason)
     }
 
     return .resolved(resolved)
@@ -113,6 +117,9 @@ public enum WorkspacePathContainment {
 // MARK: - Shape Validation
 
 private extension WorkspacePathContainment {
+  static let outsideWorkspaceWriteReason =
+    "That path resolves outside the workspace, so I can't write it."
+
   static func shapeRefusal(_ path: String) -> String? {
     guard path.isEmpty == false else {
       return "The path is empty."

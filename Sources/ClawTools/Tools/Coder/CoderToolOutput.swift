@@ -25,6 +25,11 @@ enum CoderToolOutput {
     return UUID(uuidString: raw)
   }
 
+  /// The refusal for arguments that `jobID(_:)` cannot read.
+  static func invalidJobID(redactor: SecretRedactor) -> ToolPayload {
+    failure(CoderError.invalidRequest("Provide only job_id as a UUID string."), redactor: redactor)
+  }
+
   static func job(_ job: CoderJob, redactor: SecretRedactor) -> ToolPayload {
     let result =
       job.result
