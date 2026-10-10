@@ -2306,6 +2306,13 @@ intermediate output, and SwiftLint checks correctness and idiom on the final sou
 formatter invocations are not a substitute for this gate. Local, CI, per-file, and editor-buffer
 formatting share this pipeline and validate prerequisites before source mutation.
 
+A whole-repository check (`scripts/lint.sh` without file arguments) also runs
+`scripts/check-dead-code.py`, which needs Python 3 and no build. It fails on a `Package.swift`
+target dependency that no Swift file in the target imports, and on a tracked non-Swift file whose
+name or stem no other file mentions. `BuildTools/dead-code-allowlist.txt` keeps intentional
+findings, each with a reason; an entry that no longer matches a finding also fails. Unused
+declarations and imports need an indexed build and stay outside this gate.
+
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
 which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses

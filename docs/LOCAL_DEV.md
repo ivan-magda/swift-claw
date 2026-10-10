@@ -54,6 +54,10 @@ describes per-file checks, editor-buffer formatting, and the seven-section revie
 The script reports the active stage and elapsed time; the first BuildTools build needs dependency
 access. CI calls the same script and configuration. Fix before pushing.
 
+Without file arguments, the check also runs `scripts/check-dead-code.py`. It reports target
+dependencies that nothing imports and files that nothing mentions. Delete the finding, or keep it
+with a reason in `BuildTools/dead-code-allowlist.txt`; stale entries fail too.
+
 SwiftLint rejects source lines over 100 characters,
 including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
 with continuations that preserve their runtime text. `--fix` does not perform that conversion.

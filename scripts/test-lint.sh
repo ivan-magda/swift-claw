@@ -132,4 +132,63 @@ if [[ "$(uname -s)" == Darwin ]]; then
   grep -q '^toolchain: Xcode .* required' "$scratch/xcode.log"
   cmp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
 fi
-printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight)\n'
+
+# given: a package whose target declares a dependency it never imports, and a file nothing names.
+dead_code="$scratch/dead-code"
+mkdir -p "$dead_code/scripts" "$dead_code/BuildTools" "$dead_code/Sources/App" \
+  "$dead_code/Sources/Kit" "$dead_code/docs"
+cp "$repository_root/scripts/check-dead-code.py" "$dead_code/scripts/"
+cat > "$dead_code/Package.swift" <<'MANIFEST'
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+  name: "Fixture",
+  targets: [.target(name: "App", dependencies: ["Kit"]), .target(name: "Kit")]
+)
+MANIFEST
+printf 'struct App {}\n' > "$dead_code/Sources/App/App.swift"
+printf 'public struct Kit {}\n' > "$dead_code/Sources/Kit/Kit.swift"
+printf 'diagram\n' > "$dead_code/docs/orphan-diagram.txt"
+printf 'Run scripts/check-dead-code.py\n' > "$dead_code/README.md"
+printf '.build/\n' > "$dead_code/.gitignore"
+check_dead_code() {
+  (cd "$dead_code" && python3 -I scripts/check-dead-code.py) > "$scratch/dead-code.log" 2>&1
+}
+(cd "$dead_code" && git init --quiet && git add .)
+
+# when / then: both findings fail the check with the allowlist line that would accept them.
+if check_dead_code; then
+  fail 'dead-code check accepted an orphaned dependency and an unreferenced file'
+fi
+grep -q 'App declares Kit, but no file in the target imports it' "$scratch/dead-code.log"
+grep -q "add 'file docs/orphan-diagram.txt  # reason'" "$scratch/dead-code.log"
+
+# when: the target imports its dependency and the allowlist keeps the file with a reason.
+printf 'import Kit\n' > "$dead_code/Sources/App/App.swift"
+printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' \
+  > "$dead_code/BuildTools/dead-code-allowlist.txt"
+
+# then: the check passes.
+check_dead_code || {
+  cat "$scratch/dead-code.log" >&2
+  fail 'dead-code check rejected an imported dependency or an allowlisted file'
+}
+
+# when / then: an entry without a reason is rejected.
+printf 'file docs/orphan-diagram.txt\n' > "$dead_code/BuildTools/dead-code-allowlist.txt"
+if check_dead_code; then
+  fail 'dead-code check accepted an allowlist entry without a reason'
+fi
+
+# when / then: an entry whose file is gone is reported as stale.
+printf 'file docs/orphan-diagram.txt  # kept for the fixture\n' \
+  > "$dead_code/BuildTools/dead-code-allowlist.txt"
+rm "$dead_code/docs/orphan-diagram.txt"
+if check_dead_code; then
+  fail 'dead-code check accepted a stale allowlist entry'
+fi
+grep -q 'no longer matches a finding' "$scratch/dead-code.log"
+
+printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight, '
+printf 'dead-code references)\n'

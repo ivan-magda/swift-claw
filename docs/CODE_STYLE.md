@@ -138,7 +138,8 @@ Install SwiftLint **0.65.1** from its
 [official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
 when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.62.1** from
 the locked BuildTools dependency, so the first run needs network access. It checks prerequisites
-before changing source; you do not need a global `swiftformat` install.
+before changing source; you do not need a global `swiftformat` install. A whole-repository
+check also needs Python 3 for its dead-code stage; macOS includes it with the Xcode tools.
 
 On Linux, install the same SwiftLint release as CI:
 
