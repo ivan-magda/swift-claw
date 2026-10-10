@@ -299,7 +299,10 @@ let package = Package(
 
 // Require a direct import for every member a file uses, so a transitive import cannot hide a
 // missing module dependency (architecture §19.2).
-let memberImportVisibility = SwiftSetting.enableUpcomingFeature("MemberImportVisibility")
+let memberImportVisibility = SwiftSetting.enableUpcomingFeature(
+  "MemberImportVisibility",
+  .when(platforms: [.macOS])
+)
 for target in package.targets {
   target.swiftSettings = (target.swiftSettings ?? []) + [memberImportVisibility]
 }

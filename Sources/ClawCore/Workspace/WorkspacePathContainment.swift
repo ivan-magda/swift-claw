@@ -1,7 +1,6 @@
 import Foundation
 
 #if canImport(Glibc)
-  import CoreFoundation
   import Glibc
 #else
   import Darwin
