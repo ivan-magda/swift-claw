@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Canonical Swift style gate. Diagnostics and timing go to stderr.
-#   scripts/lint.sh [--fix] [--] [FILE.swift ...]
+#   scripts/lint.sh [--fix] [--] [FILE.swift ...]   check without FILE also runs dead-code refs
 #   scripts/lint.sh --format-stdin FILE.swift < buffer > formatted-buffer
 #   STRICT=1 scripts/lint.sh       also reject SwiftLint warnings
 set -euo pipefail
@@ -42,6 +42,12 @@ fi
 for executable in swift swiftlint git; do
   command -v "$executable" >/dev/null 2>&1 || fail "$executable not found; see docs/LOCAL_DEV.md"
 done
+# A whole-repository check also runs scripts/check-dead-code.py.
+dead_code_check=0
+if [[ "$mode" == check && $# -eq 0 ]]; then
+  dead_code_check=1
+  command -v python3 >/dev/null 2>&1 || fail 'python3 not found; see docs/LOCAL_DEV.md'
+fi
 scripts/check-toolchain.sh
 case "$(uname -s)" in
   Darwin) apple_formatter=(xcrun --toolchain XcodeDefault swift-format) ;;
@@ -157,6 +163,9 @@ lint_arguments=(lint --quiet)
 [[ "${STRICT:-0}" != 1 ]] || lint_arguments+=(--strict)
 result=0
 stage 'SwiftLint correctness and idiom' swiftlint "${lint_arguments[@]}" "${files[@]}" || result=1
+if [[ "$dead_code_check" -eq 1 ]]; then
+  stage 'Dead-code references' python3 -I scripts/check-dead-code.py || result=1
+fi
 if [[ "$mode" == check && "$changed" -gt 0 ]]; then
   result=1
 fi

@@ -2306,12 +2306,27 @@ intermediate output, and SwiftLint checks correctness and idiom on the final sou
 formatter invocations are not a substitute for this gate. Local, CI, per-file, and editor-buffer
 formatting share this pipeline and validate prerequisites before source mutation.
 
+A whole-repository check (`scripts/lint.sh` without file arguments) also runs
+`scripts/check-dead-code.py`. It needs Python 3 and evaluates only the manifest, never building
+the package. It fails on a `Package.swift` target dependency that no Swift file in the target
+imports, counting untracked Swift files because SwiftPM compiles them. It also fails on a tracked
+non-Swift file whose name or stem no other tracked file mentions.
+`BuildTools/dead-code-allowlist.txt` keeps intentional findings, each with a reason; a duplicate
+entry, or one that no longer matches a finding, also fails. Unused declarations and imports need
+an indexed build and stay outside this gate.
+
+Python scripts, in `scripts/` and in the agent skills, follow PEP 8 and PEP 257 as configured in
+`.ruff.toml`: the ruff formatter's 88-column layout, plus lint rules for naming, imports,
+docstrings, type annotations and likely bugs. They run on Python 3.9, which macOS ships with the
+Xcode tools. The lint gate does not run ruff; a changed script must pass `ruff format --check`
+and `ruff check` at the pinned version before review.
+
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
 which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses
 `xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux; their `main`
 labels are not version pins. It checks SwiftLint and the locked BuildTools SwiftFormat executable
-against the shared pins. Actionlint, zizmor and ShellCheck use the same pins file.
+against the shared pins. Actionlint, zizmor, ShellCheck and ruff use the same pins file.
 CI validates the canonical lint pipeline on Linux; [CODE_STYLE.md](CODE_STYLE.md#setup)
 documents installation.
 

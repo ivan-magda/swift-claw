@@ -9,14 +9,13 @@ A scanner's output is a list of leads. It is never the verdict and never the com
 A cleanup is finished when the completeness sweep (§5) finds nothing new, not when the
 scanner's list is empty or the build passes.
 
-Run the scripts from the repository root with `S=.claude/skills/removing-dead-code/scripts`
-(not the repository's own `scripts/`), output in the session scratchpad. Each header documents
-its flags.
+Run every command from the repository root, with `S=.claude/skills/removing-dead-code/scripts`
+for the skill's own scripts and output in the session scratchpad. `scripts/check-dead-code.py` is
+the repository gate. Each script's header documents its flags.
 
 | Command | Time | Finds |
 | --- | --- | --- |
-| `python3 -I $S/orphan_deps.py` | seconds | target dependencies no file in the target imports |
-| `python3 -I $S/unreferenced_files.py` | seconds | tracked non-Swift files nothing names |
+| `python3 -I scripts/check-dead-code.py` | seconds | target dependencies nothing imports and files nothing names; `scripts/lint.sh` runs it too |
 | `bash $S/periphery_scan.sh OUT` | 5–10 min | Periphery with and without tests; `OUT/report.md` with false-positive hints |
 | `python3 -I $S/prune_imports.py --work DIR --base REF` | ~2 min per module | imports the compiler proves removable, including modules Periphery never reports |
 | `python3 -I $S/prune_imports.py --work DIR --check-only --base REF` | ~1 min | files that compile only by borrowing another file's import |
@@ -30,8 +29,9 @@ time, never in parallel: two at once take longer than the same two in sequence. 
 
 ## Modes
 
-**Quick scan** (audit, "find dead code"): run the first three scripts, then report the triage
-grouped as in §2. No edits.
+**Quick scan** (audit, "find dead code"): run `scripts/check-dead-code.py --report`, which also
+lists allowlisted findings as leads, and `periphery_scan.sh`. Report the triage grouped as in §2.
+No edits.
 
 **Full cleanup** (remove): stages 1–6 below, on a feature branch.
 
@@ -102,7 +102,8 @@ re-document anything whose remaining use changed.
    worktree of the base commit. A file listed now but not on base borrows because of a hand
    edit: put back the import its error names. Files listed on both are pre-existing: note them
    in the PR.
-4. `orphan_deps.py` again: removed imports orphan target dependencies.
+4. `scripts/check-dead-code.py` again: removed imports orphan target dependencies. Keep a
+   finding only with a reason in `BuildTools/dead-code-allowlist.txt`.
 5. Every edited test file still uses the module its target tests; otherwise move the test to the
    owning target (TESTING.md §9.1) and check it against that target's existing tests.
 6. `git grep` each removed name in `docs/`, `scripts/`, `.github/`, `.agents/`.
