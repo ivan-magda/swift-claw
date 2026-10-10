@@ -1,4 +1,3 @@
-import ClawCore
 import ClawTestSupport
 import Testing
 

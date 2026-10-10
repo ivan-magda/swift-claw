@@ -3,7 +3,6 @@ import Foundation
 import GRDB
 import Testing
 
-@testable import ClawData
 @testable import ClawGateway
 
 /// A run's compatibility surface is frozen at pickup, not read back at sealing. Without this hop
