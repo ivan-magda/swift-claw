@@ -155,12 +155,12 @@ private func requireTimedOut(
   return accounting
 }
 
-// MARK: - Cancellation-aware send double
+// MARK: - Cancellation-aware auxiliary double
 
-/// A send that blocks until cancelled — the ephemeral-send analog of a production HTTP
-/// POST, so a deadline drain can cancel it without wedging on a sink that ignores cancellation.
+/// An auxiliary loop that blocks until cancelled — the stand-in for the draft/typing loop the
+/// coordinator must cancel and drain once the race is decided, without wedging on it.
 /// An `AsyncGate` observes cancellation without hand-rolling its own continuation bookkeeping.
-private actor GatedSend {
+private actor GatedAuxiliaryLoop {
   private let releaseGate = AsyncGate()
   private(set) var observedCancellation = false
 
@@ -554,7 +554,7 @@ struct ProviderDeadlineCoordinatorTests {
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func aWonDeadlineDrainsAGatedAuxiliaryChild() async throws {
+  func aProviderWinDrainsAGatedAuxiliaryChild() async throws {
     // given — the provider wins via a completed stream, while the auxiliary loop is parked behind a
     // cancellation-aware gate. The coordinator must cancel and drain it before returning.
     let expected = racedResponse(content: "provider wins")
@@ -562,7 +562,7 @@ struct ProviderDeadlineCoordinatorTests {
       _ = try? await sink.sendDelta("provider wins")
       return .completed(expected)
     }
-    let auxGate = GatedSend()
+    let auxGate = GatedAuxiliaryLoop()
 
     // when
     let outcome = await ProviderDeadlineCoordinator.raceStreaming(

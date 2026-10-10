@@ -3,8 +3,6 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@testable import ClawLLM
-
 /// The owning-session races the provider inherits from `LLMEventStream`: `stream` returns
 /// synchronously, cancellation before the handoff owes no debit, consumer abandonment is
 /// conservative, a committed completion wins a later cancellation, and repeated joins agree. Every

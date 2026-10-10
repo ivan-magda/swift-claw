@@ -4,7 +4,6 @@ import ClawData
 import ClawTestSupport
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import ClawGateway

@@ -1,7 +1,6 @@
 import ClawCore
 import ClawData
 import ClawGateway
-import ClawMCP
 import ClawSecrets
 import ClawTestSupport
 import ClawTools
