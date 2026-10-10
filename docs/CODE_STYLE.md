@@ -138,7 +138,8 @@ Install SwiftLint **0.65.1** from its
 [official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
 when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.62.1** from
 the locked BuildTools dependency, so the first run needs network access. It checks prerequisites
-before changing source; you do not need a global `swiftformat` install.
+before changing source; you do not need a global `swiftformat` install. A whole-repository
+check also needs Python 3 for its dead-code stage; macOS includes it with the Xcode tools.
 
 On Linux, install the same SwiftLint release as CI:
 
@@ -208,6 +209,11 @@ run `scripts/lint.sh --fix <saved-file>` after saving and reload the file. Avoid
 formatter-on-save integrations: invoking Apple swift-format alone can undo the final Google
 layout. Xcode users can run the saved-file command from a terminal or external-tool integration;
 `.editorconfig` by itself does not install an Xcode formatter.
+
+Python scripts follow `.ruff.toml`, as
+[architecture §19.2](ARCHITECTURE.md#192-source-formatting-and-lint) describes. An editor's ruff
+integration applies it; from a terminal, run `ruff format` and then `ruff check` on the changed
+scripts, using the ruff version in `BuildTools/lint-versions.env`.
 
 ## Review the seven sections
 

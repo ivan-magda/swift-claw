@@ -1,10 +1,8 @@
 import ClawCore
 import ClawData
 import ClawGateway
-import ClawLLM
 import ClawMCP
 import ClawSecrets
-import ClawTelegram
 import ClawTestSupport
 import ClawTools
 import ClawWorkspace

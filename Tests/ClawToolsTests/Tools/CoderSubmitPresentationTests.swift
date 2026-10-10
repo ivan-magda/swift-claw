@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 import Testing
 
 @testable import ClawTools

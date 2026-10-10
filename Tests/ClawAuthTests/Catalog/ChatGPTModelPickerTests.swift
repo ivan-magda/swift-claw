@@ -1,4 +1,3 @@
-import ClawCore
 import Testing
 
 @testable import ClawAuth

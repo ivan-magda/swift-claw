@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 
 /// Repairs a remote tool's JSON Schema into the shape every provider encoder accepts.
 ///

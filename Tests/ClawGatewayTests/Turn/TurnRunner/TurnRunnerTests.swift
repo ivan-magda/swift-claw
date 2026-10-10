@@ -2,10 +2,8 @@ import ClawAgent
 import ClawCore
 import ClawData
 import ClawTestSupport
-import ClawWorkspace
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import ClawGateway

@@ -1,0 +1,8 @@
+# Findings of scripts/check-dead-code.py that stay on purpose.
+# One per line: `file <path>  # reason` or `dependency <target> <module>  # reason`.
+# The check fails on a finding missing here and on an entry that no longer matches a finding.
+
+file docs/assets/branding/BRAND-ASSETS.md  # index of the brand files in its own directory
+file docs/assets/demo/card-approve-deny.png  # approval demo still; may be linked from outside the repository
+file docs/assets/demo/card-privileged.png  # approval demo still; may be linked from outside the repository
+file docs/audits/duplication-audit-2026-07-13.md  # point-in-time audit report, kept as a record

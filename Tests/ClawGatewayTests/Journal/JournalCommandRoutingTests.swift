@@ -2,6 +2,7 @@ import ClawAgent
 import ClawCore
 import ClawData
 import ClawTestSupport
+import ClawWorkspace
 import Foundation
 import Testing
 

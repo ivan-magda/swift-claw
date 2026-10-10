@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import Foundation
+import Logging
 
 // MARK: - Suspend Commit
 

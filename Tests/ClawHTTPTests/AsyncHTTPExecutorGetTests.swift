@@ -1,6 +1,7 @@
 import AsyncHTTPClient
 import ClawCore
 import Foundation
+import NIOHTTP1
 import Testing
 
 @testable import ClawHTTP

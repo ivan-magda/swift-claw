@@ -14,6 +14,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
     .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.0"),
     .package(url: "https://github.com/apple/swift-system.git", from: "1.7.4"),
@@ -39,6 +40,8 @@ let package = Package(
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOFoundationCompat", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
         .product(name: "NIOPosix", package: "swift-nio"),
       ]
     ),
@@ -104,6 +107,7 @@ let package = Package(
         "ClawCore",
         "ClawData",
         "ClawTools",
+        .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
@@ -137,6 +141,7 @@ let package = Package(
         "ClawMCP",
         "ClawCoder",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
@@ -149,7 +154,6 @@ let package = Package(
         "ClawAuth",
         "ClawCore",
         "ClawSecrets",
-        "ClawGateway",
         "ClawSubprocess",
         "ClawTestSupport",
       ]
@@ -163,7 +167,16 @@ let package = Package(
         .product(name: "Crypto", package: "swift-crypto"),
       ]
     ),
-    .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore", "ClawTestSupport"]),
+    .testTarget(
+      name: "ClawDataTests",
+      dependencies: [
+        "ClawData",
+        "ClawCore",
+        "ClawTestSupport",
+        .product(name: "Crypto", package: "swift-crypto"),
+        .product(name: "GRDB", package: "GRDB.swift"),
+      ]
+    ),
     .testTarget(name: "ClawWorkspaceTests", dependencies: ["ClawWorkspace", "ClawCore"]),
     .testTarget(
       name: "ClawHTTPTests",
@@ -179,12 +192,13 @@ let package = Package(
     ),
     .testTarget(
       name: "ClawTelegramTests",
-      dependencies: ["ClawTelegram", "ClawCore", "ClawTestSupport"]
+      dependencies: ["ClawTelegram", "ClawCore", "ClawHTTP", "ClawTestSupport"]
     ),
     .testTarget(
       name: "ClawLLMTests",
       dependencies: [
         "ClawLLM",
+        "ClawAuth",
         "ClawCore",
         "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
@@ -211,6 +225,7 @@ let package = Package(
         "ClawMCP",
         "ClawCore",
         "ClawTestSupport",
+        .product(name: "Logging", package: "swift-log"),
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),
@@ -247,6 +262,8 @@ let package = Package(
         "ClawWorkspace",
         "ClawTools",
         "ClawTestSupport",
+        .product(name: "GRDB", package: "GRDB.swift"),
+        .product(name: "Logging", package: "swift-log"),
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
       ]
@@ -270,8 +287,8 @@ let package = Package(
         "ClawSubprocess",
         "ClawTools",
         "ClawCoder",
-        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Logging", package: "swift-log"),
@@ -279,3 +296,10 @@ let package = Package(
     ),
   ]
 )
+
+// Require a direct import for every member a file uses, so a transitive import cannot hide a
+// missing module dependency (architecture §19.2).
+let memberImportVisibility = SwiftSetting.enableUpcomingFeature("MemberImportVisibility")
+for target in package.targets {
+  target.swiftSettings = (target.swiftSettings ?? []) + [memberImportVisibility]
+}

@@ -2,7 +2,6 @@ import ClawTestSupport
 import Testing
 
 @testable import ClawGateway
-@testable import clawd
 
 @Suite
 struct ServiceGraphOrderingTests {

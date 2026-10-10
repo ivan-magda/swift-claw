@@ -1,4 +1,3 @@
-import ClawCore
 import Logging
 
 @testable import ClawGateway

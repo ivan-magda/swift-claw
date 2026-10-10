@@ -2,7 +2,6 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@testable import ClawCore
 @testable import ClawData
 
 @Suite

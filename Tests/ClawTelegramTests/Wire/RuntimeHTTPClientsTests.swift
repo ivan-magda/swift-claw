@@ -1,3 +1,4 @@
+import ClawHTTP
 import Testing
 
 @testable import ClawTelegram

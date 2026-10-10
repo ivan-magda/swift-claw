@@ -1,5 +1,3 @@
-import ClawCore
-
 /// Why a turn stopped: the result the gateway commits and the payload-free cause the attempt
 /// diagnostics record.
 struct TurnExit {

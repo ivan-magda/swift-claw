@@ -1,7 +1,6 @@
 import ClawAgent
 import ClawCore
 import ClawTestSupport
-import ClawWorkspace
 import Foundation
 import GRDB
 import Testing

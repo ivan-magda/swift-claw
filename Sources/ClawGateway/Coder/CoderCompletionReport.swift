@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 
 struct CoderCompletionReport: Sendable {
   private let redact: @Sendable (_ text: String) -> String
