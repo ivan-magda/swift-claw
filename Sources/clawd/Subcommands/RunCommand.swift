@@ -1,7 +1,9 @@
 import ArgumentParser
+import ClawAgent
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawSecrets
 import ClawSubprocess
 import ClawTelegram
 import Foundation

@@ -2,6 +2,7 @@ import ClawCore
 import ClawGateway
 import ClawMCP
 import ClawSecrets
+import Foundation
 
 // MARK: - MCP Health Rows
 

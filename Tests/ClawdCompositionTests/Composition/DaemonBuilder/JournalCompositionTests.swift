@@ -1,7 +1,10 @@
+import ClawCoder
 import ClawCore
 import ClawData
 import ClawSubprocess
+import ClawTelegram
 import ClawTestSupport
+import ClawTools
 import ClawWorkspace
 import Foundation
 import GRDB

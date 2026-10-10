@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 

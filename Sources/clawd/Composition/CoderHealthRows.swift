@@ -1,6 +1,7 @@
 import ClawCoder
 import ClawCore
 import ClawGateway
+import Foundation
 
 /// Coder facts use the existing doctor table; local probes never stand in for live task state.
 enum CoderHealthRows {

@@ -1,10 +1,12 @@
 import ClawAppleSpeech
 import ClawCore
+import ClawData
 import ClawGateway
 import ClawTelegram
 import ClawTools
 import ClawWorkspace
 import Foundation
+import Logging
 
 // MARK: - Intake Services & Tool Catalog
 

@@ -1,3 +1,4 @@
+import ClawCore
 import Testing
 
 @testable import clawd
