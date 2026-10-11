@@ -20,8 +20,8 @@ the repository gate. Each script's header documents its flags.
 | `python3 -I $S/prune_imports.py --work DIR --base REF` | ~2 min per module | imports the compiler proves removable, including modules Periphery never reports |
 | `python3 -I $S/prune_imports.py --work DIR --check-only --base REF` | ~1 min | files that compile only by borrowing another file's import |
 
-`periphery_scan.sh` builds its own index store: the default build backend writes none, so a
-plain `periphery scan` fails with "index store path does not exist".
+Run Periphery only through `periphery_scan.sh`. A plain `periphery scan` fails with "index
+store path does not exist", and without the script's flags the results include dependency code.
 
 The last three commands build the whole package, the pruner once per module. Run them one at a
 time, never in parallel: two at once take longer than the same two in sequence. Reuse one fixed
@@ -50,7 +50,7 @@ Verdict is one of DELETE, KEEP, AMBIGUOUS, OUT-OF-SCOPE. Every row needs evidenc
 | --- | --- | --- |
 | Property unused or assign-only in an `Encodable` type | Serialized to the wire or into a digest | Find the encoder; tests that decode the body |
 | Field assign-only in an `Equatable`/`Hashable` type | Takes part in `==` | Synthesized conformance |
-| `@Test(arguments:)` function, its argument enum, its parameter labels, helpers only it calls | Swift Testing discovers them at runtime | The `@Test` attribute |
+| Parameter of a `@Test(arguments:)` function, such as a label | Swift Testing passes every argument, read or not | The `@Test` attribute |
 | Case of a `CaseIterable` enum | Reached through `allCases` | `.allCases` users |
 | Unused parameter | Signature fixed by a protocol, override or function-typed value | `Self.function` passed as an argument |
 | Protocol requirement nobody calls through the protocol | Documented contract | ARCHITECTURE.md → AMBIGUOUS |
