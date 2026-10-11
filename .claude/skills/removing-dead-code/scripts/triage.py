@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Turn two Periphery CSV scans into a triage report with false-positive hints.
+"""Turn two Periphery JSON scans into a triage report with false-positive hints.
 
-Usage (from the package root): python3 -I triage.py ALL_CSV PROD_CSV > report.md
+Usage (from the package root): python3 -I triage.py ALL_JSON PROD_JSON > report.md
 
-ALL_CSV is a scan with tests included; PROD_CSV ignores tests, so its extra rows are
-production declarations that only tests reach. The notes are hints from simple source
-reading. They point at the check to make; they never prove that a declaration is dead or
-alive.
+ALL_JSON is a scan with tests included; PROD_JSON ignores tests, so its extra findings
+are production declarations that only tests reach. The notes are hints from simple
+source reading. They point at the check to make; they never prove that a declaration is
+dead or alive.
 """
 
 from __future__ import annotations
 
 import argparse
 import collections
-import csv
 import functools
+import json
 import re
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 # How far above a declaration to look for its attributes and doc comment.
 MAX_ATTRIBUTE_LINES = 400
@@ -41,7 +41,8 @@ TEST_SEAM_COMMENT = re.compile(r"\b(?:tests?|seam)\b", re.IGNORECASE)
 # The default for tables without a "used only by flagged" note.
 NO_FUNCTIONS: frozenset[str] = frozenset()
 
-# Periphery hints that are not plain "unused".
+# Periphery hints.
+UNUSED = "unused"
 ASSIGN_ONLY = "assignOnlyProperty"
 REDUNDANT_PUBLIC = "redundantPublicAccessibility"
 
@@ -62,18 +63,24 @@ PARAMETER_HINT = (
 
 
 class Finding(NamedTuple):
-    """One row of a Periphery CSV scan."""
+    """One result of a Periphery JSON scan."""
 
     kind: str
     name: str
     location: str  # path:line:column
-    ids: str
-    hints: str
+    ids: tuple[str, ...]
+    hints: tuple[str, ...]
 
     @classmethod
-    def from_row(cls, row: dict[str, str]) -> Finding:
-        """Make a finding from a CSV row."""
-        return cls(row["Kind"], row["Name"], row["Location"], row["IDs"], row["Hints"])
+    def from_result(cls, result: dict[str, Any]) -> Finding:
+        """Make a finding from a JSON result."""
+        return cls(
+            result["kind"],
+            result["name"],
+            result["location"],
+            tuple(result["ids"]),
+            tuple(result["hints"]),
+        )
 
     @property
     def path(self) -> str:
@@ -99,13 +106,12 @@ class ParameterizedTest(NamedTuple):
 
     first_line: int  # 0-based index of the func line
     last_line: int  # 0-based index of the line with the opening brace
-    text: str  # its attributes and signature
 
 
 def read_findings(path: str) -> list[Finding]:
-    """Read a Periphery CSV scan."""
-    with Path(path).open(newline="", encoding="utf-8") as scan:
-        return [Finding.from_row(row) for row in csv.DictReader(scan)]
+    """Read a Periphery JSON scan."""
+    with Path(path).open(encoding="utf-8") as scan:
+        return [Finding.from_result(result) for result in json.load(scan)]
 
 
 @functools.cache
@@ -172,8 +178,7 @@ def parameterized_tests(path: str) -> tuple[ParameterizedTest, ...]:
         last = index
         while "{" not in lines[last] and last + 1 < len(lines):
             last += 1
-        signature = "\n".join(lines[index : last + 1])
-        tests.append(ParameterizedTest(index, last, f"{attributes}\n{signature}"))
+        tests.append(ParameterizedTest(index, last))
     return tuple(tests)
 
 
@@ -188,24 +193,20 @@ def conforms_to(
     return any(extension.search(text) for text in lines)
 
 
-def parameterized_test_notes(
-    finding: Finding, index: int, attributes: str
-) -> list[str]:
-    """Return hints that Swift Testing reaches the declaration at runtime."""
-    notes: list[str] = []
-    in_tests = finding.path.startswith("Tests/")
-    tests = parameterized_tests(finding.path) if in_tests else ()
-    if finding.kind.startswith("function") and is_parameterized_test(attributes):
-        notes.append("parameterized @Test: Swift Testing runs it")
-    if finding.kind == "enum":
-        name = re.compile(rf"\b{finding.name}\b")
-        if any(name.search(test.text) for test in tests):
-            notes.append("argument type of a parameterized @Test")
-    if finding.kind == "var.parameter" and any(
-        test.first_line <= index <= test.last_line for test in tests
+def parameterized_test_notes(finding: Finding, index: int) -> list[str]:
+    """Return a hint when the finding is a parameter of a parameterized @Test.
+
+    Periphery 3 keeps the test and its argument types, but still reports a parameter
+    the body never reads, such as a label that only names the test case.
+    """
+    if finding.kind != "var.parameter" or not finding.path.startswith("Tests/"):
+        return []
+    if any(
+        test.first_line <= index <= test.last_line
+        for test in parameterized_tests(finding.path)
     ):
-        notes.append("argument of a parameterized @Test")
-    return notes
+        return ["argument of a parameterized @Test"]
+    return []
 
 
 def enclosing_type_notes(
@@ -266,7 +267,7 @@ def notes_for(
 
     index = finding.line - 1
     attributes = attributes_above(lines, index)
-    notes = parameterized_test_notes(finding, index, attributes)
+    notes = parameterized_test_notes(finding, index)
     declaration = enclosing_type(lines, index)
     if declaration:
         notes += enclosing_type_notes(finding, lines, declaration)
@@ -330,24 +331,24 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("all_csv", help="Periphery scan with tests included")
-    parser.add_argument("prod_csv", help="Periphery scan of production code only")
+    parser.add_argument("all_json", help="Periphery scan with tests included")
+    parser.add_argument("prod_json", help="Periphery scan of production code only")
     return parser.parse_args()
 
 
 def main() -> int:
     """Print the triage report."""
     arguments = parse_arguments()
-    findings = read_findings(arguments.all_csv)
-    production_findings = read_findings(arguments.prod_csv)
+    findings = read_findings(arguments.all_json)
+    production_findings = read_findings(arguments.prod_json)
 
     imports = [f for f in findings if f.kind == "module"]
-    assign_only = [f for f in findings if f.hints == ASSIGN_ONLY]
-    redundant_public = [f for f in findings if f.hints == REDUNDANT_PUBLIC]
+    assign_only = [f for f in findings if ASSIGN_ONLY in f.hints]
+    redundant_public = [f for f in findings if REDUNDANT_PUBLIC in f.hints]
     unused = [
         f
         for f in findings
-        if f.kind != "module" and f.hints not in {ASSIGN_ONLY, REDUNDANT_PUBLIC}
+        if f.kind != "module" and not {ASSIGN_ONLY, REDUNDANT_PUBLIC} & set(f.hints)
     ]
     # A declaration flagged without tests but not with them is one only tests reach.
     flagged_with_tests = {f.ids for f in findings}
@@ -356,7 +357,7 @@ def main() -> int:
         for f in production_findings
         if f.ids not in flagged_with_tests
         and f.kind != "module"
-        and f.hints == "unused"
+        and f.hints == (UNUSED,)
     ]
 
     print("# Periphery triage\n")
