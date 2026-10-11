@@ -4,7 +4,7 @@
 Usage (from the package root): python3 -I triage.py ALL_JSON PROD_JSON > report.md
 
 ALL_JSON is a scan with tests included; PROD_JSON ignores tests, so its extra findings
-are production declarations that only tests reach. The notes are hints from simple
+are production declarations that only tests use. The notes are hints from simple
 source reading. They point at the check to make; they never prove that a declaration is
 dead or alive.
 """
@@ -353,22 +353,28 @@ def main() -> int:
         if finding.kind != "module"
         and finding.hint not in {ASSIGN_ONLY, REDUNDANT_PUBLIC}
     ]
-    # A declaration flagged without tests but not with them is one only tests reach.
+    # A declaration flagged without tests but not with them is one that tests use.
     flagged_with_tests = {finding.ids for finding in findings}
-    test_only = [
+    flagged_only_without_tests = [
         finding
         for finding in production_findings
-        if finding.ids not in flagged_with_tests
-        and finding.kind != "module"
-        and finding.hint == UNUSED
+        if finding.ids not in flagged_with_tests and finding.kind != "module"
+    ]
+    test_only = [
+        finding for finding in flagged_only_without_tests if finding.hint == UNUSED
+    ]
+    # Production writes these properties, and only tests read them.
+    read_only_by_tests = [
+        finding for finding in flagged_only_without_tests if finding.hint == ASSIGN_ONLY
     ]
 
     print("# Periphery triage\n")
     print(
         f"Unused declarations: {len(unused)}. Test-only production declarations: "
-        f"{len(test_only)}. Unused imports: {len(imports)}. Assign-only properties: "
-        f"{len(assign_only)}. Redundant public (access level, not dead code): "
-        f"{len(redundant_public)}.\n"
+        f"{len(test_only)}. Production properties only tests read: "
+        f"{len(read_only_by_tests)}. Unused imports: {len(imports)}. Assign-only "
+        f"properties: {len(assign_only)}. Redundant public (access level, not dead "
+        f"code): {len(redundant_public)}.\n"
     )
     print(NOTES_CAVEAT)
 
@@ -383,6 +389,8 @@ def main() -> int:
     print("## Production declarations that only tests reach\n")
     print(TEST_ONLY_CAVEAT)
     print(markdown_table(test_only) + "\n")
+    print("### Properties production writes and only tests read\n")
+    print(markdown_table(read_only_by_tests) + "\n")
 
     print_unused_imports(imports)
     print_assign_only(assign_only)

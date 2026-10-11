@@ -40,28 +40,37 @@ fi
 out=$(mkdir -p "$1" && cd "$1" && pwd -P)
 script_dir=$(cd "$(dirname "$0")" && pwd -P)
 index="$out/build/out"
+# OUT_DIR is reused across runs, so a failed run must not leave the previous report behind.
+rm -f "$out/report.md"
 
 echo "scan: building package and tests with an index store (several minutes)..." >&2
 swift build --build-tests --scratch-path "$out/build" >"$out/build.log" 2>&1 ||
   { tail -20 "$out/build.log" >&2; echo "scan: build failed, see $out/build.log" >&2; exit 1; }
-# The location is a Swift Build detail. Without this check, a move would surface only in all.err.
+# The location is a Swift Build detail, so name it if it moves.
 [[ -d "$index/v5/units" ]] ||
   { echo "scan: no index store in $index; find where swift build now writes it" >&2; exit 1; }
 
 # Each scan also sends the project's line count to api.periphery.pro and, given a reply, prints
 # a plan suggestion to stdout after the results. PERIPHERY_API_BASE_URL sends that request to a
 # closed local port instead, and --quiet keeps any such message out of the JSON.
+# Usage: scan NAME [periphery options]. Writes OUT_DIR/NAME.json and OUT_DIR/NAME.err.
 scan() {
+  local name=$1
+  shift
   PERIPHERY_API_BASE_URL=http://127.0.0.1:9/v1 periphery scan --skip-build \
     --index-store-path "$index" --disable-update-check --quiet --relative-results \
-    --format json --index-exclude "$out/build/checkouts/**" "$@"
+    --format json --index-exclude "$out/build/checkouts/**" "$@" \
+    >"$out/$name.json" 2>"$out/$name.err" || {
+      tail -20 "$out/$name.err" >&2
+      echo "scan: Periphery failed, see $out/$name.err" >&2
+      exit 1
+    }
 }
 
 echo "scan: Periphery, tests included..." >&2
-scan >"$out/all.json" 2>"$out/all.err"
+scan all
 echo "scan: Periphery, tests and ClawTestSupport ignored..." >&2
-scan --index-exclude 'Tests/**' --index-exclude 'Sources/ClawTestSupport/**' \
-  >"$out/prod.json" 2>"$out/prod.err"
+scan prod --index-exclude 'Tests/**' --index-exclude 'Sources/ClawTestSupport/**'
 
 python3 -I "$script_dir/triage.py" "$out/all.json" "$out/prod.json" >"$out/report.md"
 echo "scan: report written to $out/report.md" >&2
