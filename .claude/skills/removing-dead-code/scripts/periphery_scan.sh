@@ -24,7 +24,16 @@ fi
 command -v periphery >/dev/null || { echo "periphery not found (brew install periphery)" >&2; exit 2; }
 installed_version=$(periphery version)
 if [[ "$installed_version" != "$periphery_version" ]]; then
-  echo "periphery $installed_version found; this script expects $periphery_version" >&2
+  cat >&2 <<EOF
+periphery $installed_version found; this script expects $periphery_version from homebrew-core.
+If it came from the old peripheryapp/periphery tap (it stops at 2.21.2), run in this order:
+  brew untap peripheryapp/periphery
+  brew uninstall --cask periphery
+  brew install periphery
+Uninstalling first fails: the tap's cask no longer loads ("Calling \`depends_on macos:
+:catalina\` is disabled"). The untap succeeds with the cask installed, and the uninstall then
+uses the installed copy.
+EOF
   exit 2
 fi
 

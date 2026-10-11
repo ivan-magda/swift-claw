@@ -20,12 +20,8 @@ the repository gate. Each script's header documents its flags.
 | `python3 -I $S/prune_imports.py --work DIR --base REF` | ~2 min per module | imports the compiler proves removable, including modules Periphery never reports |
 | `python3 -I $S/prune_imports.py --work DIR --check-only --base REF` | ~1 min | files that compile only by borrowing another file's import |
 
-`periphery_scan.sh` builds into `OUT/build` and passes Periphery the index store in
-`OUT/build/out`. A plain `periphery scan` fails with "index store path does not exist": the
-default build backend writes the store to `.build/out`, and Periphery looks in
-`.build/debug/index/store`. The script requires Periphery 3.8.0 from homebrew-core
-(`brew install periphery`); the old `peripheryapp/periphery` tap stopped at 2.21.2, which
-misreports parameterized tests.
+Run Periphery only through `periphery_scan.sh`. A plain `periphery scan` fails with "index
+store path does not exist", and without the script's flags the results include dependency code.
 
 The last three commands build the whole package, the pruner once per module. Run them one at a
 time, never in parallel: two at once take longer than the same two in sequence. Reuse one fixed
