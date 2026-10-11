@@ -41,7 +41,7 @@ TEST_SEAM_COMMENT = re.compile(r"\b(?:tests?|seam)\b", re.IGNORECASE)
 # The default for tables without a "used only by flagged" note.
 NO_FUNCTIONS: frozenset[str] = frozenset()
 
-# Periphery hints.
+# The hints Periphery gives a finding.
 UNUSED = "unused"
 ASSIGN_ONLY = "assignOnlyProperty"
 REDUNDANT_PUBLIC = "redundantPublicAccessibility"
@@ -68,18 +68,20 @@ class Finding(NamedTuple):
     kind: str
     name: str
     location: str  # path:line:column
-    ids: tuple[str, ...]
-    hints: tuple[str, ...]
+    ids: tuple[str, ...]  # a tuple, so that a set can hold it
+    hint: str
 
     @classmethod
-    def from_result(cls, result: dict[str, Any]) -> Finding:
-        """Make a finding from a JSON result."""
+    def from_json(cls, result: dict[str, Any]) -> Finding:
+        """Make a finding from one result of a JSON scan."""
+        # Periphery lists exactly one hint per result; the unpacking fails otherwise.
+        (hint,) = result["hints"]
         return cls(
-            result["kind"],
-            result["name"],
-            result["location"],
-            tuple(result["ids"]),
-            tuple(result["hints"]),
+            kind=result["kind"],
+            name=result["name"],
+            location=result["location"],
+            ids=tuple(result["ids"]),
+            hint=hint,
         )
 
     @property
@@ -111,7 +113,7 @@ class ParameterizedTest(NamedTuple):
 def read_findings(path: str) -> list[Finding]:
     """Read a Periphery JSON scan."""
     with Path(path).open(encoding="utf-8") as scan:
-        return [Finding.from_result(result) for result in json.load(scan)]
+        return [Finding.from_json(result) for result in json.load(scan)]
 
 
 @functools.cache
@@ -194,18 +196,16 @@ def conforms_to(
 
 
 def parameterized_test_notes(finding: Finding, index: int) -> list[str]:
-    """Return a hint when the finding is a parameter of a parameterized @Test.
+    """Return a note when the finding is a parameter of a parameterized @Test.
 
     Periphery 3 keeps the test and its argument types, but still reports a parameter
     the body never reads, such as a label that only names the test case.
     """
     if finding.kind != "var.parameter" or not finding.path.startswith("Tests/"):
         return []
-    if any(
-        test.first_line <= index <= test.last_line
-        for test in parameterized_tests(finding.path)
-    ):
-        return ["argument of a parameterized @Test"]
+    for test in parameterized_tests(finding.path):
+        if test.first_line <= index <= test.last_line:
+            return ["argument of a parameterized @Test"]
     return []
 
 
@@ -342,22 +342,25 @@ def main() -> int:
     findings = read_findings(arguments.all_json)
     production_findings = read_findings(arguments.prod_json)
 
-    imports = [f for f in findings if f.kind == "module"]
-    assign_only = [f for f in findings if ASSIGN_ONLY in f.hints]
-    redundant_public = [f for f in findings if REDUNDANT_PUBLIC in f.hints]
+    imports = [finding for finding in findings if finding.kind == "module"]
+    assign_only = [finding for finding in findings if finding.hint == ASSIGN_ONLY]
+    redundant_public = [
+        finding for finding in findings if finding.hint == REDUNDANT_PUBLIC
+    ]
     unused = [
-        f
-        for f in findings
-        if f.kind != "module" and not {ASSIGN_ONLY, REDUNDANT_PUBLIC} & set(f.hints)
+        finding
+        for finding in findings
+        if finding.kind != "module"
+        and finding.hint not in {ASSIGN_ONLY, REDUNDANT_PUBLIC}
     ]
     # A declaration flagged without tests but not with them is one only tests reach.
-    flagged_with_tests = {f.ids for f in findings}
+    flagged_with_tests = {finding.ids for finding in findings}
     test_only = [
-        f
-        for f in production_findings
-        if f.ids not in flagged_with_tests
-        and f.kind != "module"
-        and f.hints == (UNUSED,)
+        finding
+        for finding in production_findings
+        if finding.ids not in flagged_with_tests
+        and finding.kind != "module"
+        and finding.hint == UNUSED
     ]
 
     print("# Periphery triage\n")
@@ -370,7 +373,9 @@ def main() -> int:
     print(NOTES_CAVEAT)
 
     flagged_functions = frozenset(
-        f.name.split("(")[0] for f in unused if f.kind.startswith("function")
+        finding.name.split("(")[0]
+        for finding in unused
+        if finding.kind.startswith("function")
     )
     print("## Unused declarations, tests included\n")
     print(markdown_table(unused, flagged_functions) + "\n")
