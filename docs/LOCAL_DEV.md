@@ -76,8 +76,13 @@ test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
   shellcheck -s sh install.sh deploy/run-clawd.sh &&
   shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
-    scripts/update-prices.sh
+    scripts/update-prices.sh scripts/test-update-prices.sh
+bash scripts/test-update-prices.sh
 ```
+
+The price-refresh checks use local fixtures for both LiteLLM and the OpenRouter Models API;
+they need no network or credentials. The weekly workflow runs `scripts/update-prices.sh` against
+both public sources and proposes a combined `Prices.json` snapshot.
 
 Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,
 a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.

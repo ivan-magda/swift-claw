@@ -9407,6 +9407,2614 @@
     "inputUSDPerMTok": 0.07,
     "outputUSDPerMTok": 0.2
   },
+  "openrouter/aion-labs/aion-2.0": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 1.6
+  },
+  "openrouter/aion-labs/aion-3.0": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/aion-labs/aion-3.0-mini": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 1.4
+  },
+  "openrouter/aion-labs/aion-3.5": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/aion-labs/aion-3.5-mini": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 1.4
+  },
+  "openrouter/aion-labs/aion-rp-llama-3.1-8b": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 1.6
+  },
+  "openrouter/alibaba/happyhorse-1.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/alibaba/happyhorse-1.1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/alibaba/wan-2.6": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/alibaba/wan-2.7": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/alibaba/wan-3.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/alibaba/wan-3.0-prime": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/amazon/nova-2-lite-v1": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/amazon/nova-lite-v1": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "openrouter/amazon/nova-micro-v1": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.14
+  },
+  "openrouter/amazon/nova-premier-v1": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/amazon/nova-pro-v1": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
+  },
+  "openrouter/anthracite-org/magnum-v4-72b": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/anthropic/claude-fable-5": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/anthropic/claude-fable-5.1": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/anthropic/claude-fable-5.1:batch": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-fable-5:batch": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-haiku-4.5": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/anthropic/claude-haiku-4.5:batch": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/anthropic/claude-haiku-5.5": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/anthropic/claude-haiku-5.5:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/anthropic/claude-opus-4.1": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 75
+  },
+  "openrouter/anthropic/claude-opus-4.1:batch": {
+    "inputUSDPerMTok": 7.5,
+    "outputUSDPerMTok": 37.5
+  },
+  "openrouter/anthropic/claude-opus-4.5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-opus-4.5:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/anthropic/claude-opus-4.6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-opus-4.6:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/anthropic/claude-opus-4.7": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-opus-4.7:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/anthropic/claude-opus-4.8": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-opus-4.8:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/anthropic/claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-opus-5.5": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "openrouter/anthropic/claude-opus-5.5:batch": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/anthropic/claude-opus-5:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "openrouter/anthropic/claude-sonnet-4": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/anthropic/claude-sonnet-4.5": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/anthropic/claude-sonnet-4.5:batch": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/anthropic/claude-sonnet-4.6": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/anthropic/claude-sonnet-4.6:batch": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/anthropic/claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/anthropic/claude-sonnet-5.5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/anthropic/claude-sonnet-5.5:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/anthropic/claude-sonnet-5:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/apodex/apodex-1.1-mini:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/arcee-ai/trinity-large-thinking": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.8
+  },
+  "openrouter/assemblyai/universal-3-5-pro": {
+    "inputUSDPerMTok": 125,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baai/bge-base-en-v1.5": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baai/bge-large-en-v1.5": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baai/bge-m3": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux-3-image": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux-3-video": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux-video-edit": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux-video-upscale": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux.2-flex": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux.2-klein-4b": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux.2-max": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/black-forest-labs/flux.2-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance-seed/seed-1.6": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/bytedance-seed/seed-1.6-flash": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/bytedance-seed/seed-2-1-turbo": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/bytedance-seed/seed-2.0-code": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/bytedance-seed/seed-2.0-lite": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/bytedance-seed/seed-2.0-mini": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/bytedance-seed/seed-audio-1-0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 2500
+  },
+  "openrouter/bytedance-seed/seedream-4.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance-seed/seedream-5-0-flash": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance-seed/seedream-5-0-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance-seed/seedream-5-0-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/seedance-1-5-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/seedance-2.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/seedance-2.0-fast": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/seedance-2.0-mini": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/seedance-2.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/bytedance/ui-tars-1.5-7b": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/canopylabs/orpheus-3b-0.1-ft": {
+    "inputUSDPerMTok": 7,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cloudflare/clef": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cloudflare/clef-flash": {
+    "inputUSDPerMTok": 0.038,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cloudflare/clef-omni": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.9
+  },
+  "openrouter/cohere/command-a": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/cohere/command-a-plus": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/cohere/command-r-08-2024": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/cohere/command-r-plus-08-2024": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/cohere/command-r7b-12-2024": {
+    "inputUSDPerMTok": 0.0375,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/cohere/north-mini-code:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cohere/rerank-4-fast": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cohere/rerank-4-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/cohere/rerank-v3.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/deepgram/aura-2": {
+    "inputUSDPerMTok": 30,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/deepgram/flux-tts": {
+    "inputUSDPerMTok": 45,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/deepgram/nova-3": {
+    "inputUSDPerMTok": 71.666667,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/deepseek/deepseek-chat": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 0.89
+  },
+  "openrouter/deepseek/deepseek-chat-v3-0324": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1.14
+  },
+  "openrouter/deepseek/deepseek-chat-v3.1": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.95
+  },
+  "openrouter/deepseek/deepseek-r1": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/deepseek/deepseek-r1-0528": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.15
+  },
+  "openrouter/deepseek/deepseek-v3.1-terminus": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/deepseek/deepseek-v3.2": {
+    "inputUSDPerMTok": 0.259,
+    "outputUSDPerMTok": 0.8
+  },
+  "openrouter/deepseek/deepseek-v3.2-exp": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.41
+  },
+  "openrouter/deepseek/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 1.28
+  },
+  "openrouter/deepseek/deepseek-v4-flash-0731": {
+    "inputUSDPerMTok": 0.016,
+    "outputUSDPerMTok": 0.64
+  },
+  "openrouter/deepseek/deepseek-v4-flash-vision-exp": {
+    "inputUSDPerMTok": 0.2156,
+    "outputUSDPerMTok": 0.6468
+  },
+  "openrouter/deepseek/deepseek-v4-pro": {
+    "inputUSDPerMTok": 0.95526,
+    "outputUSDPerMTok": 1.91052
+  },
+  "openrouter/deepseek/deepseek-v4-pro-0813": {
+    "inputUSDPerMTok": 1.32,
+    "outputUSDPerMTok": 3.96
+  },
+  "openrouter/deepseek/deepseek-v4.1-flash": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/deepseek/deepseek-v4.1-flash:batch": {
+    "inputUSDPerMTok": 0.112,
+    "outputUSDPerMTok": 0.336
+  },
+  "openrouter/dots-studio/dots-3-note-preview:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-flash-v2": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-flash-v2.5": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-multilingual-v2": {
+    "inputUSDPerMTok": 40,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-turbo-v2": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-turbo-v2.5": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-v3": {
+    "inputUSDPerMTok": 40,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-v3-conversational": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-v4": {
+    "inputUSDPerMTok": 40,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/eleven-v4-turbo": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/scribe-v2": {
+    "inputUSDPerMTok": 30.555556,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/elevenlabs/scribe-v2-medical": {
+    "inputUSDPerMTok": 30.555556,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fireworks/ember-1": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/fish-audio/s1": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fish-audio/s2-pro": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fish-audio/s2.1-pro": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fish-audio/s2.1-pro-free:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fish-audio/transcribe-1": {
+    "inputUSDPerMTok": 100,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/fish-audio/transcribe-1-pro": {
+    "inputUSDPerMTok": 100,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/chirp-3": {
+    "inputUSDPerMTok": 266.666667,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemini-2.5-flash": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/google/gemini-2.5-flash-image": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/google/gemini-2.5-flash-lite": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/google/gemini-2.5-flash-lite:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/google/gemini-2.5-flash:batch": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.25
+  },
+  "openrouter/google/gemini-2.5-pro": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/google/gemini-2.5-pro-preview": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/google/gemini-2.5-pro:batch": {
+    "inputUSDPerMTok": 0.625,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/google/gemini-3-flash-preview": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/google/gemini-3-flash-preview:batch": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/google/gemini-3-pro-image": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/google/gemini-3-pro-image-preview": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/google/gemini-3.1-flash-image": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/google/gemini-3.1-flash-image-preview": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/google/gemini-3.1-flash-lite": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/google/gemini-3.1-flash-lite-image": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/google/gemini-3.1-flash-lite-preview": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/google/gemini-3.1-flash-lite:batch": {
+    "inputUSDPerMTok": 0.125,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/google/gemini-3.1-flash-tts-preview": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 20
+  },
+  "openrouter/google/gemini-3.1-pro-preview": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/google/gemini-3.1-pro-preview-customtools": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/google/gemini-3.1-pro-preview:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/google/gemini-3.5-flash": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 9
+  },
+  "openrouter/google/gemini-3.5-flash-lite": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/google/gemini-3.5-flash-lite:batch": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.25
+  },
+  "openrouter/google/gemini-3.5-flash:batch": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 4.5
+  },
+  "openrouter/google/gemini-3.5-transcribe": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/google/gemini-3.6-flash": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/google/gemini-3.6-flash:batch": {
+    "inputUSDPerMTok": 0.375,
+    "outputUSDPerMTok": 1.875
+  },
+  "openrouter/google/gemini-3.7-flash": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/google/gemini-3.7-flash:batch": {
+    "inputUSDPerMTok": 0.375,
+    "outputUSDPerMTok": 1.875
+  },
+  "openrouter/google/gemini-3.8-flash": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/google/gemini-3.8-flash-lite-tts": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/google/gemini-3.8-flash-tts": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 9
+  },
+  "openrouter/google/gemini-3.8-flash:batch": {
+    "inputUSDPerMTok": 0.375,
+    "outputUSDPerMTok": 1.875
+  },
+  "openrouter/google/gemini-embedding-001": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemini-embedding-2": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemini-embedding-2-preview": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemini-embedding-2:batch": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemini-nano-banana-2.1": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/google/gemma-2-27b-it": {
+    "inputUSDPerMTok": 0.65,
+    "outputUSDPerMTok": 0.65
+  },
+  "openrouter/google/gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/google/gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.45
+  },
+  "openrouter/google/gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
+  },
+  "openrouter/google/gemma-4-26b-a4b-it": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/google/gemma-4-26b-a4b-it:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/gemma-4-31b-it": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.34
+  },
+  "openrouter/google/gemma-4-31b-it:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/lyria-3-clip-preview": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/lyria-3-pro-preview": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/veo-3.1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/veo-3.1-fast": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/google/veo-3.1-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/gryphe/mythomax-l2-13b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.11
+  },
+  "openrouter/hexgrad/kokoro-82m": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/avatar-iv": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/heygen-video-1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/ibm-granite/granite-4.0-h-micro": {
+    "inputUSDPerMTok": 0.017,
+    "outputUSDPerMTok": 0.112
+  },
+  "openrouter/ibm-granite/granite-4.2-8b": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/inception/mercury-2": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/inception/mercury-2.5": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/inception/mercury-decide": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/inception/mercury-decide:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/inclusionai/ling-3.0-flash": {
+    "inputUSDPerMTok": 0.021,
+    "outputUSDPerMTok": 0.063
+  },
+  "openrouter/inclusionai/ling-3.0-flash-fin": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0.1232
+  },
+  "openrouter/inclusionai/ling-3.0-flash-sante": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0.1232
+  },
+  "openrouter/inclusionai/ling-3.0-flash-vl": {
+    "inputUSDPerMTok": 0.021,
+    "outputUSDPerMTok": 0.0616
+  },
+  "openrouter/inclusionai/ling-3.1-flash": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/inclusionai/ming-image-0.1-design": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/inclusionai/ming-image-0.1-design-layer": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/inference-net/schematron-v2-small": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.23
+  },
+  "openrouter/inference-net/schematron-v2-turbo": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/intfloat/e5-base-v2": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/intfloat/e5-large-v2": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/intfloat/multilingual-e5-large": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/jaredpalmer/kev-4b": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/krea/krea-2-large": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/krea/krea-2-medium": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/krea/krea-2-medium-turbo": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/kwaivgi/kling-v3.0-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/kwaivgi/kling-v3.0-std": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/kwaivgi/kling-video-o1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/liquid/d1": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/liquid/lfm-2.5-2.6b:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/liquid/lfm-2.5-embedding-350m:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mancer/weaver": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/meituan/longcat-2.0": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/meta-llama/llama-3.1-70b-instruct": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/meta-llama/llama-3.1-8b-instruct": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.08
+  },
+  "openrouter/meta-llama/llama-3.2-1b-instruct": {
+    "inputUSDPerMTok": 0.027,
+    "outputUSDPerMTok": 0.201
+  },
+  "openrouter/meta-llama/llama-3.2-3b-instruct": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.33
+  },
+  "openrouter/meta-llama/llama-3.3-70b-instruct": {
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/meta-llama/llama-4-maverick": {
+    "inputUSDPerMTok": 0.1875,
+    "outputUSDPerMTok": 0.6525
+  },
+  "openrouter/meta-llama/llama-4-scout": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/meta-llama/llama-guard-4-12b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "openrouter/meta/muse-glimmer-30b": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/meta/muse-image": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/meta/muse-spark-1.1": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
+  "openrouter/meta/muse-spark-1.2": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
+  "openrouter/meta/muse-spark-1.2-contributor": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/meta/muse-spark-1.3": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
+  "openrouter/meta/muse-spark-1.3-contributor": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/meta/muse-voice-transcribe-1.0": {
+    "inputUSDPerMTok": 50,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-image-2.5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-image-2.5-pro": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-image-2.6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-image-2.6-flash": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-transcribe-1.5": {
+    "inputUSDPerMTok": 360000,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-transcribe-2": {
+    "inputUSDPerMTok": 100000,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-voice-2": {
+    "inputUSDPerMTok": 22,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-voice-2-flash": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-voice-2.1": {
+    "inputUSDPerMTok": 22,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-voice-2.1-flash": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/microsoft-decision-1": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/phi-4": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.14
+  },
+  "openrouter/microsoft/wizardlm-2-8x22b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 0.62
+  },
+  "openrouter/minimax/hailuo-2.3": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/minimax/hailuo-3": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/minimax/hailuo-3-max": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/minimax/minimax-01": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.1
+  },
+  "openrouter/minimax/minimax-m1": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 2.2
+  },
+  "openrouter/minimax/minimax-m2": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/minimax/minimax-m2-her": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/minimax/minimax-m2.1": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/minimax/minimax-m2.5": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 1.08
+  },
+  "openrouter/minimax/minimax-m2.7": {
+    "inputUSDPerMTok": 0.21,
+    "outputUSDPerMTok": 0.84
+  },
+  "openrouter/minimax/minimax-m3": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/minimax/speech-2.8-hd": {
+    "inputUSDPerMTok": 100,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/minimax/speech-2.8-turbo": {
+    "inputUSDPerMTok": 60,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/codestral-2508": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.9
+  },
+  "openrouter/mistralai/codestral-2508:batch": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.45
+  },
+  "openrouter/mistralai/codestral-embed-2505": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/devstral-2512": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/mistralai/ministral-14b-2512": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/mistralai/ministral-3b-2512": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.1
+  },
+  "openrouter/mistralai/ministral-8b-2512": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/mistralai/ministral-8b-2512:batch": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.075
+  },
+  "openrouter/mistralai/mistral-embed-2312": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/mistral-large": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/mistralai/mistral-large-2407": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/mistralai/mistral-large-2512": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/mistralai/mistral-large-2512:batch": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/mistralai/mistral-large-4-0": {
+    "inputUSDPerMTok": 0.68,
+    "outputUSDPerMTok": 2.09
+  },
+  "openrouter/mistralai/mistral-medium-3": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/mistralai/mistral-medium-3-5": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/mistralai/mistral-medium-3-5:batch": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/mistralai/mistral-medium-3.1": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/mistralai/mistral-medium-3.1:batch": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/mistralai/mistral-nemo": {
+    "inputUSDPerMTok": 0.029,
+    "outputUSDPerMTok": 0.03
+  },
+  "openrouter/mistralai/mistral-saba": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/mistralai/mistral-small-24b-instruct-2501": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.08
+  },
+  "openrouter/mistralai/mistral-small-2603": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/mistralai/mistral-small-2603:batch": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/mistralai/mistral-small-3.1-24b-instruct": {
+    "inputUSDPerMTok": 0.351,
+    "outputUSDPerMTok": 0.555
+  },
+  "openrouter/mistralai/mistral-small-3.2-24b-instruct": {
+    "inputUSDPerMTok": 0.09375,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/mistralai/mixtral-8x22b-instruct": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/mistralai/voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 16.6667,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/voxtral-mini-transcribe": {
+    "inputUSDPerMTok": 50,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/voxtral-mini-tts-2603": {
+    "inputUSDPerMTok": 16,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/mistralai/voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/mistralai/voxtral-small-24b-2507-stt": {
+    "inputUSDPerMTok": 50,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/moonshotai/kimi-k2": {
+    "inputUSDPerMTok": 0.57,
+    "outputUSDPerMTok": 2.3
+  },
+  "openrouter/moonshotai/kimi-k2-0905": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/moonshotai/kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/moonshotai/kimi-k2.5": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/moonshotai/kimi-k2.6": {
+    "inputUSDPerMTok": 0.65,
+    "outputUSDPerMTok": 3.41
+  },
+  "openrouter/moonshotai/kimi-k2.7-code": {
+    "inputUSDPerMTok": 0.6712,
+    "outputUSDPerMTok": 3.35
+  },
+  "openrouter/moonshotai/kimi-k3": {
+    "inputUSDPerMTok": 0.73,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/moonshotai/kimi-k3:batch": {
+    "inputUSDPerMTok": 2.28,
+    "outputUSDPerMTok": 11.4
+  },
+  "openrouter/morph/morph-v3-fast": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/morph/morph-v3-large": {
+    "inputUSDPerMTok": 0.9,
+    "outputUSDPerMTok": 1.9
+  },
+  "openrouter/nace-ai/drex-v1.5": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nex-agi/nex-n2.5-mini": {
+    "inputUSDPerMTok": 0.025,
+    "outputUSDPerMTok": 0.1
+  },
+  "openrouter/nex-agi/nex-n2.5-pro": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/nousresearch/hermes-3-llama-3.1-405b": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/nousresearch/hermes-3-llama-3.1-70b": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 0.7
+  },
+  "openrouter/nousresearch/hermes-4-405b": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/llama-nemotron-rerank-vl-1b-v2:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3-embed-1b:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3-nano-30b-a3b": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3-super-120b-a12b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.45
+  },
+  "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3-ultra-550b-a55b": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.4
+  },
+  "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b": {
+    "inputUSDPerMTok": 3.33,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3.5-content-safety": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/nvidia/nemotron-3.5-content-safety:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/nemotron-3.5-lightning": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/nvidia/nemotron-3.5-lightning:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nvidia/parakeet-tdt-0.6b-v3": {
+    "inputUSDPerMTok": 25,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/gpt-3.5-turbo": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/openai/gpt-3.5-turbo-0613": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/openai/gpt-3.5-turbo-16k": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/openai/gpt-3.5-turbo-instruct": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/openai/gpt-3.5-turbo:batch": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/openai/gpt-4": {
+    "inputUSDPerMTok": 30,
+    "outputUSDPerMTok": 60
+  },
+  "openrouter/openai/gpt-4-turbo": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 30
+  },
+  "openrouter/openai/gpt-4-turbo:batch": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/openai/gpt-4.1": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/openai/gpt-4.1-mini": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 1.6
+  },
+  "openrouter/openai/gpt-4.1-mini:batch": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.8
+  },
+  "openrouter/openai/gpt-4.1-nano": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/openai/gpt-4.1-nano:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/openai/gpt-4.1:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/openai/gpt-4o": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-4o-2024-05-13": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/openai/gpt-4o-2024-08-06": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-4o-2024-11-20": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-4o-mini": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/openai/gpt-4o-mini-2024-07-18": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/openai/gpt-4o-mini-transcribe": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-4o-mini:batch": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/openai/gpt-4o-transcribe": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-4o:batch": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-5": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5-image": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5-image-mini": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/openai/gpt-5-mini": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/openai/gpt-5-mini:batch": {
+    "inputUSDPerMTok": 0.125,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/openai/gpt-5-nano": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/openai/gpt-5-nano:batch": {
+    "inputUSDPerMTok": 0.025,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/openai/gpt-5-pro": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 120
+  },
+  "openrouter/openai/gpt-5-pro:batch": {
+    "inputUSDPerMTok": 7.5,
+    "outputUSDPerMTok": 60
+  },
+  "openrouter/openai/gpt-5.1": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5.1-codex": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5.1-codex-max": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5.1-codex-mini": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/openai/gpt-5.1:batch": {
+    "inputUSDPerMTok": 0.625,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-5.2": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 14
+  },
+  "openrouter/openai/gpt-5.2-chat": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 14
+  },
+  "openrouter/openai/gpt-5.2-codex": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 14
+  },
+  "openrouter/openai/gpt-5.2-pro": {
+    "inputUSDPerMTok": 21,
+    "outputUSDPerMTok": 168
+  },
+  "openrouter/openai/gpt-5.2-pro:batch": {
+    "inputUSDPerMTok": 10.5,
+    "outputUSDPerMTok": 84
+  },
+  "openrouter/openai/gpt-5.2:batch": {
+    "inputUSDPerMTok": 0.875,
+    "outputUSDPerMTok": 7
+  },
+  "openrouter/openai/gpt-5.3-codex": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 14
+  },
+  "openrouter/openai/gpt-5.4": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/openai/gpt-5.4-image-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/openai/gpt-5.4-mini": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 4.5
+  },
+  "openrouter/openai/gpt-5.4-mini:batch": {
+    "inputUSDPerMTok": 0.375,
+    "outputUSDPerMTok": 2.25
+  },
+  "openrouter/openai/gpt-5.4-nano": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.25
+  },
+  "openrouter/openai/gpt-5.4-nano:batch": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.625
+  },
+  "openrouter/openai/gpt-5.4-pro": {
+    "inputUSDPerMTok": 30,
+    "outputUSDPerMTok": 180
+  },
+  "openrouter/openai/gpt-5.4-pro:batch": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 90
+  },
+  "openrouter/openai/gpt-5.4:batch": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/openai/gpt-5.5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "openrouter/openai/gpt-5.5-pro": {
+    "inputUSDPerMTok": 30,
+    "outputUSDPerMTok": 180
+  },
+  "openrouter/openai/gpt-5.5-pro:batch": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 90
+  },
+  "openrouter/openai/gpt-5.5:batch": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/openai/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/openai/gpt-5.6-luna-pro": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/openai/gpt-5.6-luna-pro:batch": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/openai/gpt-5.6-luna:batch": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/openai/gpt-5.6-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5.6-sol-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-5.6-sol-pro:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-5.6-sol:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/openai/gpt-5.6-terra-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/openai/gpt-5.6-terra-pro:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/openai/gpt-5.6-terra:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/openai/gpt-5:batch": {
+    "inputUSDPerMTok": 0.625,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6-astra": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/openai/gpt-6-astra-pro": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/openai/gpt-6-astra-pro:batch": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/openai/gpt-6-astra:batch": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "openrouter/openai/gpt-6-luna": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/openai/gpt-6-luna-decisions": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/gpt-6-luna-pro": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/openai/gpt-6-luna-pro:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/openai/gpt-6-luna:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "openrouter/openai/gpt-6-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6-sol-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6-sol-pro:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6-sol:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6.1-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6.1-sol-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6.1-sol-pro:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6.1-sol:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-audio": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-audio-mini": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.4
+  },
+  "openrouter/openai/gpt-chat-latest": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "openrouter/openai/gpt-image-1": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-image-1-mini": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/openai/gpt-image-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/openai/gpt-image-2.5-flare": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/openai/gpt-image-2.5-sunburst": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/openai/gpt-oss-120b": {
+    "inputUSDPerMTok": 0.037,
+    "outputUSDPerMTok": 0.17
+  },
+  "openrouter/openai/gpt-oss-120b:batch": {
+    "inputUSDPerMTok": 0.0296,
+    "outputUSDPerMTok": 0.136
+  },
+  "openrouter/openai/gpt-oss-20b": {
+    "inputUSDPerMTok": 0.018,
+    "outputUSDPerMTok": 0.09
+  },
+  "openrouter/openai/gpt-oss-20b:batch": {
+    "inputUSDPerMTok": 0.024,
+    "outputUSDPerMTok": 0.112
+  },
+  "openrouter/openai/gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/openai/gpt-transcribe": {
+    "inputUSDPerMTok": 75,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/o1": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 60
+  },
+  "openrouter/openai/o1-pro": {
+    "inputUSDPerMTok": 150,
+    "outputUSDPerMTok": 600
+  },
+  "openrouter/openai/o3": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/openai/o3-mini": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 4.4
+  },
+  "openrouter/openai/o3-mini-high": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 4.4
+  },
+  "openrouter/openai/o3-mini:batch": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 2.2
+  },
+  "openrouter/openai/o3-pro": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 80
+  },
+  "openrouter/openai/o3:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/openai/o4-mini": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 4.4
+  },
+  "openrouter/openai/o4-mini-high": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 4.4
+  },
+  "openrouter/openai/o4-mini:batch": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 2.2
+  },
+  "openrouter/openai/text-embedding-3-large": {
+    "inputUSDPerMTok": 0.13,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/text-embedding-3-large:batch": {
+    "inputUSDPerMTok": 0.065,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/text-embedding-3-small": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/text-embedding-3-small:batch": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/text-embedding-ada-002": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/text-embedding-ada-002:batch": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/whisper-1": {
+    "inputUSDPerMTok": 100,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/whisper-large-v3": {
+    "inputUSDPerMTok": 7.5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openai/whisper-large-v3-turbo": {
+    "inputUSDPerMTok": 3.33,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/openrouter/free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perceptron/perceptron-mk1": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/perceptron/perceptron-mk1.5": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.5
+  },
+  "openrouter/perplexity/pplx-decider-v1.1-27b": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/pplx-embed-v1-0.6b": {
+    "inputUSDPerMTok": 0.004,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/pplx-embed-v1-4b": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/sonar": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/perplexity/sonar-deep-research": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/perplexity/sonar-pro": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/perplexity/sonar-pro-search": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/perplexity/sonar-reasoning-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 8
+  },
+  "openrouter/poolside/laguna-s-2.1": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.18
+  },
+  "openrouter/poolside/laguna-s-2.1:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/poolside/laguna-xs-2.1": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.12
+  },
+  "openrouter/poolside/laguna-xs-2.1:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/prism-ml/ternary-bonsai-2-27b": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/qwen/qwen-2.5-72b-instruct": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/qwen/qwen-2.5-7b-instruct": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/qwen/qwen-2.5-coder-32b-instruct": {
+    "inputUSDPerMTok": 0.66,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/qwen/qwen-audio-3.0-tts-flash": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen-audio-3.0-tts-plus": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen-image-3": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen-image-3-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen-plus": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 0.78
+  },
+  "openrouter/qwen/qwen2.5-vl-72b-instruct": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/qwen/qwen3-14b": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.24
+  },
+  "openrouter/qwen/qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.55
+  },
+  "openrouter/qwen/qwen3-235b-a22b-thinking-2507": {
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 3.5
+  },
+  "openrouter/qwen/qwen3-30b-a3b": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/qwen/qwen3-30b-a3b-instruct-2507": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/qwen/qwen3-32b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.28
+  },
+  "openrouter/qwen/qwen3-asr-0.6b": {
+    "inputUSDPerMTok": 3.33,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-asr-1.7b": {
+    "inputUSDPerMTok": 7.5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-coder": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/qwen/qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "openrouter/qwen/qwen3-coder-flash": {
+    "inputUSDPerMTok": 0.195,
+    "outputUSDPerMTok": 0.975
+  },
+  "openrouter/qwen/qwen3-coder-next": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.8
+  },
+  "openrouter/qwen/qwen3-embedding-4b": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-embedding-8b": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 1.1
+  },
+  "openrouter/qwen/qwen3-next-80b-a3b-thinking": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/qwen/qwen3-reranker-8b": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.21,
+    "outputUSDPerMTok": 1.9
+  },
+  "openrouter/qwen/qwen3-vl-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/qwen/qwen3-vl-30b-a3b-thinking": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1
+  },
+  "openrouter/qwen/qwen3-vl-8b-instruct": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/qwen/qwen3.5-122b-a10b": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 2.08
+  },
+  "openrouter/qwen/qwen3.5-27b": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 2.6
+  },
+  "openrouter/qwen/qwen3.5-35b-a3b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/qwen/qwen3.5-397b-a17b": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 3.5
+  },
+  "openrouter/qwen/qwen3.5-9b": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.15
+  },
+  "openrouter/qwen/qwen3.5-flash-02-23": {
+    "inputUSDPerMTok": 0.065,
+    "outputUSDPerMTok": 0.26
+  },
+  "openrouter/qwen/qwen3.5-plus-02-15": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 1.56
+  },
+  "openrouter/qwen/qwen3.5-plus-20260420": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.8
+  },
+  "openrouter/qwen/qwen3.6-27b": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 3.2
+  },
+  "openrouter/qwen/qwen3.6-35b-a3b": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.95
+  },
+  "openrouter/qwen/qwen3.6-flash": {
+    "inputUSDPerMTok": 0.1875,
+    "outputUSDPerMTok": 1.125
+  },
+  "openrouter/qwen/qwen3.6-plus": {
+    "inputUSDPerMTok": 0.325,
+    "outputUSDPerMTok": 1.95
+  },
+  "openrouter/qwen/qwen3.7-flash": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.13
+  },
+  "openrouter/qwen/qwen3.7-max": {
+    "inputUSDPerMTok": 1.475,
+    "outputUSDPerMTok": 4.425
+  },
+  "openrouter/qwen/qwen3.7-plus": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 1.28
+  },
+  "openrouter/qwen/qwen3.8-2.4t-a95b": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/qwen/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 2.3
+  },
+  "openrouter/qwen/qwen3.8-flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.47
+  },
+  "openrouter/qwen/qwen3.8-max-0902": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/qwen/qwen3.8-max-prime": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/qwen/qwen3.8-omni-flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.47
+  },
+  "openrouter/recraft/recraft-v3": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-pro-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-styles": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-styles-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-styles-pro-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-styles-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-flash": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-pro-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-utility": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-utility-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-vector": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/rekaai/reka-edge": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.1
+  },
+  "openrouter/rekaai/reka-flash-3": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/relace/relace-apply-3": {
+    "inputUSDPerMTok": 0.85,
+    "outputUSDPerMTok": 1.25
+  },
+  "openrouter/relace/relace-search": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3
+  },
+  "openrouter/respan/span-01": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/respan/span-01-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/respan/span-01-lite:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/runway/aleph-2": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/runway/gen-4.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sakana/fugu-max": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/sakana/fugu-ultra": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "openrouter/sakana/fugu-ultra-v2": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "openrouter/sakana/sakana-namazu": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/sao10k/l3-lunaris-8b": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.05
+  },
+  "openrouter/sao10k/l3.1-euryale-70b": {
+    "inputUSDPerMTok": 0.85,
+    "outputUSDPerMTok": 0.85
+  },
+  "openrouter/sao10k/l3.3-euryale-70b": {
+    "inputUSDPerMTok": 0.65,
+    "outputUSDPerMTok": 0.75
+  },
+  "openrouter/sentence-transformers/all-minilm-l12-v2": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sentence-transformers/all-minilm-l6-v2": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sentence-transformers/all-mpnet-base-v2": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sentence-transformers/multi-qa-mpnet-base-dot-v1": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sentence-transformers/paraphrase-minilm-l6-v2": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sesame/csm-1b": {
+    "inputUSDPerMTok": 7,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sourceful/riverflow-v2-fast": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sourceful/riverflow-v2-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sourceful/riverflow-v2.5-fast": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/sourceful/riverflow-v2.5-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/stepfun/step-3.5-flash": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/stepfun/step-3.7-flash": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.15
+  },
+  "openrouter/stepfun/step-5-preview": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2.7
+  },
+  "openrouter/tencent/hunyuan-a13b-instruct": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.57
+  },
+  "openrouter/tencent/hy-image-v3.5-preview": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/tencent/hy-mt2-1.8b": {
+    "inputUSDPerMTok": 0.044,
+    "outputUSDPerMTok": 0.177
+  },
+  "openrouter/tencent/hy-mt2-30b-a3b": {
+    "inputUSDPerMTok": 0.074,
+    "outputUSDPerMTok": 0.295
+  },
+  "openrouter/tencent/hy-mt2-7b": {
+    "inputUSDPerMTok": 0.074,
+    "outputUSDPerMTok": 0.295
+  },
+  "openrouter/tencent/hy3": {
+    "inputUSDPerMTok": 0.132,
+    "outputUSDPerMTok": 0.528
+  },
+  "openrouter/tencent/hy3-preview": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/tencent/hy4-preview": {
+    "inputUSDPerMTok": 0.834,
+    "outputUSDPerMTok": 2.501
+  },
+  "openrouter/thedrummer/cydonia-24b-v4.1": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/thedrummer/skyfall-36b-v2": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 0.8
+  },
+  "openrouter/thedrummer/unslopnemo-12b": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/thenlper/gte-base": {
+    "inputUSDPerMTok": 0.005,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/thenlper/gte-large": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/thinkingmachines/inkling": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4.05
+  },
+  "openrouter/thinkingmachines/inkling-small": {
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/thinkingmachines/inkling-small:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/thinkingmachines/inkling:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/togethercomputer/tev1-4b-experimental": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/typesafe/jev-1.13": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/unbiased/pareto": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/unbiased/pareto-26.10-preview": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
+  },
+  "openrouter/undi95/remm-slerp-l2-13b": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 0.65
+  },
+  "openrouter/upstage/solar-decide": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/upstage/solar-decide-flash": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/upstage/solar-mini4": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/upstage/solar-pro-3": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "openrouter/upstage/solar-pro4": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.36
+  },
+  "openrouter/voyageai/rerank-2.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/rerank-2.5-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/rerank-3": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/rerank-3-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/voyage-4": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/voyage-4-large": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/voyage-4-lite": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/voyage-code-4": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/voyageai/voyage-multimodal-3.5": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/writer/palmyra-x5": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/x-ai/grok-4.20": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/x-ai/grok-4.20-multi-agent": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/x-ai/grok-4.3": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/x-ai/grok-4.3:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/x-ai/grok-4.5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/x-ai/grok-4.6": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/x-ai/grok-4.7": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/x-ai/grok-build-0.1": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/x-ai/grok-imagine-image-2.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-imagine-image-quality": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-imagine-video": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-imagine-video-1.5": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-imagine-video-1.5-lite": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-stt-1.0": {
+    "inputUSDPerMTok": 27.777778,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/x-ai/grok-voice-tts-1.0": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/xiaomi/mimo-v2.5": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
+  "openrouter/xiaomi/mimo-v2.5-pro": {
+    "inputUSDPerMTok": 0.435,
+    "outputUSDPerMTok": 0.87
+  },
+  "openrouter/xiaomi/mimo-v2.6-flash": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
+  "openrouter/xiaomi/mimo-v2.6-pro": {
+    "inputUSDPerMTok": 0.435,
+    "outputUSDPerMTok": 0.87
+  },
+  "openrouter/xiaomi/mimo-v2.6-pro-ultraspeed": {
+    "inputUSDPerMTok": 4.35,
+    "outputUSDPerMTok": 8.7
+  },
+  "openrouter/z-ai/glm-4.5": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.2
+  },
+  "openrouter/z-ai/glm-4.5-air": {
+    "inputUSDPerMTok": 0.13,
+    "outputUSDPerMTok": 0.85
+  },
+  "openrouter/z-ai/glm-4.5v": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.8
+  },
+  "openrouter/z-ai/glm-4.6": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/z-ai/glm-4.6v": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.9
+  },
+  "openrouter/z-ai/glm-4.7": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.2
+  },
+  "openrouter/z-ai/glm-4.7-flash": {
+    "inputUSDPerMTok": 0.0605,
+    "outputUSDPerMTok": 0.4
+  },
+  "openrouter/z-ai/glm-5": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.92
+  },
+  "openrouter/z-ai/glm-5-turbo": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/z-ai/glm-5.1": {
+    "inputUSDPerMTok": 0.966,
+    "outputUSDPerMTok": 3.036
+  },
+  "openrouter/z-ai/glm-5.2": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 7
+  },
+  "openrouter/z-ai/glm-5.3": {
+    "inputUSDPerMTok": 0.079,
+    "outputUSDPerMTok": 4.8
+  },
+  "openrouter/z-ai/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.0232,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/z-ai/glm-5.3-flash:batch": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.2
+  },
+  "openrouter/z-ai/glm-5.3-flashx": {
+    "inputUSDPerMTok": 0.37,
+    "outputUSDPerMTok": 1.25
+  },
+  "openrouter/z-ai/glm-5.3-prime": {
+    "inputUSDPerMTok": 2.8,
+    "outputUSDPerMTok": 8.8
+  },
+  "openrouter/z-ai/glm-5.3:batch": {
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 2
+  },
+  "openrouter/z-ai/glm-5v-turbo": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 4
+  },
+  "openrouter/~anthropic/claude-fable-latest": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/~anthropic/claude-haiku-latest": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/~anthropic/claude-opus-latest": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "openrouter/~anthropic/claude-sonnet-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/~deepseek/deepseek-flash-latest": {
+    "inputUSDPerMTok": 0.0336,
+    "outputUSDPerMTok": 1.188
+  },
+  "openrouter/~deepseek/deepseek-pro-latest": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/~deepseek/deepseek-v4-flash-latest": {
+    "inputUSDPerMTok": 0.0128,
+    "outputUSDPerMTok": 0.768
+  },
+  "openrouter/~google/gemini-flash-latest": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/~google/gemini-pro-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/~moonshotai/kimi-latest": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 24
+  },
+  "openrouter/~openai/gpt-astra-latest": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "openrouter/~openai/gpt-luna-latest": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "openrouter/~openai/gpt-mini-latest": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 4.5
+  },
+  "openrouter/~openai/gpt-sol-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/~openai/gpt-terra-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "openrouter/~typesafe/jev-latest": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/~x-ai/grok-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/~z-ai/glm-flash-latest": {
+    "inputUSDPerMTok": 0.0232,
+    "outputUSDPerMTok": 1.2
+  },
+  "openrouter/~z-ai/glm-latest": {
+    "inputUSDPerMTok": 0.055,
+    "outputUSDPerMTok": 5
+  },
   "ovhcloud/DeepSeek-R1-Distill-Llama-70B": {
     "inputUSDPerMTok": 0.67,
     "outputUSDPerMTok": 0.67
