@@ -294,7 +294,7 @@ struct AuthWorld: Sendable {
   var catalogOutcome = ScriptedCatalog.Outcome.models(AuthFixture.catalog)
   var profileID = AuthFixture.freshProfileID
 
-  /// The catalog spy the most recent `loginWorkflow()` wired, so a test can assert what
+  /// The catalog spy the most recent `loginWorkflow()` or `modelsWorkflow()` wired, so a test can assert what
   /// authorization the catalog fetch was handed without hand-copying the whole construction. A
   /// reference box keeps `AuthWorld` a copyable value while `loginWorkflow()` records into it.
   private let builtCatalog = CatalogSpyBox()
@@ -308,7 +308,7 @@ struct AuthWorld: Sendable {
     SecretStatePaths(stateRoot: root)
   }
 
-  /// The authorization the catalog fetch saw during the most recent `loginWorkflow().login()`.
+  /// The authorization the catalog fetch saw in the most recently built login or models workflow.
   var seenCatalogAuthorization: LLMRequestAuthorization? {
     builtCatalog.seenAuthorization
   }
@@ -320,7 +320,7 @@ struct AuthWorld: Sendable {
   }
 
   /// The store every command in this world opens, recording the open so a test can assert *when* it
-  /// happened relative to the lock. Shared by all three builders, so no suite can be reading through
+  /// happened relative to the lock. Shared by every builder, so no suite can be reading through
   /// a store the others are not.
   private var makeCredentialStore: @Sendable () -> any LLMCredentialStore {
     let stateRoot = root
@@ -367,6 +367,19 @@ struct AuthWorld: Sendable {
     )
   }
 
+  func modelsWorkflow() -> AuthModelsWorkflow {
+    let catalog = ScriptedCatalog(outcome: catalogOutcome, log: log)
+    builtCatalog.set(catalog)
+    return AuthModelsWorkflow(
+      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      makeCredentialStore: makeCredentialStore,
+      catalog: catalog,
+      wallDate: {
+        AuthFixture.now
+      }
+    )
+  }
+
   func logoutWorkflow() -> AuthLogoutWorkflow {
     AuthLogoutWorkflow(
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
@@ -396,8 +409,8 @@ func withAuthWorld<Value>(
 }
 
 /// The whole report as one string. Redaction claims are about everything an owner could see, so they
-/// are asserted against everything the command emitted rather than a line a test picked. Only status
-/// and logout answer through here: login has already presented its lines, and returns none.
+/// are asserted against everything the command emitted rather than a line a test picked. Only status,
+/// models and logout answer through here: login has already presented its lines, and returns none.
 extension AuthCommandResult {
   var transcript: String {
     events.map(\.text).joined(separator: "\n")

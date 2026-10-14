@@ -281,6 +281,10 @@ fails config validation with exit 10. Then:
   `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
   `systemctl --user start swift-claw.service`.
 
+To see the list again later, run `clawd auth models`. It is safe while the daemon runs and
+marks the model you have configured. It does not renew an expired access token; the running
+daemon renews it on its next model call.
+
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).
 

@@ -27,6 +27,13 @@ public struct ChatGPTCatalogModel: Sendable, Equatable {
 /// stored and valid by the time anything asks what models exist.
 enum ChatGPTCatalogFailure: Error, Sendable, Equatable {
   case unavailable(detail: String)
+
+  var safeDetail: String {
+    switch self {
+    case .unavailable(let detail):
+      ChatGPTProviderMetadata.safeDiagnostic(detail, redacting: [])
+    }
+  }
 }
 
 public protocol ChatGPTModelCatalogFetching: Sendable {
