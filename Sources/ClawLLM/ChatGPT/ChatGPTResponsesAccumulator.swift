@@ -55,6 +55,7 @@ struct ChatGPTResponsesAccumulator: Sendable {
     observedTokens
   }
 
+  // periphery:ignore - test seam
   /// Counts raw delta-buffer bytes, separate from the visible-output budget.
   /// Memory-bound tests use this to verify that the reducer discards irrelevant deltas.
   var retainedDeltaBytes: Int {

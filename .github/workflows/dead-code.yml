@@ -1,0 +1,132 @@
+name: Dead code
+
+# Unused declarations and imports need a full indexed build, too slow for every pull request.
+# This runs weekly, on demand, and on pull requests that change the analysis itself.
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .claude/skills/removing-dead-code/scripts/**
+      - .github/workflows/dead-code.yml
+      - .periphery.yml
+      - BuildTools/periphery-baseline.txt
+      - scripts/check-periphery-baseline.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dead-code-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  periphery:
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select and verify pinned Xcode toolchain
+        run: |
+          source BuildTools/lint-versions.env
+          sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
+          scripts/check-toolchain.sh
+
+      - name: Install pinned Periphery
+        run: |
+          source BuildTools/lint-versions.env
+          archive="$RUNNER_TEMP/periphery.zip"
+          release_url="https://github.com/peripheryapp/periphery/releases/download/${CLAW_PERIPHERY_VERSION}"
+          curl --fail --location --silent --show-error \
+            "${release_url}/periphery-${CLAW_PERIPHERY_VERSION}.zip" \
+            --output "$archive"
+          printf '%s  %s\n' "$CLAW_PERIPHERY_MACOS_SHA256" "$archive" | shasum -a 256 --check
+
+          unzip -q "$archive" -d "$RUNNER_TEMP/periphery"
+          printf '%s\n' "$RUNNER_TEMP/periphery" >> "$GITHUB_PATH"
+
+      - name: Scan with and without tests
+        run: bash .claude/skills/removing-dead-code/scripts/periphery_scan.sh "$RUNNER_TEMP/scan"
+
+      - name: Fail on findings missing from the baseline
+        run: |
+          scan="$RUNNER_TEMP/scan"
+          status=0
+          python3 -I scripts/check-periphery-baseline.py "$scan/all.json" "$scan/prod.json" \
+            > "$scan/baseline.txt" 2>&1 || status=$?
+          cat "$scan/baseline.txt"
+          {
+            echo '### Periphery findings missing from the baseline'
+            echo '```'
+            cat "$scan/baseline.txt"
+            echo '```'
+            echo 'The triage report is in the periphery artifact.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Upload the triage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: periphery
+          path: |
+            ${{ runner.temp }}/scan/*.md
+            ${{ runner.temp }}/scan/*.json
+            ${{ runner.temp }}/scan/*.txt
+            ${{ runner.temp }}/scan/*.log
+            ${{ runner.temp }}/scan/*.err
+
+  imports:
+    runs-on: xcode-27
+    timeout-minutes: 300
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select and verify pinned Xcode toolchain
+        run: |
+          source BuildTools/lint-versions.env
+          sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
+          scripts/check-toolchain.sh
+
+      # Periphery never reports imports of package dependencies, Testing or Synchronization.
+      # Product code comes first, so test code is left to an explicit --include-tests run.
+      - name: Try removing every package-dependency import from product code
+        run: |
+          work="$RUNNER_TEMP/prune"
+          mkdir -p "$work"
+          python3 -I .claude/skills/removing-dead-code/scripts/prune_imports.py \
+            --work "$work" --all --modules deps | tee "$work/result.txt"
+          {
+            echo '### Removable package-dependency imports in product code'
+            echo '```'
+            cat "$work/result.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -s "$work/prune.patch" ]]; then
+            echo "::error::Remove these imports: apply prune.patch from the imports artifact."
+            exit 1
+          fi
+
+      - name: Upload the patch and build logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: imports
+          path: |
+            ${{ runner.temp }}/prune/prune.patch
+            ${{ runner.temp }}/prune/result.txt
+            ${{ runner.temp }}/prune/*.log

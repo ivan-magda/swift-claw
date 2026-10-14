@@ -79,6 +79,10 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
             "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
             -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
-            scripts/update-prices.sh scripts/test-update-prices.sh
+            scripts/update-prices.sh scripts/test-update-prices.sh \
+            scripts/test-periphery-baseline.sh \
+            .claude/skills/removing-dead-code/scripts/periphery_scan.sh
       - name: Verify price refresh safeguards
         run: bash scripts/test-update-prices.sh
+      - name: Verify the Periphery baseline gate
+        run: bash scripts/test-periphery-baseline.sh

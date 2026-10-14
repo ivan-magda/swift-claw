@@ -171,6 +171,7 @@ public actor ContainerBackend {
     }
   }
 
+  // periphery:ignore - test seam
   func setPreparedInitImageForTesting(_ image: String?) {
     preparedInitImage = image
   }

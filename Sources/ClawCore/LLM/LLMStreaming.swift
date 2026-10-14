@@ -118,6 +118,7 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     return await owner.awaitTermination()
   }
 
+  // periphery:ignore - documented stream contract, docs/ARCHITECTURE.md §8
   public func awaitTermination() async -> LLMStreamTermination {
     await owner.awaitTermination()
   }

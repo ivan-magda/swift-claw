@@ -3,7 +3,8 @@
 
 Usage (from the package root):
   python3 -I prune_imports.py --work DIR [--check-only] [--modules A,B]
-                              [--include-platform] (--base REF | --all | FILE ...)
+                              [--include-platform] [--include-tests]
+                              (--base REF | --all | FILE ...)
 
 Periphery reports unused imports only for modules it indexed, so imports of package
 dependencies (GRDB, Logging, NIO...) and some project imports never show up. This script
@@ -28,6 +29,10 @@ reported by --check-only, not changed.
 every package-dependency product the targets declare plus Testing and Synchronization:
 the imports Periphery never reports. A repository-wide pass uses `--all --modules deps`:
 without a filter, every module's pass rebuilds most targets.
+
+--base and --all skip test code, the test targets and ClawTestSupport, unless
+--include-tests is given: product code comes first, and the weekly workflow checks only
+it. Files named on the command line are always checked.
 
 Runs take a machine-wide lock: a second run waits for the first. Parallel runs each
 rebuild the whole package and finish later than the same runs in sequence.
@@ -79,6 +84,8 @@ PLATFORM_MODULES = frozenset(
 )
 # `--modules deps` tries these toolchain modules besides the declared products.
 TOOLCHAIN_MODULES = ("Testing", "Synchronization")
+# Shared test support builds as a library, but it is test code like the test targets.
+TEST_SUPPORT_TARGETS = frozenset({"ClawTestSupport"})
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\")
 COMPILER_ERROR = re.compile(
@@ -121,6 +128,15 @@ def describe_package(root: Path) -> dict[str, Any]:
 def target_directories(package: dict[str, Any]) -> dict[str, str]:
     """Return each target's source directory, by target name."""
     return {target["name"]: target["path"] for target in package["targets"]}
+
+
+def test_code_targets(package: dict[str, Any]) -> set[str]:
+    """Return the names of the test targets and the shared test support."""
+    return {
+        target["name"]
+        for target in package["targets"]
+        if target["type"] == "test" or target["name"] in TEST_SUPPORT_TARGETS
+    }
 
 
 def dependency_modules(package: dict[str, Any]) -> set[str]:
@@ -450,15 +466,25 @@ def prune_files(
 
 
 def files_to_check(
-    arguments: argparse.Namespace, root: Path, targets: dict[str, str]
+    arguments: argparse.Namespace,
+    root: Path,
+    targets: dict[str, str],
+    test_targets: Collection[str],
 ) -> list[str]:
     """Return the Swift files inside a target that the command line selects."""
-    files = list(arguments.files)
+    selected: list[str] = []
     if arguments.base:
         changed = ["git", "diff", "--name-only", "--diff-filter=AM", arguments.base]
-        files += run(changed, root).stdout.splitlines()
+        selected += run(changed, root).stdout.splitlines()
     if arguments.all:
-        files += run(["git", "ls-files", "*.swift"], root).stdout.splitlines()
+        selected += run(["git", "ls-files", "*.swift"], root).stdout.splitlines()
+    if not arguments.include_tests:
+        selected = [
+            path
+            for path in selected
+            if owning_target(path, targets) not in test_targets
+        ]
+    files = list(arguments.files) + selected
     # Package.swift is in no target; restoring it would also erase the strict setting.
     return sorted(
         {
@@ -520,6 +546,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="also try Foundation, OS modules and Crypto",
     )
+    parser.add_argument(
+        "--include-tests",
+        action="store_true",
+        help="also check test targets and ClawTestSupport with --base or --all",
+    )
     parser.add_argument("files", nargs="*", help="Swift files to check")
     return parser.parse_args()
 
@@ -530,7 +561,7 @@ def main() -> int:
     root = Path.cwd()
     package = describe_package(root)
     targets = target_directories(package)
-    files = files_to_check(arguments, root, targets)
+    files = files_to_check(arguments, root, targets, test_code_targets(package))
     if not files:
         sys.exit("no Swift files inside a target to check")
 

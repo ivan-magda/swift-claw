@@ -1,0 +1,8 @@
+# Periphery settings shared by every scan run from the repository root. The scan script in
+# .claude/skills/removing-dead-code/scripts/periphery_scan.sh adds the index store, the
+# exclusions and the output format.
+
+# Properties of Codable types are read by the encoder or written by the decoder, and those of
+# Equatable and Hashable types take part in ==. Periphery sees neither use.
+retain_codable_properties: true
+retain_equatable_properties: true

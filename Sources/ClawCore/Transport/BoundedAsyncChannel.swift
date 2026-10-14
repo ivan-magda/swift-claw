@@ -93,6 +93,7 @@ struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
 // MARK: - Suspension observation
 
 extension BoundedAsyncChannel {
+  // periphery:ignore - test seam
   /// Producers currently suspended on a full buffer.
   ///
   /// Suspending rather than dropping is the channel's contract, so tests observe it here;
@@ -101,6 +102,7 @@ extension BoundedAsyncChannel {
     storage.suspendedSenderCount
   }
 
+  // periphery:ignore - test seam
   /// Consumers currently suspended on an empty buffer — at most one, by the single-consumer rule.
   var suspendedReceiverCount: Int {
     storage.suspendedReceiverCount

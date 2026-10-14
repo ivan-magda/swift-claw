@@ -81,6 +81,7 @@ public actor ScheduledLearningService {
     _ = kickDrain(now: now())
   }
 
+  // periphery:ignore - documented entry point, docs/ARCHITECTURE.md §14
   public func advance(runID: Int64) async {
     guard !stopping, ensureOperations(now: now()) else {
       return
@@ -90,6 +91,7 @@ public actor ScheduledLearningService {
     }
   }
 
+  // periphery:ignore - documented entry point, docs/ARCHITECTURE.md §14
   public func advance(jobID: Int64) async {
     guard !stopping, ensureOperations(now: now()) else {
       return
