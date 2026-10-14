@@ -2323,9 +2323,8 @@ Product code comes first: neither job fails on test code, meaning the test targe
 `ClawTestSupport`. The Periphery job lists test-code findings and fails on a product finding
 whose USR `BuildTools/periphery-baseline.txt` does not list;
 `scripts/check-periphery-baseline.py` compares the scans with that backlog and regenerates it.
-An intentional test seam or documented contract carries `// periphery:ignore - reason` instead
-of a baseline entry; the scan without tests reports such a comment once production code uses the
-declaration. The import job runs the dead-code skill's `prune_imports.py --all --modules deps`
+The baseline holds intentional test seams and documented contracts as well as backlog, so
+product code carries no Periphery comments. The import job runs the dead-code skill's `prune_imports.py --all --modules deps`
 on product code and fails on any import of a package dependency, `Testing` or `Synchronization`
 that the compiler proves removable; `--include-tests` extends a run to test code. A macOS build
 does not compile `#if os(Linux)` branches, so neither job checks Linux-only code.

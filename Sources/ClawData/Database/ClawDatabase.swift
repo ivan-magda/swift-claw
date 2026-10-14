@@ -18,7 +18,6 @@ public enum ClawDatabase {
     }
   }
 
-  // periphery:ignore - test seam
   /// Tests use an in-memory queue (WAL is unavailable in-memory).
   public static func makeInMemoryQueue() throws -> DatabaseQueue {
     try DatabaseQueue(configuration: makeConfiguration())

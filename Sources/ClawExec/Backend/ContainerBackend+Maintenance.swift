@@ -50,17 +50,14 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     _ = sweepScratchRoots()
   }
 
-  // periphery:ignore - test seam
   var preparedInitImageForTesting: String? {
     preparedInitImage
   }
 
-  // periphery:ignore - test seam
   func reapOwnedContainersForTesting() async -> Bool {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
   }
 
-  // periphery:ignore - test seam
   // swiftlint:disable:next discouraged_optional_collection
   func ownedContainerNamesForTesting() async -> [String]? {
     await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?.compactMap(

@@ -80,12 +80,9 @@ Keep by default: migrations, legacy-data compatibility paths, contracts named in
 `docs/ARCHITECTURE.md`, resources loaded by a computed name, files tools discover by
 convention. An unwired enum case or protocol member named by a spec is AMBIGUOUS: report it.
 
-A KEEP that Periphery reports gets `// periphery:ignore - reason` on the line above the
-declaration when its code or a spec states the intent, such as a `ForTesting` seam or a
-documented contract. Otherwise it stays in the baseline. Never add a DELETE row to the baseline.
-An ignored type's members inherit the comment, and the scan without tests reports it as
-superfluous on each member that something calls, such as a protocol witness. Mark such a file
-with `// periphery:ignore:all - reason` above its imports instead.
+A KEEP that Periphery reports, such as a `ForTesting` seam or a documented contract, goes into
+the baseline with `scripts/check-periphery-baseline.py --write`. Product code carries no
+`periphery:ignore` comments. Never add a DELETE row to the baseline.
 
 ## 3. Independent researcher, before each deletion group
 

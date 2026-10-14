@@ -167,7 +167,6 @@ public struct SandboxHealth: Sendable, Equatable {
       && reaperOK && rootfsRO && stagingRO && interpretersOK && lastError == nil
   }
 
-  // periphery:ignore - test seam: a sandbox health that passes every check
   public static let passingForTests = SandboxHealth(
     available: true,
     osOK: true,

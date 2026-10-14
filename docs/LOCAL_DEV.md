@@ -107,8 +107,7 @@ python3 -I $S/prune_imports.py --work .build/dead-code/prune --all --modules dep
 
 Both checks fail only on product code. The Periphery check lists findings in test code, and
 `--include-tests` makes the pruner check test code too. For a new Periphery finding, delete the
-code. A test seam or documented contract instead gets `// periphery:ignore - reason` on the line
-above its declaration. Record a finding as backlog only deliberately, by rerunning the baseline
+code. Record a test seam, a documented contract or deliberate backlog by rerunning the baseline
 check with `--write`; that also drops entries whose code is gone. When the import job fails,
 apply `prune.patch` from its `imports` artifact with `git apply`. The
 [dead-code skill](../.claude/skills/removing-dead-code/SKILL.md) covers triage and complete

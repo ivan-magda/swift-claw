@@ -71,11 +71,10 @@ scan() {
     }
 }
 
-# A `periphery:ignore` comment on a test seam is superfluous once tests are scanned, because
-# the tests use the seam. Only the scan without tests checks those comments. Without tests,
-# a public declaration that only another target's tests use looks redundantly public.
+# Without tests, a public declaration that only another target's tests use looks redundantly
+# public.
 echo "scan: Periphery, tests included..." >&2
-scan all --no-superfluous-ignore-comments
+scan all
 echo "scan: Periphery, tests and ClawTestSupport ignored..." >&2
 scan prod --index-exclude 'Tests/**' --index-exclude 'Sources/ClawTestSupport/**' \
   --disable-redundant-public-analysis
