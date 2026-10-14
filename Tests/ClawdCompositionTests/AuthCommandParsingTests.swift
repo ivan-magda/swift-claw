@@ -12,16 +12,19 @@ struct AuthCommandParsingTests {
     // given
     let loginArguments = ["auth", "login"]
     let statusArguments = ["auth", "status"]
+    let modelsArguments = ["auth", "models"]
     let logoutArguments = ["auth", "logout"]
 
     // when
     let login = try Clawd.parseAsRoot(loginArguments)
     let status = try Clawd.parseAsRoot(statusArguments)
+    let models = try Clawd.parseAsRoot(modelsArguments)
     let logout = try Clawd.parseAsRoot(logoutArguments)
 
     // then
     #expect(login is AuthCommand.Login)
     #expect(status is AuthCommand.Status)
+    #expect(models is AuthCommand.Models)
     #expect(logout is AuthCommand.Logout)
   }
 

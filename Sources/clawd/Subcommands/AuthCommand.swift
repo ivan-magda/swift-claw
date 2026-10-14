@@ -19,7 +19,7 @@ struct AuthCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "auth",
     abstract: "Manage the assistant's provider credentials.",
-    subcommands: [Login.self, Status.self, Logout.self]
+    subcommands: [Login.self, Status.self, Models.self, Logout.self]
   )
 
   struct Login: AsyncParsableCommand {
@@ -31,11 +31,11 @@ struct AuthCommand: AsyncParsableCommand {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
 
-      // The only client any auth command opens, and the reason it is opened here rather than in the
-      // composition below: login is the one command with a wire step. Nothing between this line and
-      // the shutdown can throw — the workflow reports its failures rather than raising them — so the
-      // client cannot outlive the command. `defer` could not make that promise, because it cannot
-      // await the shutdown, and a dropped client is a hung process rather than a leaked one.
+      // Opened here rather than in the composition below because only login and models have a wire
+      // step. Nothing between this line and the shutdown can throw — the workflow reports its
+      // failures rather than raising them — so the client cannot outlive the command. `defer`
+      // could not make that promise, because it cannot await the shutdown, and a dropped client is
+      // a hung process rather than a leaked one.
       let httpClient = HTTPClient(
         eventLoopGroupProvider: .singleton,
         configuration: HTTPClientProfile.protectedEgress.configuration
@@ -67,6 +67,30 @@ struct AuthCommand: AsyncParsableCommand {
     }
   }
 
+  struct Models: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "List the models the stored subscription may use, without refreshing it."
+    )
+
+    func run() async throws {
+      let environment = ProcessInfo.processInfo.environment
+      let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
+
+      let httpClient = HTTPClient(
+        eventLoopGroupProvider: .singleton,
+        configuration: HTTPClientProfile.protectedEgress.configuration
+      )
+      let modelsResult = await AuthCommand.modelsWorkflow(
+        bootstrap: bootstrap,
+        executor: AsyncHTTPExecutor(client: httpClient)
+      )
+      .models()
+      try? await httpClient.shutdown()
+
+      try AuthCommand.finish(modelsResult)
+    }
+  }
+
   struct Logout: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Remove the stored credential from this machine."
@@ -85,7 +109,7 @@ struct AuthCommand: AsyncParsableCommand {
 
 private extension AuthCommand {
   /// Hands login the real lock, the real seal, the real store, the owner's real terminal, and the
-  /// one HTTP client any auth command opens.
+  /// command's one HTTP client.
   static func loginWorkflow(
     bootstrap: AuthBootstrap,
     environment: [String: String],
@@ -118,6 +142,20 @@ private extension AuthCommand {
     AuthStatusWorkflow(
       bootstrap: bootstrap,
       makeCredentialStore: credentialStore(in: bootstrap.stateRoot),
+      wallDate: {
+        Date()
+      }
+    )
+  }
+
+  static func modelsWorkflow(
+    bootstrap: AuthBootstrap,
+    executor: any HTTPExecuting
+  ) -> AuthModelsWorkflow {
+    AuthModelsWorkflow(
+      bootstrap: bootstrap,
+      makeCredentialStore: credentialStore(in: bootstrap.stateRoot),
+      catalog: ChatGPTModelCatalog(http: executor),
       wallDate: {
         Date()
       }

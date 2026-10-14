@@ -277,11 +277,7 @@ private extension AuthLoginWorkflow {
   }
 
   static func describe(_ failure: ChatGPTCatalogFailure) -> String {
-    switch failure {
-    case .unavailable(let detail):
-      return "the model list could not be read — "
-        + ChatGPTProviderMetadata.safeDiagnostic(detail, redacting: [])
-    }
+    "the model list could not be read — \(failure.safeDetail)"
   }
 }
 

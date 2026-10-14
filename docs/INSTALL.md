@@ -223,7 +223,7 @@ A second `clawd` against the same state root refuses to boot (file lock), and a 
 409 conflict is logged as critical. The commands that write into the state root take that
 same lock — `clawd secrets seal`, `clawd auth login` / `logout`, and `clawd mcp set-token`
 / `clear-token` — so stop the service before running them. Diagnostic commands
-(`clawd doctor`, `clawd auth status`, `clawd mcp list` / `probe`) are safe against a
+(`clawd doctor`, `clawd auth status` / `models`, `clawd mcp list` / `probe`) are safe against a
 running daemon, but full `doctor` opens/migrates the database and runs enabled backend probes;
 it is not a read-only operation. `doctor --check-config` skips database and live network probes.
 Exit codes are diagnostic:

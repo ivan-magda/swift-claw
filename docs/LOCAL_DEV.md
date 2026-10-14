@@ -525,6 +525,17 @@ Reports provider, presence, expiry, freshness (`fresh` / `expiring` / `expired`)
 and the configured model — never any token bytes or account ID. It never
 refreshes or contacts the network.
 
+### Models
+
+```bash
+.build/debug/clawd auth models
+```
+
+Lists the models the stored credential can use as `openai-chatgpt/<model>` references
+and marks the configured one. It makes one model-list request with the stored access
+token, takes no lock, and never refreshes. An expired token fails the command; the
+running daemon renews it on its next model call.
+
 ### Log out
 
 ```bash
