@@ -80,7 +80,7 @@ jobs:
             "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
             -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
             scripts/update-prices.sh scripts/test-update-prices.sh \
-            scripts/test-periphery-baseline.sh \
+            scripts/test-periphery-baseline.sh scripts/cloud-warm-build.sh \
             .claude/skills/removing-dead-code/scripts/periphery_scan.sh
       - name: Verify price refresh safeguards
         run: bash scripts/test-update-prices.sh

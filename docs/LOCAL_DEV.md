@@ -77,6 +77,7 @@ test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VE
   shellcheck -s sh install.sh deploy/run-clawd.sh &&
   shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
     scripts/update-prices.sh scripts/test-update-prices.sh scripts/test-periphery-baseline.sh \
+    scripts/cloud-warm-build.sh \
     .claude/skills/removing-dead-code/scripts/periphery_scan.sh
 bash scripts/test-update-prices.sh
 bash scripts/test-periphery-baseline.sh
@@ -124,6 +125,32 @@ swift test --filter SuiteName/testName       # single test
 
 Tests follow Given-When-Then. Check `// given` / `// when` / `// then` sections
 when reading failures.
+
+---
+
+## Claude Code cloud sessions
+
+[Cloud sessions](https://code.claude.com/docs/en/cloud-environments) run on Ubuntu 24.04 x86_64
+without Swift, so the cloud environment needs its own setup. It mirrors the Linux CI job:
+
+- Network access: **Custom**, allowing `download.swift.org` plus the default package-manager list.
+  The default list has `swift.org` but not the toolchain download host.
+- Setup script: install the Swift dependencies and `libsqlite3-dev` with `apt-get`, verify the
+  `.swift-version` release tarball against `https://www.swift.org/keys/all-keys.asc`, unpack it
+  to `/opt/swift`, link `/opt/swift/usr/bin/swift*` into `/usr/local/bin`, and install SwiftLint
+  from its release zip with the checksum in `BuildTools/lint-versions.env`.
+- Environment variables: `LINUX_SOURCEKIT_LIB_PATH=/opt/swift/usr/lib` lets SwiftLint find
+  SourceKit. `BASH_DEFAULT_TIMEOUT_MS=600000` and `BASH_MAX_TIMEOUT_MS=1800000` give cold builds
+  room to finish.
+
+Each session starts from a fresh clone, so the first build is cold: on 2026-10-14 a 4-vCPU cloud
+VM took about 9 minutes for `swift build`, 4.5 more to compile tests, and 5 for `scripts/lint.sh`.
+Claude Code caches an environment only when its setup finishes within about five minutes, so the
+setup script cannot prebuild. Instead, the project's SessionStart hook runs
+`scripts/cloud-warm-build.sh`. It starts `swift build --build-tests` and then the BuildTools
+SwiftFormat build in the background, and returns without waiting. A `swift build` started meanwhile
+waits for the `.build` lock. Progress goes to `.build/cloud-warm-build.log`. The script does
+nothing unless `CLAUDE_CODE_REMOTE` is `true`, which Claude Code sets only in cloud sessions.
 
 ---
 
