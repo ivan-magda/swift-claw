@@ -1,0 +1,14 @@
+name: Select pinned Xcode
+description: >-
+  Select the Xcode version that BuildTools/lint-versions.env pins and verify the toolchain
+  identity with scripts/check-toolchain.sh. Run it after checking out the repository.
+
+runs:
+  using: composite
+  steps:
+    - name: Select and verify pinned Xcode toolchain
+      shell: bash
+      run: |
+        source BuildTools/lint-versions.env
+        sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
+        scripts/check-toolchain.sh

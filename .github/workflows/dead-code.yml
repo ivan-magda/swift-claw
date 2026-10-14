@@ -37,10 +37,7 @@ jobs:
           persist-credentials: false
 
       - name: Select and verify pinned Xcode toolchain
-        run: |
-          source BuildTools/lint-versions.env
-          sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
-          scripts/check-toolchain.sh
+        uses: $/.github/actions/select-xcode
 
       - name: Install pinned Periphery
         run: |
@@ -97,10 +94,7 @@ jobs:
           persist-credentials: false
 
       - name: Select and verify pinned Xcode toolchain
-        run: |
-          source BuildTools/lint-versions.env
-          sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
-          scripts/check-toolchain.sh
+        uses: $/.github/actions/select-xcode
 
       # Periphery never reports imports of package dependencies, Testing or Synchronization.
       # Product code comes first, so test code is left to an explicit --include-tests run.

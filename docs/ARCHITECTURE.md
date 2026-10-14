@@ -2337,7 +2337,9 @@ and `ruff check` at the pinned version before review.
 
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
-which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses
+which verifies the compiler build identity and the macOS Xcode version/build. macOS workflow jobs
+select the pinned Xcode and run that check through the `.github/actions/select-xcode` action,
+referenced with GitHub's `$/` self-repository syntax. The lint gate uses
 `xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux; their `main`
 labels are not version pins. It checks SwiftLint and the locked BuildTools SwiftFormat executable
 against the shared pins. Actionlint, zizmor, ShellCheck and ruff use the same pins file.
