@@ -12,20 +12,24 @@
 # The scans exclude OUT_DIR/build/checkouts: otherwise they report dependency code and drop our
 # witnesses of dependency protocols, such as ArgumentParser's `configuration`. They write JSON
 # because Periphery's CSV leaves the comma in `@available(*, unavailable)` unquoted.
+#
+# Periphery reads .periphery.yml from the current directory, and BuildTools/lint-versions.env
+# pins its version.
 set -euo pipefail
-
-# The version triage.py's notes were checked against. Recheck them before changing it.
-periphery_version=3.8.0
 
 if [[ $# -ne 1 ]]; then
   echo "usage: bash periphery_scan.sh OUT_DIR" >&2
   exit 2
 fi
+# shellcheck source=BuildTools/lint-versions.env
+source BuildTools/lint-versions.env
+periphery_version=$CLAW_PERIPHERY_VERSION
 command -v periphery >/dev/null || { echo "periphery not found (brew install periphery)" >&2; exit 2; }
 installed_version=$(periphery version)
 if [[ "$installed_version" != "$periphery_version" ]]; then
   cat >&2 <<EOF
-periphery $installed_version found; this script expects $periphery_version from homebrew-core.
+periphery $installed_version found; this script expects $periphery_version, from homebrew-core or
+the GitHub release that .github/workflows/dead-code.yml installs.
 If it came from the old peripheryapp/periphery tap (it stops at 2.21.2), run in this order:
   brew untap peripheryapp/periphery
   brew uninstall --cask periphery
@@ -67,10 +71,13 @@ scan() {
     }
 }
 
+# Without tests, a public declaration that only another target's tests use looks redundantly
+# public.
 echo "scan: Periphery, tests included..." >&2
 scan all
 echo "scan: Periphery, tests and ClawTestSupport ignored..." >&2
-scan prod --index-exclude 'Tests/**' --index-exclude 'Sources/ClawTestSupport/**'
+scan prod --index-exclude 'Tests/**' --index-exclude 'Sources/ClawTestSupport/**' \
+  --disable-redundant-public-analysis
 
 python3 -I "$script_dir/triage.py" "$out/all.json" "$out/prod.json" >"$out/report.md"
 echo "scan: report written to $out/report.md" >&2

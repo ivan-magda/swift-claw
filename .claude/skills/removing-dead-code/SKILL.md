@@ -22,6 +22,19 @@ the repository gate. Each script's header documents its flags.
 
 Run Periphery only through `periphery_scan.sh`. A plain `periphery scan` fails with "index
 store path does not exist", and without the script's flags the results include dependency code.
+`.periphery.yml` retains the properties of Codable, Equatable and Hashable types.
+
+The weekly `.github/workflows/dead-code.yml` runs the scan and `prune_imports.py --all --modules
+deps`. It fails on a product-code Periphery finding missing from
+`BuildTools/periphery-baseline.txt`, the recorded backlog, and on any removable product-code
+import. Test code, the test targets and `ClawTestSupport`, never fails it. Its artifacts hold
+`report.md` and `prune.patch`. `python3 -I scripts/check-periphery-baseline.py OUT/all.json
+OUT/prod.json` lists the findings the backlog lacks; with `--write` it rewrites the backlog.
+
+Product code comes first: with `--base` or `--all`, `prune_imports.py` skips test code. Pass
+`--include-tests` when the task asks for test code or the branch edits test files, and only after
+a run without it: on 2026-10-14 a run with tests kept all 103 Logging imports, and a product-only
+run then removed 3 from product files.
 
 The last three commands build the whole package, the pruner once per module. Run them one at a
 time, never in parallel: two at once take longer than the same two in sequence. Reuse one fixed
@@ -30,8 +43,8 @@ time, never in parallel: two at once take longer than the same two in sequence. 
 ## Modes
 
 **Quick scan** (audit, "find dead code"): run `scripts/check-dead-code.py --report`, which also
-lists allowlisted findings as leads, and `periphery_scan.sh`. Report the triage grouped as in §2.
-No edits.
+lists allowlisted findings as leads, and `periphery_scan.sh`. Report the triage grouped as in §2,
+marking the findings that the baseline check calls new. No edits.
 
 **Full cleanup** (remove): stages 1–6 below, on a feature branch.
 
@@ -48,8 +61,7 @@ Verdict is one of DELETE, KEEP, AMBIGUOUS, OUT-OF-SCOPE. Every row needs evidenc
 
 | The scanner says | Usually in this repo | The check that decides |
 | --- | --- | --- |
-| Property unused or assign-only in an `Encodable` type | Serialized to the wire or into a digest | Find the encoder; tests that decode the body |
-| Field assign-only in an `Equatable`/`Hashable` type | Takes part in `==` | Synthesized conformance |
+| Property unused or assign-only in a Codable, Equatable or Hashable type | `.periphery.yml` retains these, so Periphery missed the conformance | The encoder, decoder or `==` |
 | Parameter of a `@Test(arguments:)` function, such as a label | Swift Testing passes every argument, read or not | The `@Test` attribute |
 | Case of a `CaseIterable` enum | Reached through `allCases` | `.allCases` users |
 | Unused parameter | Signature fixed by a protocol, override or function-typed value | `Self.function` passed as an argument |
@@ -67,6 +79,10 @@ commit, a doc comment or a `ForTesting` name means it was kept on purpose. Searc
 Keep by default: migrations, legacy-data compatibility paths, contracts named in
 `docs/ARCHITECTURE.md`, resources loaded by a computed name, files tools discover by
 convention. An unwired enum case or protocol member named by a spec is AMBIGUOUS: report it.
+
+A KEEP that Periphery reports, such as a `ForTesting` seam or a documented contract, goes into
+the baseline with `scripts/check-periphery-baseline.py --write`. Product code carries no
+`periphery:ignore` comments. Never add a DELETE row to the baseline.
 
 ## 3. Independent researcher, before each deletion group
 
@@ -97,7 +113,8 @@ re-document anything whose remaining use changed.
    keeps any import a file uses through members, even when the file compiles without it.
 2. Repository-wide task: `prune_imports.py --work DIR --all --modules deps` (package-dependency
    modules, Testing and Synchronization; Foundation, OS modules and Crypto stay out because a
-   macOS build cannot prove Linux). It takes about an hour: run it last and alone.
+   macOS build cannot prove Linux). With `--include-tests` it takes over an hour, mostly for
+   `Testing`: run it last and alone.
 3. `prune_imports.py --work DIR --check-only --base <branch base>`, then the same check on a
    worktree of the base commit. A file listed now but not on base borrows because of a hand
    edit: put back the import its error names. Files listed on both are pre-existing: note them
@@ -108,6 +125,8 @@ re-document anything whose remaining use changed.
    owning target (TESTING.md §9.1) and check it against that target's existing tests.
 6. `git grep` each removed name in `docs/`, `scripts/`, `.github/`, `.agents/`.
 7. `periphery_scan.sh` again: a deletion exposes the next layer (a gate only its reader used).
+   Then `scripts/check-periphery-baseline.py --write` on the new scans; its diff must only
+   remove entries.
 
 ## 6. Verify and publish
 

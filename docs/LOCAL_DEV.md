@@ -76,8 +76,10 @@ test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
   shellcheck -s sh install.sh deploy/run-clawd.sh &&
   shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
-    scripts/update-prices.sh scripts/test-update-prices.sh
+    scripts/update-prices.sh scripts/test-update-prices.sh scripts/test-periphery-baseline.sh \
+    .claude/skills/removing-dead-code/scripts/periphery_scan.sh
 bash scripts/test-update-prices.sh
+bash scripts/test-periphery-baseline.sh
 ```
 
 The price-refresh checks use local fixtures for both LiteLLM and the OpenRouter Models API;
@@ -86,6 +88,30 @@ both public sources and proposes a combined `Prices.json` snapshot.
 
 Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,
 a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
+
+### Weekly dead-code analysis
+
+The [dead-code workflow](../.github/workflows/dead-code.yml) finds unused declarations and
+imports with an indexed build, so it runs weekly, on demand, and only on pull requests that change
+the analysis. To reproduce it on macOS, install Periphery at the version in
+`BuildTools/lint-versions.env`, from Homebrew until it disables the formula on 2027-08-12 or from
+the release the workflow downloads. Then run from the repository root:
+
+```bash
+S=.claude/skills/removing-dead-code/scripts
+bash $S/periphery_scan.sh .build/dead-code/scan          # 5-10 minutes
+python3 -I scripts/check-periphery-baseline.py \
+  .build/dead-code/scan/all.json .build/dead-code/scan/prod.json
+python3 -I $S/prune_imports.py --work .build/dead-code/prune --all --modules deps  # one build per trial
+```
+
+Both checks fail only on product code. The Periphery check lists findings in test code, and
+`--include-tests` makes the pruner check test code too. For a new Periphery finding, delete the
+code. Record a test seam, a documented contract or deliberate backlog by rerunning the baseline
+check with `--write`; that also drops entries whose code is gone. When the import job fails,
+apply `prune.patch` from its `imports` artifact with `git apply`. The
+[dead-code skill](../.claude/skills/removing-dead-code/SKILL.md) covers triage and complete
+cleanups.
 
 ---
 

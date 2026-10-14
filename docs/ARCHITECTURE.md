@@ -2315,6 +2315,20 @@ non-Swift file whose name or stem no other tracked file mentions.
 entry, or one that no longer matches a finding, also fails. Unused declarations and imports need
 an indexed build and stay outside this gate.
 
+The [dead-code workflow](../.github/workflows/dead-code.yml) covers them on macOS weekly, on
+demand, and on pull requests that change the analysis. Its Periphery job installs the archived
+MIT release at the version and checksum in `BuildTools/lint-versions.env`, builds an index store,
+and scans with tests and again without tests and `ClawTestSupport`, applying `.periphery.yml`.
+Product code comes first: neither job fails on test code, meaning the test targets and
+`ClawTestSupport`. The Periphery job lists test-code findings and fails on a product finding
+whose USR `BuildTools/periphery-baseline.txt` does not list;
+`scripts/check-periphery-baseline.py` compares the scans with that backlog and regenerates it.
+The baseline holds intentional test seams and documented contracts as well as backlog, so
+product code carries no Periphery comments. The import job runs the dead-code skill's `prune_imports.py --all --modules deps`
+on product code and fails on any import of a package dependency, `Testing` or `Synchronization`
+that the compiler proves removable; `--include-tests` extends a run to test code. A macOS build
+does not compile `#if os(Linux)` branches, so neither job checks Linux-only code.
+
 Python scripts, in `scripts/` and in the agent skills, follow PEP 8 and PEP 257 as configured in
 `.ruff.toml`: the ruff formatter's 88-column layout, plus lint rules for naming, imports,
 docstrings, type annotations and likely bugs. They run on Python 3.9, which macOS ships with the
