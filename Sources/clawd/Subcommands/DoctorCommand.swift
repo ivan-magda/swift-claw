@@ -10,7 +10,6 @@ import ClawSubprocess
 import ClawTelegram
 import ClawTools
 import Foundation
-import Logging
 
 struct DoctorCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(

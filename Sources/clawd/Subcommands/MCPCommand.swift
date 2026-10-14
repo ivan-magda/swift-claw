@@ -5,7 +5,6 @@ import ClawGateway
 import ClawSecrets
 import ClawWorkspace
 import Foundation
-import Logging
 
 #if canImport(Glibc)
   import Glibc
