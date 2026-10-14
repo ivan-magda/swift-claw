@@ -1,7 +1,6 @@
 import ClawCore
 import ClawData
 import Foundation
-import GRDB
 import Testing
 
 @testable import ClawGateway
