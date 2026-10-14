@@ -32,7 +32,9 @@ import. Test code, the test targets and `ClawTestSupport`, never fails it. Its a
 OUT/prod.json` lists the findings the backlog lacks; with `--write` it rewrites the backlog.
 
 Product code comes first: with `--base` or `--all`, `prune_imports.py` skips test code. Pass
-`--include-tests` when the task asks for test code or the branch edits test files.
+`--include-tests` when the task asks for test code or the branch edits test files, and only after
+a run without it: on 2026-10-14 a run with tests kept all 103 Logging imports, and a product-only
+run then removed 3 from product files.
 
 The last three commands build the whole package, the pruner once per module. Run them one at a
 time, never in parallel: two at once take longer than the same two in sequence. Reuse one fixed
