@@ -2,7 +2,6 @@ import AsyncHTTPClient
 import ClawCore
 import Foundation
 import NIOCore
-import NIOFoundationCompat
 import NIOHTTP1
 import NIOPosix
 

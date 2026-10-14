@@ -1,7 +1,6 @@
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Synchronization
 import Testing
 
 #if canImport(Darwin)

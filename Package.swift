@@ -39,7 +39,6 @@ let package = Package(
         "ClawCore",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
-        .product(name: "NIOFoundationCompat", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),
         .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
         .product(name: "NIOPosix", package: "swift-nio"),

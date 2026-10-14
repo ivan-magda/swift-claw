@@ -1,6 +1,5 @@
 import ClawCore
 import Foundation
-import GRDB
 
 extension ScheduledLearningStoreGRDB {
   public func commitPromotionReply(

@@ -1,4 +1,3 @@
-import AsyncHTTPClient
 import ClawCore
 import ClawGateway
 import ClawLLM

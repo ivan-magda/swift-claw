@@ -1,6 +1,5 @@
 import ClawCore
 import Foundation
-import Logging
 
 /// The /schedule family: create parses ONE draft and parks it; list is read-only;
 /// pause/resume/runnow/cancel claim the update BEFORE their effect so a redelivered command

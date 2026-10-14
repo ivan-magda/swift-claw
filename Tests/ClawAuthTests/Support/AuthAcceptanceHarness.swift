@@ -2,7 +2,6 @@ import ClawCore
 import ClawSecrets
 import ClawTestSupport
 import Foundation
-import Synchronization
 
 @testable import ClawAuth
 
