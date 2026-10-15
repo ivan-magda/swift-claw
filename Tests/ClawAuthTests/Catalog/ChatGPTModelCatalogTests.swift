@@ -21,7 +21,9 @@ private enum CatalogFixture {
     slug: String = CatalogFixture.slug,
     priority: JSONValue? = nil,
     visibility: JSONValue? = nil,
-    picker: (key: String, value: JSONValue)? = nil
+    picker: (key: String, value: JSONValue)? = nil,
+    defaultLevel: JSONValue? = nil,
+    supportedLevels: JSONValue? = nil
   ) -> JSONValue {
     var fields: [String: JSONValue] = ["slug": .string(slug)]
     fields["priority"] = priority
@@ -29,7 +31,28 @@ private enum CatalogFixture {
     if let picker {
       fields[picker.key] = picker.value
     }
+    fields["default_reasoning_level"] = defaultLevel
+    fields["supported_reasoning_levels"] = supportedLevels
     return .object(fields)
+  }
+
+  /// Supported levels in the shape the vendor sends them: one object per level, carrying a
+  /// description this parser has no use for.
+  static func levelEntries(_ efforts: [String]) -> JSONValue {
+    .array(
+      efforts.map { effort in
+        .object(["effort": .string(effort), "description": .string("Reasoning at \(effort)")])
+      }
+    )
+  }
+
+  static func onlyModel(
+    _ rows: [JSONValue],
+    sourceLocation: SourceLocation = #_sourceLocation
+  ) throws -> ChatGPTCatalogModel {
+    let models = try ChatGPTModelCatalog.eligibleModels(in: payload(rows))
+    try #require(models.count == 1, sourceLocation: sourceLocation)
+    return models[0]
   }
 
   static func payload(_ rows: [JSONValue]) -> JSONValue {
@@ -359,6 +382,120 @@ struct ChatGPTModelCatalogPriorityTests {
 
     // then
     #expect(slugs == ["zulu", "alpha", "bravo"])
+  }
+}
+
+// MARK: - Reasoning Levels
+
+@Suite
+struct ChatGPTModelCatalogReasoningLevelTests {
+  @Test
+  func aRowKeepsItsReasoningLevelsInTheVendorsOrderWithItsDefault() throws {
+    // given
+    let rows = [
+      CatalogFixture.row(
+        defaultLevel: .string("medium"),
+        supportedLevels: CatalogFixture.levelEntries(["low", "medium", "high"])
+      ),
+    ]
+
+    // when
+    let model = try CatalogFixture.onlyModel(rows)
+
+    // then
+    #expect(model.reasoningLevels == ["low", "medium", "high"])
+    #expect(model.defaultReasoningLevel == "medium")
+  }
+
+  /// Levels are optional detail. A row whose levels this parser cannot read still lists, the way
+  /// a row with an unreadable priority does.
+  @Test(arguments: [
+    JSONValue.string("low"),
+    JSONValue.array([.string("low")]),
+    JSONValue.array([.object(["effort": .number(1)])]),
+  ])
+  func unreadableReasoningLevelsLeaveTheRowListedWithoutThem(supported: JSONValue) throws {
+    // given
+    let rows = [CatalogFixture.row(defaultLevel: .number(1), supportedLevels: supported)]
+
+    // when
+    let model = try CatalogFixture.onlyModel(rows)
+
+    // then
+    #expect(model.slug == CatalogFixture.slug)
+    #expect(model.reasoningLevels.isEmpty)
+    #expect(model.defaultReasoningLevel == nil)
+  }
+
+  @Test(arguments: [
+    "xhigh",
+    "High",
+    "high-2",
+    "very_high",
+    String(repeating: "a", count: 32),
+  ])
+  func aSafeReasoningLevelIsKept(level: String) throws {
+    // given
+    let rows = [
+      CatalogFixture.row(
+        defaultLevel: .string(level),
+        supportedLevels: CatalogFixture.levelEntries([level])
+      ),
+    ]
+
+    // when
+    let model = try CatalogFixture.onlyModel(rows)
+
+    // then
+    #expect(model.reasoningLevels == [level])
+    #expect(model.defaultReasoningLevel == level)
+  }
+
+  /// The printed list reaches a terminal, so a level must not carry an escape sequence or other
+  /// text beyond one short word.
+  @Test(arguments: [
+    "",
+    "very high",
+    "high\n",
+    "\u{1B}[31mhigh",
+    "h\u{00EF}gh",
+    "high,low",
+    String(repeating: "a", count: 33),
+  ])
+  func anUnsafeReasoningLevelNeverReachesTheCatalog(level: String) throws {
+    // given
+    let rows = [
+      CatalogFixture.row(
+        defaultLevel: .string(level),
+        supportedLevels: CatalogFixture.levelEntries([level, "low"])
+      ),
+    ]
+
+    // when
+    let model = try CatalogFixture.onlyModel(rows)
+
+    // then
+    #expect(model.reasoningLevels == ["low"])
+    #expect(model.defaultReasoningLevel == nil)
+  }
+
+  /// Deduplication runs before the cap, as it does for rows: a repeated level cannot spend the
+  /// allowance and hide the levels behind it.
+  @Test
+  func repeatedLevelsAreKeptOnceAndTheListIsBounded() throws {
+    // given
+    let distinct = (0..<20).map { index in
+      "level-\(index)"
+    }
+    let efforts = Array(repeating: "low", count: 20) + distinct
+    let rows = [CatalogFixture.row(supportedLevels: CatalogFixture.levelEntries(efforts))]
+
+    // when
+    let model = try CatalogFixture.onlyModel(rows)
+
+    // then
+    let retained = ChatGPTModelCatalog.maximumRetainedReasoningLevels
+    #expect(model.reasoningLevels == ["low"] + distinct.prefix(retained - 1))
   }
 }
 

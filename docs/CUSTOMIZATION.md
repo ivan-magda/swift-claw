@@ -218,8 +218,8 @@ party you trust with that content.
   (leave the key blank for no-auth endpoints).
 - **`openai-chatgpt/<model>`** uses the ChatGPT subscription route. `clawd auth login`
   handles the OAuth flow and prints the exact value to set; base URL and API key are
-  unused there. `clawd auth models` lists the models your subscription offers, at any
-  time and while the daemon runs.
+  unused there. `clawd auth models` lists the models your subscription offers, with
+  each model's reasoning effort levels, at any time and while the daemon runs.
 
 Related knobs: `CLAW_LLM_STREAMING` (rich streamed drafts, on by default),
 `CLAW_LLM_MAX_TOKENS`, `CLAW_LLM_MAX_TOKENS_FIELD`, `CLAW_LLM_STRUCTURED_OUTPUT`.
