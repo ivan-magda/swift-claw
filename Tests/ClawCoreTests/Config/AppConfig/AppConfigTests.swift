@@ -321,16 +321,6 @@ struct AppConfigTests {
 
   // MARK: - Route resolution matrix
 
-  /// A ChatGPT model with no base URL and no key at all, to prove the managed route neither reads nor
-  /// requires either.
-  private func chatGPTEnv(_ overrides: [String: String] = [:]) -> [String: String] {
-    [EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: "openai-chatgpt/gpt-5.4"].merging(
-      overrides
-    ) { _, new in
-      new
-    }
-  }
-
   @Test
   func chatGPTPrefixResolvesTheManagedRouteWithoutBaseURLOrKey() throws {
     // given — the exact qualified prefix, and neither CLAW_LLM_BASE_URL nor CLAW_LLM_API_KEY present

@@ -270,6 +270,29 @@ extension StructuredOutputMode: CustomStringConvertible {
   }
 }
 
+/// A reasoning effort the owner sets with `CLAW_LLM_REASONING_EFFORT`, spelled as the provider takes
+/// it. The list only catches a typo before boot: which of these a given model accepts is the
+/// provider's decision, made per request, and it can refuse one the list allows.
+public enum LLMReasoningEffort: String, Sendable, Equatable, CaseIterable {
+  /// `none` asks the provider not to reason. It is not the same as leaving the setting unset, which
+  /// sends no level and leaves the choice to the provider.
+  case disabled = "none"
+  case minimal
+  case low
+  case medium
+  case high
+  case xhigh
+  case max
+  case ultra
+}
+
+extension LLMReasoningEffort: CustomStringConvertible {
+  /// The word the owner typed, so a diagnostic names the setting's value rather than a Swift case.
+  public var description: String {
+    rawValue
+  }
+}
+
 /// The provider-neutral LLM settings the composition root wires a stack from. It carries the resolved
 /// route — the parsed `CLAW_LLM_MODEL` with its provider descriptor, accounting reference, wire model,
 /// and egress identity — plus the settings no route owns: the local output reservation, the retry and

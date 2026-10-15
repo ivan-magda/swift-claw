@@ -202,6 +202,45 @@ struct ProviderRosterFactoryTests {
     // then — the retry still spends both budgeted attempts
     #expect(await http.recorded.count == 2)
   }
+
+  // MARK: - Reasoning effort wiring
+
+  @Test("a primary's configured reasoning effort reaches its wire body and never the fallback's")
+  func reasoningEffortReachesThePrimaryWireOnly() async throws {
+    // given — two ChatGPT routes, only the primary carrying a configured level
+    let primary = chatGPTRoute(reasoningEffort: .configured(.high))
+    let fallback = chatGPTRoute()
+    let success = ScriptedHTTPExecutor.Step.stream(Support.head(200), Fixtures.basicSuccess())
+    let http = ScriptedHTTPExecutor([success, success])
+    let stack = try ProviderStackFactory.makeRoster(
+      primaryRoute: primary,
+      fallbackRoute: fallback,
+      settings: settings(route: primary),
+      loadStaticBearer: {
+        nil
+      },
+      loadFallbackBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(storedCredential()))
+      },
+      http: http,
+      buildVersion: "test"
+    )
+
+    // when
+    _ = try await stack.roster.primary.provider.complete(request: sampleRequest)
+    _ = try await #require(stack.roster.fallback).provider.complete(request: sampleRequest)
+
+    // then
+    let recorded = await http.recorded
+    try #require(recorded.count == 2)
+    let primaryBody = try decodeBody(recorded[0].body)
+    let fallbackBody = try decodeBody(recorded[1].body)
+    #expect(primaryBody["reasoning"] as? [String: String] == ["effort": "high"])
+    #expect(fallbackBody["reasoning"] == nil)
+  }
 }
 
 // MARK: - Builders

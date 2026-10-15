@@ -19,7 +19,10 @@ extension AppConfig {
       modelReference: model,
       configuredBaseURL: try requiredBaseURL(from: env)
     )
-    let route = try routeApplyingWireOutputField(to: resolved, env: env)
+    let route = try routeApplyingReasoningEffort(
+      to: routeApplyingWireOutputField(to: resolved, env: env),
+      env: env
+    )
     let fallbackRoute = try parseFallbackRoute(from: env)
     let prices = try parseRoutePrices(route: route, fallbackRoute: fallbackRoute, env: env)
 
@@ -140,23 +143,39 @@ private extension AppConfig {
       throw ConfigError.invalidMaxTokensField(rawField)
     }
 
-    let capabilities = route.descriptor.capabilities
-    let rebuilt = LLMProviderDescriptor(
-      providerID: route.descriptor.providerID,
-      qualifiedPrefix: route.descriptor.qualifiedPrefix,
-      egress: route.descriptor.egress,
-      credentialMode: route.descriptor.credentialMode,
-      capabilities: LLMProviderCapabilities(
-        supportsStructuredOutput: capabilities.supportsStructuredOutput,
-        outputTokenField: .configured(maxTokensField)
-      )
-    )
+    var capabilities = route.descriptor.capabilities
+    capabilities.outputTokenField = .configured(maxTokensField)
+    return route.replacingCapabilities(capabilities)
+  }
 
-    return ResolvedLLMRoute(
-      descriptor: rebuilt,
-      configuredReference: route.configuredReference,
-      wireModel: route.wireModel
-    )
+  /// Settles the primary route's reasoning effort from `CLAW_LLM_REASONING_EFFORT`, only on a route
+  /// whose requests have such a field. Elsewhere the variable is neither read nor validated, like the
+  /// wire output field above, so moving to the compatible route stays a change to the model alone.
+  /// The fallback never calls this: it keeps the provider's level rather than inherit one its model
+  /// might refuse.
+  static func routeApplyingReasoningEffort(
+    to route: ResolvedLLMRoute,
+    env: [String: String]
+  ) throws -> ResolvedLLMRoute {
+    guard route.descriptor.capabilities.reasoningEffort == .providerDefault else {
+      return route
+    }
+
+    let rawEffort = env[EnvKey.llmReasoningEffort]?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !rawEffort.isEmpty else {
+      return route
+    }
+
+    guard let effort = LLMReasoningEffort(rawValue: rawEffort) else {
+      throw ConfigError.invalidReasoningEffort(
+        value: rawEffort,
+        allowed: LLMReasoningEffort.allCases.map(\.rawValue)
+      )
+    }
+
+    var capabilities = route.descriptor.capabilities
+    capabilities.reasoningEffort = .configured(effort)
+    return route.replacingCapabilities(capabilities)
   }
 
   /// Parses `CLAW_LLM_STRUCTURED_OUTPUT` and enforces every configured route's capability: a mode the

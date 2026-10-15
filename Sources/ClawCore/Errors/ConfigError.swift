@@ -8,6 +8,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidPrimaryCooldown(String)
   case invalidMaxTokensField(String)
   case invalidStructuredOutput(String)
+  case invalidReasoningEffort(value: String, allowed: [String])
   case emptyQualifiedModelSuffix(reference: String)
   case oversizedQualifiedModelSuffix(reference: String)
   case unsafeQualifiedModelSuffix(reference: String)

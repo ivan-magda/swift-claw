@@ -295,6 +295,7 @@ struct AuthWorld: Sendable {
 
   var environment: [String: String]
   var configuredModel: String?
+  var configuredReasoningEffort: LLMReasoningEffort?
   var lockFailure: AuthMutationLockFailure?
   /// The real `flock` adapter when a test is about contention; the scripted lock otherwise.
   var mutationLock: (any AuthMutationLocking)?
@@ -381,7 +382,11 @@ struct AuthWorld: Sendable {
     let catalog = ScriptedCatalog(outcome: catalogOutcome, log: log)
     builtCatalog.set(catalog)
     return AuthModelsWorkflow(
-      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      bootstrap: AuthBootstrap(
+        stateRoot: root,
+        configuredModel: configuredModel,
+        configuredReasoningEffort: configuredReasoningEffort
+      ),
       makeCredentialStore: makeCredentialStore,
       catalog: catalog,
       wallDate: {

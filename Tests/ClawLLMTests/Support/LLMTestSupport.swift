@@ -69,13 +69,18 @@ func makeCurrentRoute(
 }
 
 /// The managed ChatGPT route, so a test needing only the Responses adapter's shape does not restate
-/// the qualified descriptor.
-func chatGPTRoute() -> ResolvedLLMRoute {
-  ResolvedLLMRoute(
+/// the qualified descriptor. A reasoning effort is set the way configuration parsing leaves it.
+func chatGPTRoute(
+  reasoningEffort: LLMWireReasoningEffort = .providerDefault
+) -> ResolvedLLMRoute {
+  var capabilities = LLMProviderDescriptor.openAIChatGPT.capabilities
+  capabilities.reasoningEffort = reasoningEffort
+
+  return ResolvedLLMRoute(
     descriptor: .openAIChatGPT,
     configuredReference: "openai-chatgpt/gpt-5.4",
     wireModel: "gpt-5.4"
-  )
+  ).replacingCapabilities(capabilities)
 }
 
 /// An unexpired stored ChatGPT credential, so a managed-route composition test can authorize without
@@ -105,7 +110,8 @@ func currentRouteWithEgress(_ egress: LLMEgressIdentity) -> ResolvedLLMRoute {
       credentialMode: .noneOrStaticBearer,
       capabilities: LLMProviderCapabilities(
         supportsStructuredOutput: true,
-        outputTokenField: .configured(.maxCompletionTokens)
+        outputTokenField: .configured(.maxCompletionTokens),
+        reasoningEffort: .unsupported
       )
     ),
     configuredReference: "gpt-4o",

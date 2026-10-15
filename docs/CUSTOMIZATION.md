@@ -221,8 +221,24 @@ party you trust with that content.
   unused there. `clawd auth models` lists the models your subscription offers, with
   each model's reasoning effort levels, at any time and while the daemon runs.
 
+On the subscription route, `CLAW_LLM_REASONING_EFFORT` sets how much the model reasons
+before it answers: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`.
+Leave it blank and clawd sends no level, so the provider picks one. `none` is a level of
+its own: it asks for no reasoning. A misspelled word stops clawd at startup.
+
+- **Pick a level your model lists.** The provider decides which levels a model accepts
+  and may refuse the rest on every message. `clawd auth models` marks the configured
+  level and warns when the configured model does not list it.
+- **It applies to every call on the primary,** including `/schedule` drafts and journal
+  summaries. Those two stop after 30 seconds, so a high level can make them fail.
+- **Only the primary gets it.** The fallback runs at its provider's level, and the
+  OpenAI-compatible route ignores the variable, so switching routes is still a change
+  to `CLAW_LLM_MODEL` alone. Native Coder runs the Codex CLI with its own
+  configuration, so the setting does not reach it either.
+
 Related knobs: `CLAW_LLM_STREAMING` (rich streamed drafts, on by default),
-`CLAW_LLM_MAX_TOKENS`, `CLAW_LLM_MAX_TOKENS_FIELD`, `CLAW_LLM_STRUCTURED_OUTPUT`.
+`CLAW_LLM_MAX_TOKENS`, `CLAW_LLM_MAX_TOKENS_FIELD`, `CLAW_LLM_STRUCTURED_OUTPUT`,
+`CLAW_LLM_REASONING_EFFORT`.
 
 ### Telegram progress
 
@@ -312,6 +328,9 @@ Before you turn it on:
 - **Both routes are checked at startup.** `CLAW_LLM_STRUCTURED_OUTPUT` set to a mode your
   fallback cannot serve fails config validation with exit 10, naming the route, rather
   than waiting to break the first time the fallback carries a turn.
+- **The fallback runs at its provider's reasoning effort.** `CLAW_LLM_REASONING_EFFORT`
+  applies to the primary alone, so a level your fallback model lacks cannot break the
+  route that exists to answer when the primary cannot.
 - **An approval you granted can execute against the other provider.** You approve an
   action while your conversation is going to one provider; if the route switches before
   the run resumes, the action runs anyway and its output goes to the other one. clawd does

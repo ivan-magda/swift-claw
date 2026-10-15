@@ -22,6 +22,7 @@ public struct AppConfig: Sendable, Equatable {
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"
     static let llmStructuredOutput = "CLAW_LLM_STRUCTURED_OUTPUT"
+    public static let llmReasoningEffort = "CLAW_LLM_REASONING_EFFORT"
     public static let llmInputUSDPerMTok = "CLAW_LLM_INPUT_USD_PER_MTOK"
     public static let llmOutputUSDPerMTok = "CLAW_LLM_OUTPUT_USD_PER_MTOK"
 

@@ -446,6 +446,22 @@ struct ChatGPTSubscriptionAcceptanceTests {
     #expect(corrupt.render.contains("credential unreadable"))
   }
 
+  /// The live health table reads the level from the booted daemon's own config, so `/status` and a
+  /// full doctor report what the primary actually sends.
+  @Test
+  func theBootedDaemonReportsTheConfiguredReasoningEffort() async throws {
+    // given
+    var env = CompositionAcceptanceHarness.validEnv()
+    env[AppConfig.EnvKey.llmModel] = CompositionAcceptance.qualifiedModel
+    env[AppConfig.EnvKey.llmReasoningEffort] = LLMReasoningEffort.high.rawValue
+
+    // when
+    let harness = try await CompositionAcceptanceHarness.boot(environment: env)
+
+    // then
+    #expect(harness.healthRow("llm.reasoning_effort") == LLMReasoningEffort.high.rawValue)
+  }
+
   // MARK: - Included-plan accounting
 
   /// A subscription call resolves to a confirmed zero-dollar `included_plan` cost through the real

@@ -118,6 +118,30 @@ struct AuthBootstrapTests {
     #expect(bootstrap.configuredModel == raw)
   }
 
+  /// Read leniently, for the same reason: a misspelled level is config load's to refuse, while
+  /// `clawd auth models` must still list models for an owner fixing it.
+  @Test(arguments: [
+    (raw: " high ", expected: LLMReasoningEffort.high),
+    (raw: "hihg", expected: nil),
+  ])
+  func theConfiguredReasoningEffortIsReadWithoutRefusingAMisspelling(
+    raw: String,
+    expected: LLMReasoningEffort?
+  ) throws {
+    // given
+    let root = try makeTemporaryRoot(prefix: "auth-bootstrap-effort")
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    // when
+    let bootstrap = try AuthBootstrap.resolve(environment: [
+      AppConfig.EnvKey.stateRoot: root.path,
+      AppConfig.EnvKey.llmReasoningEffort: raw,
+    ])
+
+    // then
+    #expect(bootstrap.configuredReasoningEffort == expected)
+  }
+
   // MARK: - Process Isolation
 
   /// The supplied dictionary is the whole environment. A bootstrap that read or exported the

@@ -93,10 +93,17 @@ private extension AuthModelsWorkflow {
     var events: [AuthPresentationEvent] = [.output("Available models:")]
 
     for model in models {
-      let marker = model.slug == configured ? " (configured)" : ""
+      let isConfigured = model.slug == configured
+      let marker = isConfigured ? " (configured)" : ""
       events.append(.output("  \(ChatGPTProviderMetadata.modelPrefix)\(model.slug)\(marker)"))
-      if let levels = Self.reasoningLevelsLine(for: model) {
+
+      // The level applies to the configured model alone, so no other row is measured against it.
+      let configuredLevel = isConfigured ? bootstrap.configuredReasoningEffort : nil
+      if let levels = Self.reasoningLevelsLine(for: model, configuredLevel: configuredLevel) {
         events.append(.output(levels))
+      }
+      if let warning = Self.unlistedLevelWarning(for: model, configuredLevel: configuredLevel) {
+        events.append(.output(warning))
       }
     }
 
@@ -107,16 +114,45 @@ private extension AuthModelsWorkflow {
   }
 
   /// A line of its own under the reference, so the reference stays pasteable as printed.
-  static func reasoningLevelsLine(for model: ChatGPTCatalogModel) -> String? {
+  static func reasoningLevelsLine(
+    for model: ChatGPTCatalogModel,
+    configuredLevel: LLMReasoningEffort?
+  ) -> String? {
     guard !model.reasoningLevels.isEmpty else {
       return nil
     }
 
     let levels = model.reasoningLevels.map { level in
-      level == model.defaultReasoningLevel ? "\(level) (default)" : level
+      let marks = [
+        level == model.defaultReasoningLevel ? "default" : nil,
+        level == configuredLevel?.rawValue ? "configured" : nil,
+      ].compactMap { mark in
+        mark
+      }
+      return marks.isEmpty ? level : "\(level) (\(marks.joined(separator: ", ")))"
     }
     let levelList = levels.joined(separator: ", ")
 
     return "    reasoning effort: \(levelList)"
+  }
+
+  /// A configured level the model does not list may be refused on every message, so the listing
+  /// says so under that model. A model that lists no levels gives nothing to check against, so it
+  /// draws no warning.
+  static func unlistedLevelWarning(
+    for model: ChatGPTCatalogModel,
+    configuredLevel: LLMReasoningEffort?
+  ) -> String? {
+    guard let configuredLevel,
+          !model.reasoningLevels.isEmpty,
+          !model.reasoningLevels.contains(configuredLevel.rawValue)
+    else {
+      return nil
+    }
+
+    return """
+          \(AppConfig.EnvKey.llmReasoningEffort)=\(configuredLevel) is not one of this model's \
+      levels, so the provider may refuse it.
+      """
   }
 }

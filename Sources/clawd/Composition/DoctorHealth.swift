@@ -83,6 +83,7 @@ enum DoctorHealth {
       routeHealth: routeHealth,
       retryBudget: config.llm.retryBudget,
       streamingEnabled: config.llm.streamingEnabled,
+      reasoningEffort: config.llm.route.descriptor.capabilities.reasoningEffort,
       todayUsage: read {
         try stores.usage.todayTokensAndCost(now: now)
       },
