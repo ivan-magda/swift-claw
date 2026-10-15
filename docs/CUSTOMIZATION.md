@@ -222,15 +222,18 @@ party you trust with that content.
   each model's reasoning effort levels, at any time and while the daemon runs.
 
 On the subscription route, `CLAW_LLM_REASONING_EFFORT` sets how much the model reasons
-before it answers: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`.
-Leave it blank and clawd sends no level, so the provider picks one. `none` is a level of
-its own: it asks for no reasoning. A misspelled word stops clawd at startup.
+before it answers: `none`, `low`, `medium`, `high`, `xhigh` or `max`. Leave it blank and
+clawd sends no level, so the provider picks one. `none` is a level of its own: it asks for
+no reasoning. Any other word stops clawd at startup. That includes `ultra`, which
+`clawd auth models` can list for some models: it is a Codex client mode, not a level the
+backend takes in a request. `minimal` is refused by the backend too.
 
 - **Pick a level your model lists.** The provider decides which levels a model accepts
   and may refuse the rest on every message. `clawd auth models` marks the configured
   level and warns when the configured model does not list it.
 - **It applies to every call on the primary,** including `/schedule` drafts and journal
-  summaries. Those two stop after 30 seconds, so a high level can make them fail.
+  summaries. A turn stops after 180 seconds, and those two stop after 30, so a high level
+  can make them fail. A turn that runs several tool rounds reasons again on each one.
 - **Only the primary gets it.** The fallback runs at its provider's level, and the
   OpenAI-compatible route ignores the variable, so switching routes is still a change
   to `CLAW_LLM_MODEL` alone. Native Coder runs the Codex CLI with its own

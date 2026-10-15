@@ -9,7 +9,7 @@ struct AppConfigReasoningEffortTests {
 
   /// The words are the wire spelling an owner types, so each is written out here rather than read
   /// back from the enum that parses it.
-  @Test(arguments: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"])
+  @Test(arguments: ["none", "low", "medium", "high", "xhigh", "max"])
   func eachDocumentedLevelConfiguresTheChatGPTPrimary(word: String) throws {
     // given
     let env = chatGPTEnv([EnvKey.llmReasoningEffort: word])
@@ -34,15 +34,17 @@ struct AppConfigReasoningEffortTests {
     #expect(config.llm.route.descriptor.capabilities.reasoningEffort == .providerDefault)
   }
 
-  @Test
-  func anUnknownWordFailsConfigurationNamingTheAllowedWords() {
+  /// A typo, and the two catalog words the Codex wire refuses: `ultra` is listed for some models
+  /// but is a client mode, and `minimal` is rejected outright. Either would fail every message.
+  @Test(arguments: ["hihg", "ultra", "minimal"])
+  func aWordOutsideTheWireLevelsFailsConfigurationNamingTheAllowedWords(word: String) {
     // given
-    let env = chatGPTEnv([EnvKey.llmReasoningEffort: "hihg"])
+    let env = chatGPTEnv([EnvKey.llmReasoningEffort: word])
 
-    // then
+    // when / then
     #expect(
       throws: ConfigError.invalidReasoningEffort(
-        value: "hihg",
+        value: word,
         allowed: LLMReasoningEffort.allCases.map(\.rawValue)
       )
     ) {

@@ -271,19 +271,22 @@ extension StructuredOutputMode: CustomStringConvertible {
 }
 
 /// A reasoning effort the owner sets with `CLAW_LLM_REASONING_EFFORT`, spelled as the provider takes
-/// it. The list only catches a typo before boot: which of these a given model accepts is the
-/// provider's decision, made per request, and it can refuse one the list allows.
+/// it. The list holds the levels both reference implementations send on the Codex wire, so it
+/// catches a typo before boot. Which of these a given model accepts is still the provider's
+/// decision, made per request.
+///
+/// `minimal` and `ultra` are left out on purpose. Both references report the Codex backend refuses
+/// `minimal`, and `ultra` is a Codex client mode rather than a request level, even though the model
+/// catalog lists it for some models. Accepting either would fail every message on the primary.
 public enum LLMReasoningEffort: String, Sendable, Equatable, CaseIterable {
   /// `none` asks the provider not to reason. It is not the same as leaving the setting unset, which
   /// sends no level and leaves the choice to the provider.
   case disabled = "none"
-  case minimal
   case low
   case medium
   case high
   case xhigh
   case max
-  case ultra
 }
 
 extension LLMReasoningEffort: CustomStringConvertible {
