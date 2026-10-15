@@ -131,6 +131,9 @@ private extension DoctorCommand {
       HealthRowsBuilder.fallbackConfiguredCheck(
         fallbackReference: config.llm.fallbackRoute?.configuredReference
       ),
+      HealthRowsBuilder.reasoningEffortCheck(
+        config.llm.route.descriptor.capabilities.reasoningEffort
+      ),
     ])
     // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.

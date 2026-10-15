@@ -58,6 +58,7 @@ public enum HealthRowsBuilder {
     public let routeHealth: LLMRouteHealth
     public let retryBudget: Int
     public let streamingEnabled: Bool
+    public let reasoningEffort: LLMWireReasoningEffort
     public let todayUsage: HealthValue<(tokens: Int, costUSD: Double)>
     public let costMix: HealthValue<[CostSource: Int]>
     public let primaryPrice: RoutePriceHealth
@@ -76,6 +77,7 @@ public enum HealthRowsBuilder {
       routeHealth: LLMRouteHealth,
       retryBudget: Int,
       streamingEnabled: Bool,
+      reasoningEffort: LLMWireReasoningEffort,
       todayUsage: HealthValue<(tokens: Int, costUSD: Double)>,
       costMix: HealthValue<[CostSource: Int]>,
       primaryPrice: RoutePriceHealth,
@@ -93,6 +95,7 @@ public enum HealthRowsBuilder {
       self.routeHealth = routeHealth
       self.retryBudget = retryBudget
       self.streamingEnabled = streamingEnabled
+      self.reasoningEffort = reasoningEffort
       self.todayUsage = todayUsage
       self.costMix = costMix
       self.primaryPrice = primaryPrice
@@ -128,6 +131,13 @@ public enum HealthRowsBuilder {
       } ?? "no",
       .llmRuns
     )
+  }
+
+  /// The one spelling of the reasoning effort row, shared by the config-only doctor path and the live
+  /// health table. An unset level reads `provider default` rather than `none`, because `none` is
+  /// itself a level an owner can send.
+  public static func reasoningEffortCheck(_ effort: LLMWireReasoningEffort) -> DoctorReport.Check {
+    check("llm.reasoning_effort", reasoningEffortValue(effort), .llmRuns)
   }
 
   static func skillsCheck(_ diagnostics: SkillDiagnostics) -> DoctorReport.Check {
@@ -196,6 +206,7 @@ private extension HealthRowsBuilder {
       },
       check("llm.retry_budget", "\(inputs.retryBudget)", .llmRuns),
       check("llm.streaming", inputs.streamingEnabled ? "on" : "off", .llmRuns),
+      reasoningEffortCheck(inputs.reasoningEffort),
       .storeRead(
         inputs.runsHealth,
         key: "runs.in_flight",
@@ -262,6 +273,17 @@ private extension HealthRowsBuilder {
       "\(remainingSeconds)"
     case .unobservable:
       "unknown"
+    }
+  }
+
+  static func reasoningEffortValue(_ effort: LLMWireReasoningEffort) -> String {
+    switch effort {
+    case .configured(let level):
+      level.rawValue
+    case .providerDefault:
+      "provider default"
+    case .unsupported:
+      "not used on this route"
     }
   }
 

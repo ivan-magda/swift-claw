@@ -33,13 +33,37 @@ public enum LLMWireOutputTokenField: Sendable, Equatable {
   case omitted
 }
 
-public struct LLMProviderCapabilities: Sendable, Equatable {
-  public let supportsStructuredOutput: Bool
-  public let outputTokenField: LLMWireOutputTokenField
+/// What a route's requests say about reasoning effort. A route with no such field is `unsupported`
+/// and never reads the setting; one that has it sends nothing until the owner configures a level.
+public enum LLMWireReasoningEffort: Sendable, Equatable {
+  case unsupported
+  case providerDefault
+  case configured(LLMReasoningEffort)
 
-  public init(supportsStructuredOutput: Bool, outputTokenField: LLMWireOutputTokenField) {
+  /// The level to put on the wire, or nil when the request should carry none.
+  public var configuredLevel: LLMReasoningEffort? {
+    guard case .configured(let level) = self else {
+      return nil
+    }
+    return level
+  }
+}
+
+/// Mutable fields so a parser that settles one route-owned wire option copies every other field
+/// with the value, rather than rebuilding them by hand and dropping one added later.
+public struct LLMProviderCapabilities: Sendable, Equatable {
+  public var supportsStructuredOutput: Bool
+  public var outputTokenField: LLMWireOutputTokenField
+  public var reasoningEffort: LLMWireReasoningEffort
+
+  public init(
+    supportsStructuredOutput: Bool,
+    outputTokenField: LLMWireOutputTokenField,
+    reasoningEffort: LLMWireReasoningEffort
+  ) {
     self.supportsStructuredOutput = supportsStructuredOutput
     self.outputTokenField = outputTokenField
+    self.reasoningEffort = reasoningEffort
   }
 }
 
@@ -98,7 +122,8 @@ extension LLMProviderDescriptor {
     credentialMode: .managedOAuth,
     capabilities: LLMProviderCapabilities(
       supportsStructuredOutput: false,
-      outputTokenField: .omitted
+      outputTokenField: .omitted,
+      reasoningEffort: .providerDefault
     )
   )
 
@@ -110,7 +135,8 @@ extension LLMProviderDescriptor {
       credentialMode: .noneOrStaticBearer,
       capabilities: LLMProviderCapabilities(
         supportsStructuredOutput: true,
-        outputTokenField: .configured(AppConfig.EnvDefaults.maxTokensField)
+        outputTokenField: .configured(AppConfig.EnvDefaults.maxTokensField),
+        reasoningEffort: .unsupported
       )
     )
   }
@@ -131,6 +157,24 @@ public struct ResolvedLLMRoute: Sendable, Equatable {
     self.descriptor = descriptor
     self.configuredReference = configuredReference
     self.wireModel = wireModel
+  }
+}
+
+extension ResolvedLLMRoute {
+  /// The same route with its descriptor's capabilities replaced: the one step configuration parsing
+  /// takes to settle a route-owned wire option after the registry has resolved the route.
+  func replacingCapabilities(_ capabilities: LLMProviderCapabilities) -> ResolvedLLMRoute {
+    ResolvedLLMRoute(
+      descriptor: LLMProviderDescriptor(
+        providerID: descriptor.providerID,
+        qualifiedPrefix: descriptor.qualifiedPrefix,
+        egress: descriptor.egress,
+        credentialMode: descriptor.credentialMode,
+        capabilities: capabilities
+      ),
+      configuredReference: configuredReference,
+      wireModel: wireModel
+    )
   }
 }
 

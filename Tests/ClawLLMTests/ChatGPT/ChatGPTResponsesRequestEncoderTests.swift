@@ -259,6 +259,28 @@ struct ChatGPTResponsesRequestEncoderTests {
     #expect(body["include"] as? [String] == ["reasoning.encrypted_content"])
   }
 
+  /// The configured level and the summary request share one `reasoning` object, so neither may
+  /// displace the other.
+  @Test(arguments: [false, true])
+  func aConfiguredLevelJoinsTheReasoningObject(summaryEnabled: Bool) throws {
+    // given
+    let encoder = ChatGPTResponsesRequestEncoder(reasoningEffort: .high)
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: [ChatMessage(role: .user, content: "hello")],
+      maxOutputTokens: 256,
+      progressExplanationsEnabled: summaryEnabled
+    )
+
+    // when
+    let body = try decodeBody(encoder.encode(request: request))
+
+    // then
+    let reasoning = try #require(body["reasoning"] as? [String: String])
+    let expected = summaryEnabled ? ["effort": "high", "summary": "auto"] : ["effort": "high"]
+    #expect(reasoning == expected)
+  }
+
   /// System text is joined wherever it appears in the history, in the order it appears — including
   /// after a user turn, which a filter that only reads a leading run would miss.
   @Test

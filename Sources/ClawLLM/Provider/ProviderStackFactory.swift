@@ -263,7 +263,10 @@ private extension ProviderStackFactory {
       epochID: {
         UUID()
       },
-      treatsQuotaAsTerminal: treatsQuotaAsTerminal
+      treatsQuotaAsTerminal: treatsQuotaAsTerminal,
+      // Configuration settles the level on the primary alone, so a fallback route arrives here
+      // with none and keeps the provider's choice.
+      reasoningEffort: route.descriptor.capabilities.reasoningEffort.configuredLevel
     )
     let binding = LLMRouteBinding(
       provider: provider,

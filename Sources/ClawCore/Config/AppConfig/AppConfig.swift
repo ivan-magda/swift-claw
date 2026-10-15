@@ -18,6 +18,7 @@ public struct AppConfig: Sendable, Equatable {
 
     static let llmBaseURL = "CLAW_LLM_BASE_URL"
     public static let llmModel = "CLAW_LLM_MODEL"
+    public static let llmReasoningEffort = "CLAW_LLM_REASONING_EFFORT"
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"

@@ -33,7 +33,8 @@ struct HealthRowsBuilderTests {
           source: .priceFile
         )
       )
-    )
+    ),
+    reasoningEffort: LLMWireReasoningEffort = .unsupported
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
       allowlist: allowlist,
@@ -50,6 +51,7 @@ struct HealthRowsBuilderTests {
       routeHealth: routeHealth,
       retryBudget: 3,
       streamingEnabled: true,
+      reasoningEffort: reasoningEffort,
       todayUsage: .available((tokens: 100, costUSD: todayUSD)),
       costMix: .available([:]),
       primaryPrice: primaryPrice,
@@ -195,6 +197,7 @@ struct HealthRowsBuilderTests {
     #expect(byKey["llm.streaming"]?.isHeadline == false)
     #expect(byKey["spend.per_run_cap_usd"]?.isHeadline == false)
     #expect(byKey["llm.fallback_configured"]?.isHeadline == false)
+    #expect(byKey["llm.reasoning_effort"]?.isHeadline == false)
     // …and a cooldown window nobody is waiting out is not a signal
     #expect(byKey["llm.primary_cooldown_s"]?.isHeadline == false)
   }
@@ -398,6 +401,29 @@ struct HealthRowsBuilderTests {
     ) { first, _ in
       first
     }
+  }
+
+  /// A level the primary sends, the provider's own choice, or a route with no such field: three
+  /// different requests on the wire, so the row never lets one pass for another.
+  @Test(arguments: [
+    (effort: LLMWireReasoningEffort.configured(.high), value: LLMReasoningEffort.high.rawValue),
+    (effort: .providerDefault, value: "provider default"),
+    (effort: .unsupported, value: "not used on this route"),
+  ])
+  func theReasoningEffortRowSaysWhatThePrimarySends(
+    effort: LLMWireReasoningEffort,
+    value: String
+  ) throws {
+    // when
+    let checks = HealthRowsBuilder.checks(inputs(reasoningEffort: effort))
+
+    // then
+    let row = try #require(
+      checks.first { check in
+        check.key == "llm.reasoning_effort"
+      }
+    )
+    #expect(row.value == value)
   }
 
   @Test

@@ -283,8 +283,11 @@ fails config validation with exit 10. Then:
 
 To see the list again later, run `clawd auth models`. It is safe while the daemon runs and
 marks the model you have configured. Under each model it lists the reasoning effort levels
-the provider offers, with the provider's default marked. It does not renew an expired
-access token; the running daemon renews it on its next model call.
+the provider offers, with the provider's default marked. To choose a level, set
+`CLAW_LLM_REASONING_EFFORT` to one your model lists; the listing then marks it. Leave it
+blank to let the provider choose. See [CUSTOMIZATION.md](CUSTOMIZATION.md) for the rules.
+It does not renew an expired access token; the running daemon renews it on its next
+model call.
 
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).

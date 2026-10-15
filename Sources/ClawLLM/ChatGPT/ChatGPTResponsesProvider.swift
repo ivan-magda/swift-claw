@@ -16,7 +16,7 @@ import Logging
 struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   private let engine: ChatGPTResponsesAttemptEngine
   private let codec: ChatGPTProviderStateCodec
-  private let encoder = ChatGPTResponsesRequestEncoder()
+  private let encoder: ChatGPTResponsesRequestEncoder
   private let credentialProfileID: UUID?
   private let userAgent: String
   private let requestTimeoutSeconds: Int
@@ -37,6 +37,7 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   ///   - epochID: Creates new replay epoch identities.
   ///   - treatsQuotaAsTerminal: Whether a configured fallback should receive a 429 immediately
   ///     instead of spending this route's retry budget.
+  ///   - reasoningEffort: The level every request on this route asks for, or nil to send none.
   init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
@@ -47,7 +48,8 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     clock: any Clock<Duration>,
     jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
-    treatsQuotaAsTerminal: Bool = false
+    treatsQuotaAsTerminal: Bool = false,
+    reasoningEffort: LLMReasoningEffort? = nil
   ) {
     self.init(
       http: http,
@@ -60,6 +62,7 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       jitter: jitter,
       epochID: epochID,
       treatsQuotaAsTerminal: treatsQuotaAsTerminal,
+      reasoningEffort: reasoningEffort,
       // The bootstrapped default handler, never a forced no-op: this is the only path production wires
       // from `clawd`, so silencing it here would sink the replay-drop diagnostic and every engine line
       // with it.
@@ -79,8 +82,10 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
     treatsQuotaAsTerminal: Bool = false,
+    reasoningEffort: LLMReasoningEffort? = nil,
     logger: Logger
   ) {
+    self.encoder = ChatGPTResponsesRequestEncoder(reasoningEffort: reasoningEffort)
     self.credentialProfileID = credentialProfileID
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.userAgent = Self.userAgent(buildVersion: buildVersion)

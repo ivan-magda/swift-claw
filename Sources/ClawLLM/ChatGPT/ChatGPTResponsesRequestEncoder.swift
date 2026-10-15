@@ -17,6 +17,15 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
   /// output, so requesting them would buy text that is dropped on arrival.
   static let encryptedReasoningInclude = "reasoning.encrypted_content"
 
+  /// The level the owner configured for this route, or nil to send none and let the provider pick.
+  /// It belongs to the adapter rather than the request: it is a property of the configured route,
+  /// and the agent loop never learns which provider it is talking to.
+  private let reasoningEffort: LLMReasoningEffort?
+
+  init(reasoningEffort: LLMReasoningEffort? = nil) {
+    self.reasoningEffort = reasoningEffort
+  }
+
   func encode(request: ChatRequest) throws -> Data {
     try encode(request: request, replaying: nil, includePriorState: false)
   }
@@ -54,6 +63,7 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
       store: false,
       stream: true,
       include: [Self.encryptedReasoningInclude],
+      reasoningEffort: reasoningEffort,
       summaryEnabled: request.progressExplanationsEnabled,
       promptCacheKey: cacheKey,
       tools: tools
@@ -233,6 +243,7 @@ struct ChatGPTWireRequest: Encodable {
   let store: Bool
   let stream: Bool
   let include: [String]
+  let reasoningEffort: LLMReasoningEffort?
   let summaryEnabled: Bool
   let promptCacheKey: String
   let tools: [ChatGPTWireTool]
@@ -261,8 +272,17 @@ struct ChatGPTWireRequest: Encodable {
     try container.encode(store, forKey: .store)
     try container.encode(stream, forKey: .stream)
     try container.encode(include, forKey: .include)
+    // One object for both options, written only when one is set, so a request asking for neither
+    // keeps the body it has always had.
+    var reasoning: [String: String] = [:]
+    if let reasoningEffort {
+      reasoning["effort"] = reasoningEffort.rawValue
+    }
     if summaryEnabled {
-      try container.encode(["summary": "auto"], forKey: .reasoning)
+      reasoning["summary"] = "auto"
+    }
+    if reasoning.isEmpty == false {
+      try container.encode(reasoning, forKey: .reasoning)
     }
     try container.encode(promptCacheKey, forKey: .promptCacheKey)
 

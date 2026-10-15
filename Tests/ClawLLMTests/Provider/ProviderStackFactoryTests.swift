@@ -258,7 +258,8 @@ private extension ProviderStackFactoryTests {
         credentialMode: .noneOrStaticBearer,
         capabilities: LLMProviderCapabilities(
           supportsStructuredOutput: true,
-          outputTokenField: field
+          outputTokenField: field,
+          reasoningEffort: .unsupported
         )
       ),
       configuredReference: "gpt-4o",

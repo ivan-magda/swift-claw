@@ -103,6 +103,133 @@ struct AuthModelsWorkflowTests {
     }
   }
 
+  /// The configured level is marked beside the model it applies to, and only there, so the owner
+  /// can check it against the levels that model lists.
+  @Test(arguments: [
+    (configured: LLMReasoningEffort.high, marked: "low, medium (default), high (configured)"),
+    (configured: .medium, marked: "low, medium (default, configured), high"),
+  ])
+  func modelsMarksTheConfiguredLevelOnTheConfiguredModelOnly(
+    configured: LLMReasoningEffort,
+    marked: String
+  ) async throws {
+    try await withAuthWorld("auth-models-configured-level") { world in
+      // given
+      try world.seedPriorLogin()
+      let levels = ["low", "medium", "high"]
+      let selected = ChatGPTCatalogModel(
+        slug: "gpt-5.4",
+        priority: 1,
+        reasoningLevels: levels,
+        defaultReasoningLevel: "medium"
+      )
+      let other = ChatGPTCatalogModel(
+        slug: "gpt-5.4-mini",
+        priority: 2,
+        reasoningLevels: levels,
+        defaultReasoningLevel: "medium"
+      )
+      world.catalogOutcome = .models([selected, other])
+      world.configuredModel = ChatGPTProviderMetadata.modelPrefix + selected.slug
+      world.configuredReasoningEffort = configured
+      let workflow = world.modelsWorkflow()
+
+      // when
+      let result = await workflow.models()
+
+      // then
+      let lines = result.events.map(\.text)
+      let selectedRow = try #require(
+        lines.firstIndex { line in
+          line.hasSuffix(selected.slug + " (configured)")
+        }
+      )
+      let otherRow = try #require(
+        lines.firstIndex { line in
+          line.hasSuffix(ChatGPTProviderMetadata.modelPrefix + other.slug)
+        }
+      )
+      let selectedLevels = try #require(lines.dropFirst(selectedRow + 1).first)
+      let otherLevels = try #require(lines.dropFirst(otherRow + 1).first)
+      #expect(selectedLevels.hasSuffix(marked))
+      #expect(otherLevels.contains("configured") == false)
+      #expect(
+        lines.contains { line in
+          line.contains(AppConfig.EnvKey.llmReasoningEffort)
+        } == false
+      )
+    }
+  }
+
+  /// A level the configured model does not list may fail every message on the wire, so the listing
+  /// names it, in the word the owner typed, rather than leaving the owner to spot the gap.
+  @Test
+  func modelsWarnsWhenTheConfiguredModelDoesNotListTheConfiguredLevel() async throws {
+    try await withAuthWorld("auth-models-unlisted-level") { world in
+      // given — `none` is spelled differently from its Swift case, so the warning must use the word
+      let selected = ChatGPTCatalogModel(
+        slug: "gpt-5.4",
+        priority: 1,
+        reasoningLevels: ["low", "medium", "high"],
+        defaultReasoningLevel: "medium"
+      )
+      try world.seedPriorLogin()
+      world.catalogOutcome = .models([selected])
+      world.configuredModel = ChatGPTProviderMetadata.modelPrefix + selected.slug
+      world.configuredReasoningEffort = .disabled
+      let workflow = world.modelsWorkflow()
+
+      // when
+      let result = await workflow.models()
+
+      // then
+      let lines = result.events.map(\.text)
+      let selectedRow = try #require(
+        lines.firstIndex { line in
+          line.hasSuffix(selected.slug + " (configured)")
+        }
+      )
+      let warning = try #require(lines.dropFirst(selectedRow + 2).first)
+      let setting = "\(AppConfig.EnvKey.llmReasoningEffort)=\(LLMReasoningEffort.disabled.rawValue)"
+      #expect(warning.contains(setting))
+    }
+  }
+
+  /// A model that lists no levels gives nothing to check the configured one against.
+  @Test
+  func aConfiguredModelThatListsNoLevelsDrawsNoWarning() async throws {
+    try await withAuthWorld("auth-models-no-levels") { world in
+      // given
+      let selected = ChatGPTCatalogModel(
+        slug: "gpt-5.4-mini",
+        priority: 1,
+        reasoningLevels: [],
+        defaultReasoningLevel: nil
+      )
+      try world.seedPriorLogin()
+      world.catalogOutcome = .models([selected])
+      world.configuredModel = ChatGPTProviderMetadata.modelPrefix + selected.slug
+      world.configuredReasoningEffort = .high
+      let workflow = world.modelsWorkflow()
+
+      // when
+      let result = await workflow.models()
+
+      // then
+      let lines = result.events.map(\.text)
+      #expect(
+        lines.contains { line in
+          line.hasSuffix(selected.slug + " (configured)")
+        }
+      )
+      #expect(
+        lines.contains { line in
+          line.contains(AppConfig.EnvKey.llmReasoningEffort)
+        } == false
+      )
+    }
+  }
+
   /// Renewing an expired token is the daemon's job alone. The command must stop before the vendor
   /// rather than spend a token it knows is dead or rotate one behind the daemon's back.
   @Test

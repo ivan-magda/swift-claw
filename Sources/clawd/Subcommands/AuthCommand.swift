@@ -178,9 +178,9 @@ private extension AuthCommand {
     }
   }
 
-  /// Resolves the state root and the raw model reference, and nothing else. Deliberately not
-  /// `AppConfig`: an owner diagnosing their credentials most needs an answer on the installation
-  /// whose other configuration the daemon would refuse to boot on.
+  /// Resolves the state root, the raw model reference and the configured reasoning effort, and
+  /// nothing else. Deliberately not `AppConfig`: an owner diagnosing their credentials most needs an
+  /// answer on the installation whose other configuration the daemon would refuse to boot on.
   static func resolveBootstrapOrExit(environment: [String: String]) throws -> AuthBootstrap {
     do {
       return try AuthBootstrap.resolve(environment: environment)

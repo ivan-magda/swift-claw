@@ -560,10 +560,12 @@ refreshes or contacts the network.
 
 Lists the models the stored credential can use as `openai-chatgpt/<model>` references
 and marks the configured one. Under each model it prints the reasoning effort levels the
-provider lists and marks the provider's default. clawd sends no reasoning effort, so the
-provider picks the level for each request. It makes one model-list request with the
-stored access token, takes no lock, and never refreshes. An expired token fails the
-command; the running daemon renews it on its next model call.
+provider lists and marks the provider's default. Without `CLAW_LLM_REASONING_EFFORT`, clawd
+sends no reasoning effort and the provider picks the level for each request. With it, the
+configured model's line also marks the configured level, and a warning follows when that
+model does not list it. It makes one model-list request with the stored access token,
+takes no lock, and never refreshes. An expired token fails the command; the running
+daemon renews it on its next model call.
 
 ### Log out
 
@@ -583,6 +585,11 @@ usable credential shows
 (an OK row); no usable credential is a failing row with `run: clawd auth login`
 guidance; a malformed envelope is a failing decrypt row. Doctor never refreshes,
 fetches models, or contacts ChatGPT.
+
+`llm.reasoning_effort` shows the level the primary route sends: the configured word,
+`provider default` when `CLAW_LLM_REASONING_EFFORT` is blank, or `not used on this
+route` on the OpenAI-compatible route. Doctor checks only the spelling; whether the
+model accepts the level shows in `clawd auth models`.
 
 ### Expired credentials, access, and quota
 
