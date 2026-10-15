@@ -127,6 +127,10 @@ The `.build` cache key includes the revision so successful builds refresh compil
 prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
 changing one of these starts a new compatible cache. The first such build is cold.
 
+Only `main` saves the cache; pull requests restore the newest compatible `main` cache and save
+nothing. GitHub lets only the same pull request restore a cache it saved, so a saved copy would only
+use the repository quota and push `main`'s caches out.
+
 CI runs tests on macOS and Linux, and canonical lint on Linux, with the
 [pinned toolchain](CODE_STYLE.md#setup). Tests use the default build backend; release builds follow the
 [deployment build policy](ARCHITECTURE.md#17-deployment--portability).
