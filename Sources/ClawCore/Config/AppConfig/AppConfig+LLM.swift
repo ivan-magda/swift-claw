@@ -175,7 +175,7 @@ private extension AppConfig {
 
     var capabilities = route.descriptor.capabilities
     capabilities.reasoningEffort = .configured(effort)
-    
+
     return route.replacingCapabilities(capabilities)
   }
 

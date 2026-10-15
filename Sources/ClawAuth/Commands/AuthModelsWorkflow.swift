@@ -126,7 +126,7 @@ private extension AuthModelsWorkflow {
       let defaultMarker = level == model.defaultReasoningLevel ? "default" : nil
       let configuredMarker = level == configuredLevel?.rawValue ? "configured" : nil
       let markers = [defaultMarker, configuredMarker]
-      
+
       let activeMarkers = markers.compactMap { marker in
         marker
       }
