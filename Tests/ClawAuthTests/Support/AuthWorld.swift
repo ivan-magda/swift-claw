@@ -352,7 +352,11 @@ struct AuthWorld: Sendable {
     let catalog = ScriptedCatalog(outcome: catalogOutcome, log: log)
     builtCatalog.set(catalog)
     return AuthLoginWorkflow(
-      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      bootstrap: AuthBootstrap(
+        stateRoot: root,
+        configuredModel: configuredModel,
+        configuredReasoningEffort: nil
+      ),
       runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
       makeCredentialStore: makeCredentialStore,
@@ -370,7 +374,11 @@ struct AuthWorld: Sendable {
 
   func statusWorkflow() -> AuthStatusWorkflow {
     AuthStatusWorkflow(
-      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      bootstrap: AuthBootstrap(
+        stateRoot: root,
+        configuredModel: configuredModel,
+        configuredReasoningEffort: nil
+      ),
       makeCredentialStore: makeCredentialStore,
       wallDate: {
         AuthFixture.now

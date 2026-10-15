@@ -64,7 +64,11 @@ struct AuthAcceptanceWorld: Sendable {
       AcceptanceAuthFixture.wallNow
     }
     return AuthLoginWorkflow(
-      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      bootstrap: AuthBootstrap(
+        stateRoot: root,
+        configuredModel: configuredModel,
+        configuredReasoningEffort: nil
+      ),
       runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
       makeCredentialStore: makeCredentialStore,
@@ -87,7 +91,11 @@ struct AuthAcceptanceWorld: Sendable {
 
   func statusWorkflow() -> AuthStatusWorkflow {
     AuthStatusWorkflow(
-      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      bootstrap: AuthBootstrap(
+        stateRoot: root,
+        configuredModel: configuredModel,
+        configuredReasoningEffort: nil
+      ),
       makeCredentialStore: makeCredentialStore,
       wallDate: {
         AcceptanceAuthFixture.wallNow

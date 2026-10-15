@@ -4,14 +4,12 @@ import Foundation
 public struct AuthBootstrap: Sendable, Equatable {
   public let stateRoot: URL
   public let configuredModel: String?
-  /// The configured level only when it is a word clawd accepts. A misspelled one stays unmarked here
-  /// and fails configuration at boot, which is where the owner is told about it.
   public let configuredReasoningEffort: LLMReasoningEffort?
 
   public init(
     stateRoot: URL,
     configuredModel: String?,
-    configuredReasoningEffort: LLMReasoningEffort? = nil
+    configuredReasoningEffort: LLMReasoningEffort?
   ) {
     self.stateRoot = stateRoot
     self.configuredModel = configuredModel
@@ -23,12 +21,18 @@ public struct AuthBootstrap: Sendable, Equatable {
   ///
   /// - Throws: `ConfigError.unwritableStateRoot` when the state root cannot be created.
   public static func resolve(environment env: [String: String]) throws -> AuthBootstrap {
-    AuthBootstrap(
-      stateRoot: try StateRootResolver.createStateRoot(for: env[AppConfig.EnvKey.stateRoot]),
-      configuredModel: env[AppConfig.EnvKey.llmModel],
-      configuredReasoningEffort: env[AppConfig.EnvKey.llmReasoningEffort].flatMap { raw in
-        LLMReasoningEffort(rawValue: raw.trimmingCharacters(in: .whitespaces))
-      }
+    let stateRoot = try StateRootResolver.createStateRoot(for: env[AppConfig.EnvKey.stateRoot])
+    let configuredModel = env[AppConfig.EnvKey.llmModel]
+
+    let rawReasoningEffort = env[AppConfig.EnvKey.llmReasoningEffort]
+    let configuredReasoningEffort = rawReasoningEffort.flatMap { value in
+      LLMReasoningEffort(rawValue: value.trimmingCharacters(in: .whitespaces))
+    }
+
+    return AuthBootstrap(
+      stateRoot: stateRoot,
+      configuredModel: configuredModel,
+      configuredReasoningEffort: configuredReasoningEffort
     )
   }
 }

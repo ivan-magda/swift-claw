@@ -123,13 +123,19 @@ private extension AuthModelsWorkflow {
     }
 
     let levels = model.reasoningLevels.map { level in
-      let marks = [
-        level == model.defaultReasoningLevel ? "default" : nil,
-        level == configuredLevel?.rawValue ? "configured" : nil,
-      ].compactMap { mark in
-        mark
+      let defaultMarker = level == model.defaultReasoningLevel ? "default" : nil
+      let configuredMarker = level == configuredLevel?.rawValue ? "configured" : nil
+      let markers = [defaultMarker, configuredMarker]
+      
+      let activeMarkers = markers.compactMap { marker in
+        marker
       }
-      return marks.isEmpty ? level : "\(level) (\(marks.joined(separator: ", ")))"
+      guard !activeMarkers.isEmpty else {
+        return level
+      }
+
+      let markerList = activeMarkers.joined(separator: ", ")
+      return "\(level) (\(markerList))"
     }
     let levelList = levels.joined(separator: ", ")
 
