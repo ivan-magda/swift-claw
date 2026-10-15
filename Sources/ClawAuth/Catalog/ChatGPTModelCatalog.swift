@@ -8,17 +8,14 @@ import Foundation
 public struct ChatGPTCatalogModel: Sendable, Equatable {
   public let slug: String
   public let priority: Double
-  /// The reasoning effort levels the vendor lists for this model, in its order. Empty when the row
-  /// lists none this parser can read.
   public let reasoningLevels: [String]
-  /// The level the vendor marks as this model's default, read independently of the list.
   public let defaultReasoningLevel: String?
 
   public init(
     slug: String,
     priority: Double,
-    reasoningLevels: [String] = [],
-    defaultReasoningLevel: String? = nil
+    reasoningLevels: [String],
+    defaultReasoningLevel: String?
   ) {
     self.slug = slug
     self.priority = priority
@@ -261,14 +258,17 @@ private extension ChatGPTModelCatalog {
       guard levels.count < maximumRetainedReasoningLevels else {
         break
       }
+
       guard case .object(let fields) = entry,
             let level = reasoningLevel(fields[Catalog.effort]),
             levels.contains(level) == false
       else {
         continue
       }
+
       levels.append(level)
     }
+
     return levels
   }
 
@@ -278,17 +278,21 @@ private extension ChatGPTModelCatalog {
     guard case .string(let level)? = value else {
       return nil
     }
+
     let scalars = level.unicodeScalars
     guard (1...maximumReasoningLevelScalars).contains(scalars.count),
           scalars.allSatisfy(isReasoningLevelScalar)
     else {
       return nil
     }
+
     return level
   }
 
   static func isReasoningLevelScalar(_ scalar: Unicode.Scalar) -> Bool {
-    ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar) || ("0"..."9").contains(scalar)
-      || scalar == "-" || scalar == "_"
+    let isLetter = ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar)
+    let isDigit = ("0"..."9").contains(scalar)
+    let isSeparator = scalar == "-" || scalar == "_"
+    return isLetter || isDigit || isSeparator
   }
 }

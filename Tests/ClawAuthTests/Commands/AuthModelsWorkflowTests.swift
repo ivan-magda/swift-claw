@@ -69,7 +69,12 @@ struct AuthModelsWorkflowTests {
         reasoningLevels: ["low", "medium", "high"],
         defaultReasoningLevel: "medium"
       )
-      let plain = ChatGPTCatalogModel(slug: "gpt-5.4-mini", priority: 2)
+      let plain = ChatGPTCatalogModel(
+        slug: "gpt-5.4-mini",
+        priority: 2,
+        reasoningLevels: [],
+        defaultReasoningLevel: nil
+      )
       world.catalogOutcome = .models([reasoning, plain])
       let workflow = world.modelsWorkflow()
 

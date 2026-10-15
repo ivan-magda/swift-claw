@@ -111,9 +111,12 @@ private extension AuthModelsWorkflow {
     guard !model.reasoningLevels.isEmpty else {
       return nil
     }
+
     let levels = model.reasoningLevels.map { level in
       level == model.defaultReasoningLevel ? "\(level) (default)" : level
     }
-    return "    reasoning effort: \(levels.joined(separator: ", "))"
+    let levelList = levels.joined(separator: ", ")
+
+    return "    reasoning effort: \(levelList)"
   }
 }

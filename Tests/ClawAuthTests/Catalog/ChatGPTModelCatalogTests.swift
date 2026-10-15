@@ -102,8 +102,18 @@ struct ChatGPTModelCatalogParsingTests {
     // then
     #expect(
       models == [
-        ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
-        ChatGPTCatalogModel(slug: "gpt-5.4-codex", priority: 2),
+        ChatGPTCatalogModel(
+          slug: "gpt-5.4",
+          priority: 1,
+          reasoningLevels: [],
+          defaultReasoningLevel: nil
+        ),
+        ChatGPTCatalogModel(
+          slug: "gpt-5.4-codex",
+          priority: 2,
+          reasoningLevels: [],
+          defaultReasoningLevel: nil
+        ),
       ]
     )
   }
@@ -348,7 +358,16 @@ struct ChatGPTModelCatalogPriorityTests {
     let models = try ChatGPTModelCatalog.eligibleModels(in: CatalogFixture.payload(rows))
 
     // then
-    #expect(models == [ChatGPTCatalogModel(slug: CatalogFixture.slug, priority: expected)])
+    #expect(
+      models == [
+        ChatGPTCatalogModel(
+          slug: CatalogFixture.slug,
+          priority: expected,
+          reasoningLevels: [],
+          defaultReasoningLevel: nil
+        ),
+      ]
+    )
   }
 
   @Test
@@ -516,7 +535,16 @@ struct ChatGPTModelCatalogBoundsTests {
     let models = try ChatGPTModelCatalog.eligibleModels(in: CatalogFixture.payload(rows))
 
     // then
-    #expect(models == [ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1)])
+    #expect(
+      models == [
+        ChatGPTCatalogModel(
+          slug: "gpt-5.4",
+          priority: 1,
+          reasoningLevels: [],
+          defaultReasoningLevel: nil
+        ),
+      ]
+    )
   }
 
   /// The row that only a dedup-before-cap parser keeps. A parser that capped first would spend its
