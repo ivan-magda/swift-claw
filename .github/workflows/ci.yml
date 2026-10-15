@@ -42,8 +42,9 @@ jobs:
           toolchain_key=$(swift --version | sha256sum | cut -d ' ' -f 1)
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Swift package build artifacts
-        uses: actions/cache@v6
+      - name: Restore Swift package build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v6
         with:
           path: .build
           key: >-
@@ -75,6 +76,14 @@ jobs:
             --filter ApprovalBootReconcilerTests \
             --filter TrialSerializationTests
 
+      # A pull request's cache is visible only to that pull request, so only main saves one.
+      - name: Save Swift package build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
   test-macos:
     runs-on: xcode-27
     timeout-minutes: 30
@@ -100,8 +109,9 @@ jobs:
           )
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Swift package build artifacts
-        uses: actions/cache@v6
+      - name: Restore Swift package build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v6
         with:
           path: .build
           key: >-
@@ -122,6 +132,14 @@ jobs:
 
       - name: Run native Coder integration in a separate test process
         run: swift test --skip-build --filter ClawCoderTests
+
+      # A pull request's cache is visible only to that pull request, so only main saves one.
+      - name: Save Swift package build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   install-script:
     strategy:
