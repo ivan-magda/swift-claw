@@ -8,10 +8,19 @@ import Foundation
 public struct ChatGPTCatalogModel: Sendable, Equatable {
   public let slug: String
   public let priority: Double
+  public let reasoningLevels: [String]
+  public let defaultReasoningLevel: String?
 
-  public init(slug: String, priority: Double) {
+  public init(
+    slug: String,
+    priority: Double,
+    reasoningLevels: [String],
+    defaultReasoningLevel: String?
+  ) {
     self.slug = slug
     self.priority = priority
+    self.reasoningLevels = reasoningLevels
+    self.defaultReasoningLevel = defaultReasoningLevel
   }
 
   /// What a row weighs when the vendor stated no ordering this parser can act on. It sorts behind
@@ -89,6 +98,9 @@ private enum Catalog {
   /// The spelling the vendor is also observed to use for the same flag.
   static let showInPickerAlias = "showInPicker"
   static let listedVisibility = "list"
+  static let defaultReasoningLevel = "default_reasoning_level"
+  static let supportedReasoningLevels = "supported_reasoning_levels"
+  static let effort = "effort"
 }
 
 // MARK: - Requests
@@ -128,6 +140,10 @@ extension ChatGPTModelCatalog {
   /// How many models are worth offering. A list this long is already past what any owner reads, and
   /// the cap is what stops a broken or hostile response from deciding how much the daemon holds.
   static let maximumRetainedModels = 512
+
+  /// How many reasoning levels one model may list. The vendor offers a handful, and the cap keeps a
+  /// broken row from deciding how long its printed line grows.
+  static let maximumRetainedReasoningLevels = 16
 
   /// The models a response actually offers, in the order they should be shown.
   ///
@@ -172,7 +188,12 @@ private extension ChatGPTModelCatalog {
     else {
       return nil
     }
-    return ChatGPTCatalogModel(slug: slug, priority: priority(fields[Catalog.priority]))
+    return ChatGPTCatalogModel(
+      slug: slug,
+      priority: priority(fields[Catalog.priority]),
+      reasoningLevels: reasoningLevels(fields[Catalog.supportedReasoningLevels]),
+      defaultReasoningLevel: reasoningLevel(fields[Catalog.defaultReasoningLevel])
+    )
   }
 
   /// An allowlist, and deliberately not the denylist of hidden spellings a reader might expect. A
@@ -216,5 +237,62 @@ private extension ChatGPTModelCatalog {
     case nil, .null?, .bool?, .string?, .number?, .array?, .object?:
       return ChatGPTCatalogModel.unrankedPriority
     }
+  }
+}
+
+// MARK: - Reasoning Levels
+
+private extension ChatGPTModelCatalog {
+  static let maximumReasoningLevelScalars = 32
+
+  /// The levels a row lists, in its order. Only the observed shape counts: an array of objects that
+  /// each name their level under `effort`. An entry of any other shape is skipped rather than
+  /// guessed at, and deduplication precedes the cap for the same reason it does for rows.
+  static func reasoningLevels(_ value: JSONValue?) -> [String] {
+    guard case .array(let entries)? = value else {
+      return []
+    }
+
+    var levels: [String] = []
+    for entry in entries {
+      guard levels.count < maximumRetainedReasoningLevels else {
+        break
+      }
+
+      guard case .object(let fields) = entry,
+            let level = reasoningLevel(fields[Catalog.effort]),
+            levels.contains(level) == false
+      else {
+        continue
+      }
+
+      levels.append(level)
+    }
+
+    return levels
+  }
+
+  /// A level is one short ASCII word, the shape the vendor sends. The list is printed to a
+  /// terminal, so anything wider, such as an escape sequence or a phrase, is refused.
+  static func reasoningLevel(_ value: JSONValue?) -> String? {
+    guard case .string(let level)? = value else {
+      return nil
+    }
+
+    let scalars = level.unicodeScalars
+    guard (1...maximumReasoningLevelScalars).contains(scalars.count),
+          scalars.allSatisfy(isReasoningLevelScalar)
+    else {
+      return nil
+    }
+
+    return level
+  }
+
+  static func isReasoningLevelScalar(_ scalar: Unicode.Scalar) -> Bool {
+    let isLetter = ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar)
+    let isDigit = ("0"..."9").contains(scalar)
+    let isSeparator = scalar == "-" || scalar == "_"
+    return isLetter || isDigit || isSeparator
   }
 }

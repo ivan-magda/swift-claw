@@ -58,6 +58,51 @@ struct AuthModelsWorkflowTests {
     }
   }
 
+  @Test
+  func modelsListsEachModelsReasoningLevelsBelowItAndMarksTheDefault() async throws {
+    try await withAuthWorld("auth-models-reasoning") { world in
+      // given
+      try world.seedPriorLogin()
+      let reasoning = ChatGPTCatalogModel(
+        slug: "gpt-5.4",
+        priority: 1,
+        reasoningLevels: ["low", "medium", "high"],
+        defaultReasoningLevel: "medium"
+      )
+      let plain = ChatGPTCatalogModel(
+        slug: "gpt-5.4-mini",
+        priority: 2,
+        reasoningLevels: [],
+        defaultReasoningLevel: nil
+      )
+      world.catalogOutcome = .models([reasoning, plain])
+      let workflow = world.modelsWorkflow()
+
+      // when
+      let result = await workflow.models()
+
+      // then
+      let lines = result.events.map(\.text)
+      let reasoningRow = try #require(
+        lines.firstIndex { line in
+          line.hasSuffix(ChatGPTProviderMetadata.modelPrefix + reasoning.slug)
+        }
+      )
+      let plainRow = try #require(
+        lines.firstIndex { line in
+          line.hasSuffix(ChatGPTProviderMetadata.modelPrefix + plain.slug)
+        }
+      )
+      let levelsLine = try #require(lines.dropFirst(reasoningRow + 1).first)
+      #expect(levelsLine.contains("low, medium (default), high"))
+      #expect(plainRow == reasoningRow + 2)
+      let levelLines = lines.filter { line in
+        line.contains("reasoning effort")
+      }
+      #expect(levelLines.count == 1)
+    }
+  }
+
   /// Renewing an expired token is the daemon's job alone. The command must stop before the vendor
   /// rather than spend a token it knows is dead or rotate one behind the daemon's back.
   @Test

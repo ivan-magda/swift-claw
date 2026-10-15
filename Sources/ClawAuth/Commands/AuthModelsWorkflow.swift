@@ -95,11 +95,28 @@ private extension AuthModelsWorkflow {
     for model in models {
       let marker = model.slug == configured ? " (configured)" : ""
       events.append(.output("  \(ChatGPTProviderMetadata.modelPrefix)\(model.slug)\(marker)"))
+      if let levels = Self.reasoningLevelsLine(for: model) {
+        events.append(.output(levels))
+      }
     }
 
     events.append(.output("Set one in your environment:"))
     events.append(.output("    \(ModelSelection.manualAssignmentForm)"))
 
     return events
+  }
+
+  /// A line of its own under the reference, so the reference stays pasteable as printed.
+  static func reasoningLevelsLine(for model: ChatGPTCatalogModel) -> String? {
+    guard !model.reasoningLevels.isEmpty else {
+      return nil
+    }
+
+    let levels = model.reasoningLevels.map { level in
+      level == model.defaultReasoningLevel ? "\(level) (default)" : level
+    }
+    let levelList = levels.joined(separator: ", ")
+
+    return "    reasoning effort: \(levelList)"
   }
 }

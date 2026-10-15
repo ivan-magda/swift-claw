@@ -5,9 +5,24 @@ import Testing
 @Suite
 struct ChatGPTModelPickerTests {
   private static let catalog = [
-    ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
-    ChatGPTCatalogModel(slug: "gpt-5.4-codex", priority: 2),
-    ChatGPTCatalogModel(slug: "gpt-5.4-mini", priority: 3),
+    ChatGPTCatalogModel(
+      slug: "gpt-5.4",
+      priority: 1,
+      reasoningLevels: [],
+      defaultReasoningLevel: nil
+    ),
+    ChatGPTCatalogModel(
+      slug: "gpt-5.4-codex",
+      priority: 2,
+      reasoningLevels: [],
+      defaultReasoningLevel: nil
+    ),
+    ChatGPTCatalogModel(
+      slug: "gpt-5.4-mini",
+      priority: 3,
+      reasoningLevels: [],
+      defaultReasoningLevel: nil
+    ),
   ]
 
   @Test(arguments: [true, false])

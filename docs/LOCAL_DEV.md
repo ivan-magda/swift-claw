@@ -559,9 +559,11 @@ refreshes or contacts the network.
 ```
 
 Lists the models the stored credential can use as `openai-chatgpt/<model>` references
-and marks the configured one. It makes one model-list request with the stored access
-token, takes no lock, and never refreshes. An expired token fails the command; the
-running daemon renews it on its next model call.
+and marks the configured one. Under each model it prints the reasoning effort levels the
+provider lists and marks the provider's default. clawd sends no reasoning effort, so the
+provider picks the level for each request. It makes one model-list request with the
+stored access token, takes no lock, and never refreshes. An expired token fails the
+command; the running daemon renews it on its next model call.
 
 ### Log out
 

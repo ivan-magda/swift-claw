@@ -261,8 +261,18 @@ enum AuthFixture {
   )
 
   static let catalog = [
-    ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
-    ChatGPTCatalogModel(slug: "gpt-5.4-mini", priority: 2),
+    ChatGPTCatalogModel(
+      slug: "gpt-5.4",
+      priority: 1,
+      reasoningLevels: [],
+      defaultReasoningLevel: nil
+    ),
+    ChatGPTCatalogModel(
+      slug: "gpt-5.4-mini",
+      priority: 2,
+      reasoningLevels: [],
+      defaultReasoningLevel: nil
+    ),
   ]
 
   /// A prior login this state root already holds. Every "the old credential survived" assertion is
