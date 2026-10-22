@@ -1,5 +1,5 @@
 # Final layout owners that supplement Apple swift-format (ARCHITECTURE.md §19.2).
---rules blankLinesBetweenScopes,trailingCommas,trailingSpace,wrapAttributes,wrapGuardStatementBodies,wrapIfStatementBodies,wrapLoopBodies,wrapCaseBodies,wrapFunctionBodies,wrapPropertyBodies,wrap,wrapArguments
+--rules blankLinesBetweenScopes,trailingCommas,trailingSpace,wrapAttributes,wrapGuardStatementBodies,wrapIfStatementBodies,wrapLoopBodies,wrapCaseBodies,wrapClosureBodies,wrapDoBodies,wrapFunctionBodies,wrapPropertyBodies,wrap,wrapArguments
 --indent 2
 --linebreaks lf
 --swift-version 6.4
@@ -13,7 +13,8 @@
 --wrap-parameters before-first
 --wrap-collections before-first
 --wrap-conditions after-first
+--wrap-closure-bodies always
 --wrap-return-type never
 --allow-partial-wrapping false
 --indent-strings false
---wrap-string-interpolation preserve
+--wrap-string-interpolation false

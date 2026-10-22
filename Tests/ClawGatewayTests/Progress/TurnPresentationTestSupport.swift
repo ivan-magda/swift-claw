@@ -117,8 +117,8 @@ actor ClosingDrafts: RichDraftStreaming {
     if cleaned.isOpen, markdown.contains("Waiting for your approval") {
       waitingAfterCleanup.open()
     }
-    guard !hasBlocked, calls >= blockingCall, blockingText.map({ markdown.contains($0) }) ?? true
-    else {
+    let matchesBlockingText = blockingText.map(markdown.contains) ?? true
+    guard !hasBlocked, calls >= blockingCall, matchesBlockingText else {
       return true
     }
     hasBlocked = true

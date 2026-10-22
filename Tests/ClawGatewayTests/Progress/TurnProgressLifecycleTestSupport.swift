@@ -160,7 +160,9 @@ struct RegistrationTurn: TurnDispatching {
     )
     if reporter != nil {
       // A wrongly admitted sender must reach its unmanaged seam before the test drains it.
-      let observation = Task { await draftSeen.waitUntilOpen() }
+      let observation = Task {
+        await draftSeen.waitUntilOpen()
+      }
       _ = await observation.value
     }
     attempted.open()

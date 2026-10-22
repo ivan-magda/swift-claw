@@ -937,15 +937,21 @@ private struct Harness: Sendable {
   }
 
   var attemptCount: Int {
-    get async { await http.recorded.count }
+    get async {
+      await http.recorded.count
+    }
   }
 
   var deltas: [String] {
-    get async { await sink.received }
+    get async {
+      await sink.received
+    }
   }
 
   var delays: [Double] {
-    get async { await sleeps.delays }
+    get async {
+      await sleeps.delays
+    }
   }
 
   var includePriorStateLog: [Bool] {

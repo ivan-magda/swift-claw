@@ -94,7 +94,7 @@ a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
 
 The [dead-code workflow](../.github/workflows/dead-code.yml) finds unused declarations and
 imports with an indexed build, so it runs weekly, on demand, and only on pull requests that change
-the analysis. To reproduce it on macOS, install Periphery at the version in
+the analysis or its pinned toolchain. To reproduce it on macOS, install Periphery at the version in
 `BuildTools/lint-versions.env`, from Homebrew until it disables the formula on 2027-08-12 or from
 the release the workflow downloads. Then run from the repository root:
 

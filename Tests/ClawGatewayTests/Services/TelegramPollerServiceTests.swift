@@ -139,7 +139,9 @@ struct TelegramPollerServiceTests {
 
     // then — a graceful shutdown is not a Telegram fault
     let errors = logs.entries
-      .filter { $0.level >= .error }
+      .filter {
+        $0.level >= .error
+      }
       .map(\.message)
     #expect(errors.isEmpty)
   }

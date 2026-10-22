@@ -1,7 +1,8 @@
 version: 2
 updates:
   - package-ecosystem: "swift"
-    directory: "/"
+    # A BuildTools SwiftFormat bump must also update its pin in BuildTools/lint-versions.env.
+    directories: ["/", "/BuildTools"]
     schedule:
       interval: "weekly"
     cooldown:

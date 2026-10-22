@@ -39,7 +39,11 @@ struct TelegramDraftEmojiFallbackTests {
       attempts.map(\.markdown)
         == [draft.markdown, ordinary + answer, ordinary + answer, decorated]
     )
-    #expect(attempts.allSatisfy { $0.chatID == 42 })
+    #expect(
+      attempts.allSatisfy {
+        $0.chatID == 42
+      }
+    )
     #expect(attempts.map(\.draftID) == [9, 9, 10, 11])
   }
 

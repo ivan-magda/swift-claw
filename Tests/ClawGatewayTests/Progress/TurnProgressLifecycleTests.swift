@@ -84,7 +84,9 @@ extension TurnProgressLifecycleTests {
       ],
       httpResponses: [:],
       extraTools: [tool],
-      notifyOutbox: { suspended.open() },
+      notifyOutbox: {
+        suspended.open()
+      },
       beforeCompletion: { _, _ in
         providerStarted.open()
         if phase == .provider {
@@ -227,9 +229,17 @@ extension TurnProgressLifecycleTests {
     #expect(resumed)
     #expect(finished)
     let sent = await drafts.drafts
-    #expect(sent.contains { $0.markdown.contains(status == .ok ? "Succeeded" : "Failed") })
+    #expect(
+      sent.contains {
+        $0.markdown.contains(status == .ok ? "Succeeded" : "Failed")
+      }
+    )
     let initialDraft = try #require(sent.first)
-    let resumedDraft = try #require(sent.first { $0.markdown.contains("resumed answer") })
+    let resumedDraft = try #require(
+      sent.first {
+        $0.markdown.contains("resumed answer")
+      }
+    )
     #expect(resumedDraft.draftID == initialDraft.draftID)
     #expect(
       try runState(databasePath: harness.databasePath, runID: approval.runID)
@@ -237,9 +247,17 @@ extension TurnProgressLifecycleTests {
     )
     let outboxPayloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
     #expect(outboxPayloads.contains("final answer"))
-    #expect(outboxPayloads.allSatisfy { !$0.contains("<tg-thinking>") })
+    #expect(
+      outboxPayloads.allSatisfy {
+        !$0.contains("<tg-thinking>")
+      }
+    )
     let explanation = ApprovalProgressProvider.explanation
-    #expect(try harness.snapshot().history.allSatisfy { !$0.content.contains(explanation) })
+    #expect(
+      try harness.snapshot().history.allSatisfy {
+        !$0.content.contains(explanation)
+      }
+    )
     let ftsCount = try await harness.readPool.read { db in
       try Int.fetchOne(
         db,
@@ -248,7 +266,11 @@ extension TurnProgressLifecycleTests {
       ) ?? 0
     }
     #expect(ftsCount == 0)
-    #expect(try harness.auditRows().allSatisfy { !$0.argsRedacted.contains(explanation) })
+    #expect(
+      try harness.auditRows().allSatisfy {
+        !$0.argsRedacted.contains(explanation)
+      }
+    )
   }
 }
 
@@ -280,7 +302,9 @@ extension TurnProgressLifecycleTests {
         dependent: .init(
           commitCredentials: {},
           closeLLMClient: {},
-          closeTelegramClient: { telegramClosed.open() },
+          closeTelegramClient: {
+            telegramClosed.open()
+          },
           closeToolClient: {}
         )
       )
@@ -385,7 +409,9 @@ extension TurnProgressLifecycleTests {
       ],
       httpResponses: [:],
       extraTools: [ApprovedProgressTool()],
-      notifyOutbox: { suspended.open() },
+      notifyOutbox: {
+        suspended.open()
+      },
       presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
