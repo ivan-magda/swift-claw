@@ -1,5 +1,5 @@
+import ClawTestSupport
 import Foundation
-import Logging
 import MCP
 
 @testable import ClawMCP
@@ -116,7 +116,7 @@ struct StubTransportFactory: MCPTransportFactory {
 /// flight, but no reply carrying our request's id ever arrives, and the SDK resolves a request only
 /// on that. Disconnect finishes the stream so the client's message loop can still be torn down.
 actor SilentTransport: Transport {
-  nonisolated let logger = Logger(label: "test.mcp.silent")
+  nonisolated let logger = TestLog.silent
 
   private var closed = false
   private let messages: AsyncThrowingStream<Data, any Error>
@@ -157,7 +157,7 @@ actor SilentTransport: Transport {
 /// a later request is swallowed — the same never-answered exchange `SilentTransport` models, reached
 /// after a session is already up.
 actor MuteAfterHandshakeTransport: Transport {
-  nonisolated let logger = Logger(label: "test.mcp.mute")
+  nonisolated let logger = TestLog.silent
 
   private let inner: InMemoryTransport
   private let mutingSend: Int
@@ -207,7 +207,7 @@ actor MuteAfterHandshakeTransport: Transport {
 actor FaultyTransport: Transport {
   static let firstCallSend = 3
 
-  nonisolated let logger = Logger(label: "test.mcp.faulty")
+  nonisolated let logger = TestLog.silent
 
   private let inner: InMemoryTransport
   private let failingSend: Int

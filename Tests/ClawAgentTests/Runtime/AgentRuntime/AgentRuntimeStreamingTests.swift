@@ -117,9 +117,7 @@ actor StreamingProvider: LLMProvider {
       case .reportsCancel(let accounting):
         return .cancelled(accounting)
       case .neverFinishes:
-        while !Task.isCancelled {
-          try? await Task.sleep(for: .milliseconds(10))
-        }
+        await suspendUntilCancelled()
         return .cancelled(.mayHaveStarted(observing: 0))
       case .ignoresCancellation(let gate):
         _ = await Self.send(.delta("partial"), into: sink)

@@ -20,48 +20,11 @@ struct ApprovedActionExecutorTests {
     }
   }
 
-  private actor ExecutionGate {
-    private var started = false
-    private var released = false
-    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
-    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
-
-    func arriveAndWait() async {
-      started = true
-      for waiter in startedWaiters {
-        waiter.resume()
-      }
-      startedWaiters.removeAll()
-      guard released == false else {
-        return
-      }
-      await withCheckedContinuation { continuation in
-        releaseWaiters.append(continuation)
-      }
-    }
-
-    func waitUntilStarted() async {
-      guard started == false else {
-        return
-      }
-      await withCheckedContinuation { continuation in
-        startedWaiters.append(continuation)
-      }
-    }
-
-    func release() {
-      released = true
-      for waiter in releaseWaiters {
-        waiter.resume()
-      }
-      releaseWaiters.removeAll()
-    }
-  }
-
   private struct RecordingWriteTool: Tool {
     let toolName: String
     let payload: ToolPayload
-    let gate: ExecutionGate?
+    let started: AsyncGate?
+    let release: AsyncGate?
     let probe: ExecutionProbe?
 
     init(
@@ -70,7 +33,8 @@ struct ApprovedActionExecutorTests {
       status: ToolObservationStatus = .ok,
       ingestedUntrusted: Bool = false,
       readPrivateData: Bool = false,
-      gate: ExecutionGate? = nil,
+      started: AsyncGate? = nil,
+      release: AsyncGate? = nil,
       probe: ExecutionProbe? = nil
     ) {
       self.toolName = toolName
@@ -80,7 +44,8 @@ struct ApprovedActionExecutorTests {
         ingestedUntrusted: ingestedUntrusted,
         readPrivateData: readPrivateData
       )
-      self.gate = gate
+      self.started = started
+      self.release = release
       self.probe = probe
     }
 
@@ -105,7 +70,8 @@ struct ApprovedActionExecutorTests {
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       await probe?.mark()
-      await gate?.arriveAndWait()
+      started?.open()
+      await release?.waitIgnoringCancellation()
       return payload
     }
   }
@@ -349,11 +315,20 @@ struct ApprovedActionExecutorTests {
   func awaitsAStallingToolToCompletionWithoutTheTimeoutAbandonRace() async throws {
     // given
     let env = try makeSuspendedFixture()
-    let gate = ExecutionGate()
+    let started = AsyncGate()
+    let release = AsyncGate()
+    defer {
+      release.open()
+    }
     let executor = makeExecutor(
       env,
       tools: [
-        RecordingWriteTool(toolName: "file_write", result: "the gated write finished", gate: gate),
+        RecordingWriteTool(
+          toolName: "file_write",
+          result: "the gated write finished",
+          started: started,
+          release: release
+        ),
       ]
     )
 
@@ -363,8 +338,8 @@ struct ApprovedActionExecutorTests {
         approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
       )
     }
-    await gate.waitUntilStarted()
-    await gate.release()
+    await started.waitIgnoringCancellation()
+    release.open()
     let commit = await execution.value
 
     // then: approved execution awaits completion and records the truthful result
@@ -415,7 +390,11 @@ struct ApprovedActionExecutorTests {
   func stopDuringExecutionRetainsCompletedPayloadProvenance() async throws {
     // given
     let env = try makeSuspendedFixture()
-    let gate = ExecutionGate()
+    let started = AsyncGate()
+    let release = AsyncGate()
+    defer {
+      release.open()
+    }
     let executor = makeExecutor(
       env,
       tools: [
@@ -424,7 +403,8 @@ struct ApprovedActionExecutorTests {
           result: "completed output",
           ingestedUntrusted: true,
           readPrivateData: true,
-          gate: gate
+          started: started,
+          release: release
         ),
       ]
     )
@@ -433,7 +413,7 @@ struct ApprovedActionExecutorTests {
         approval(env, tool: "execute_code", argsJSON: "{}", target: "code_exec:sh:abcd")
       )
     }
-    await gate.waitUntilStarted()
+    await started.waitIgnoringCancellation()
 
     // when: claim is already RUNNING; /stop wins before the fill
     _ = try CommandStoreGRDB(writer: env.queue).applyStop(
@@ -441,7 +421,7 @@ struct ApprovedActionExecutorTests {
       sessionKey: env.sessionKey,
       now: Date()
     )
-    await gate.release()
+    release.open()
     let commit = await execution.value
 
     // then
@@ -456,7 +436,11 @@ struct ApprovedActionExecutorTests {
   func newDuringExecutionNeverRetaintsTheFreshWindow() async throws {
     // given
     let env = try makeSuspendedFixture()
-    let gate = ExecutionGate()
+    let started = AsyncGate()
+    let release = AsyncGate()
+    defer {
+      release.open()
+    }
     let executor = makeExecutor(
       env,
       tools: [
@@ -465,7 +449,8 @@ struct ApprovedActionExecutorTests {
           result: "old-window output",
           ingestedUntrusted: true,
           readPrivateData: true,
-          gate: gate
+          started: started,
+          release: release
         ),
       ]
     )
@@ -474,7 +459,7 @@ struct ApprovedActionExecutorTests {
         approval(env, tool: "execute_code", argsJSON: "{}", target: "code_exec:sh:abcd")
       )
     }
-    await gate.waitUntilStarted()
+    await started.waitIgnoringCancellation()
 
     // when: /new supersedes/detaints after claim but before fill
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
@@ -483,7 +468,7 @@ struct ApprovedActionExecutorTests {
       journalScope: nil,
       now: Date()
     )
-    await gate.release()
+    release.open()
     let commit = await execution.value
 
     // then: old observation and audit are truthful; fresh-window flags remain clear

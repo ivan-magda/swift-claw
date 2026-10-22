@@ -201,9 +201,7 @@ actor StopNewProvider: LLMProvider {
     resumeRequestContinuations()
 
     if requests.count == 1 {
-      while !Task.isCancelled {
-        try await Task.sleep(for: .milliseconds(5))
-      }
+      await suspendUntilCancelled()
       throw CancellationError()
     }
 

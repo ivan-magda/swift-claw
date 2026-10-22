@@ -23,28 +23,6 @@ struct CommandApprovalCancelSignalRaceTests {
     }
   }
 
-  private actor Latch {
-    private var isOpen = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func open() {
-      isOpen = true
-      for waiter in waiters {
-        waiter.resume()
-      }
-      waiters.removeAll()
-    }
-
-    func wait() async {
-      guard isOpen == false else {
-        return
-      }
-      await withCheckedContinuation { continuation in
-        waiters.append(continuation)
-      }
-    }
-  }
-
   // MARK: - Fixture
 
   private struct Harness {
@@ -97,7 +75,7 @@ private extension CommandApprovalCancelSignalRaceTests {
   func runLiveCommandCycle(command: String) async throws -> String? {
     let harness = try makeHarness()
     let waiter = makeWaiter(harness)
-    let laneFreed = Latch()
+    let laneFreed = AsyncGate()
 
     _ = await harness.lanes.enqueue(sessionID: harness.sessionID, runID: harness.runID) {
       await waiter.park(
@@ -111,7 +89,7 @@ private extension CommandApprovalCancelSignalRaceTests {
 
     let trailingRunID = harness.runID + 1_000_000
     _ = await harness.lanes.enqueue(sessionID: harness.sessionID, runID: trailingRunID) {
-      await laneFreed.open()
+      laneFreed.open()
     }
 
     for _ in 0..<16 {
@@ -123,7 +101,7 @@ private extension CommandApprovalCancelSignalRaceTests {
     )
     #expect(outcome == .processed)
 
-    await laneFreed.wait()
+    await laneFreed.waitIgnoringCancellation()
 
     return try await harness.queue.read { db in
       try String.fetchOne(
