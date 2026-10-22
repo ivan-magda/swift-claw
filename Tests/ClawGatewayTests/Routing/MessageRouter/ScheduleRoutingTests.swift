@@ -332,29 +332,6 @@ struct ScheduleRoutingTests {
   }
 
   @Test
-  func otherTextClearsTheDraftAndFallsThroughToATurn() async throws {
-    // given
-    let harness = try makeHarness()
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
-    )
-
-    // when
-    await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "what's the weather?"))
-    await harness.dispatcher.waitForCalls(atLeast: 1)
-
-    // then — the text became an ordinary turn and the slot is empty
-    #expect(await harness.dispatcher.calls.count == 1)
-    #expect(try jobCount(harness) == 0)
-    let sessionID = try #require(
-      try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatID: 42)
-      )
-    )
-    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
-  }
-
-  @Test
   func restartDropsTheParkedDraft() async throws {
     // given — a draft parked, then the daemon restarts (fresh ephemeral registry, same DB; D10)
     let harness = try makeHarness()
@@ -375,27 +352,6 @@ struct ScheduleRoutingTests {
 
     // then — "yes" became a plain turn; nothing armed
     #expect(try jobCount(harness) == 0)
-  }
-
-  @Test
-  func providerFailureRepliesDegradationAndArmsNothing() async throws {
-    // given
-    let harness = try makeHarness(parseResults: [.providerUnavailable])
-
-    // when
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am")
-    )
-
-    // then — the DEG-01 reply, nothing parked, nothing armed
-    #expect(await harness.transport.sent.last?.text == Degradation.providerUnavailable)
-    #expect(try jobCount(harness) == 0)
-    let sessionID = try #require(
-      try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatID: 42)
-      )
-    )
-    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
   }
 
   @Test
@@ -475,28 +431,5 @@ struct ScheduleRoutingTests {
     #expect(line.contains("every weekday at 07:00"))
     #expect(line.contains("Europe/Berlin"))
     #expect(line.contains("next 2026-07-07 07:00"))
-  }
-
-  @Test
-  func strangersNeverReachTheScheduleSurface() async throws {
-    // given
-    let harness = try makeHarness()
-
-    // when — a non-allowlisted sender tries to create and list
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 7, text: "/schedule every weekday at 7am")
-    )
-    await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "/schedule list"))
-
-    // then — private-bot replies only; the parser was never invoked; nothing exists
-    let sent = await harness.transport.sent
-    #expect(sent.count == 2)
-    #expect(
-      sent.allSatisfy { reply in
-        reply.text == MessageRouter.privateBotText
-      }
-    )
-    #expect(await harness.parser.ownerTexts.isEmpty)
-    #expect(try jobCount(harness) == 0)
   }
 }

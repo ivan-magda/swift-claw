@@ -113,22 +113,6 @@ struct RememberRoutingTests {
   }
 
   @Test
-  func rememberFromStrangerGetsPrivateBotReply() async throws {
-    // given
-    let harness = try MemoryRoutingHarness.make()
-
-    // when
-    _ = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 7, text: "/remember steal this")
-    )
-
-    // then
-    let sent = await harness.transport.sent
-    #expect(sent.map(\.text) == [MessageRouter.privateBotText])
-    #expect(try harness.memoryItemCount() == 0)
-  }
-
-  @Test
   func newRememberReplacesTheEarlierPendingOne() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()

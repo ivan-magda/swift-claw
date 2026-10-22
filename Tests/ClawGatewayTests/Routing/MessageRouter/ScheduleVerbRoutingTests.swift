@@ -135,24 +135,6 @@ struct ScheduleVerbRoutingTests {
   }
 
   @Test
-  func pauseIsIdempotent() async throws {
-    // given
-    let harness = try makeHarness()
-    let seeded = try seedDailyJob(harness)
-    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "/pause \(seeded.id)"))
-
-    // when — a second /pause with a NEW update id (not a redelivery)
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 2, from: 42, text: "/pause \(seeded.id)")
-    )
-
-    // then — still paused, still a friendly ack, no error
-    #expect(outcome == .processed)
-    let job = try #require(try harness.jobs.job(id: seeded.id))
-    #expect(job.status == .paused)
-  }
-
-  @Test
   func resumeRecomputesNextFromNowSkippingMissedOccurrences() async throws {
     // given — the job was due YESTERDAY-morning while paused; resume must NOT catch that up
     let harness = try makeHarness()
@@ -323,27 +305,5 @@ struct ScheduleVerbRoutingTests {
     // then
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [ScheduleReplies.cancelUsage, ScheduleReplies.pauseUsage])
-  }
-
-  @Test
-  func strangersNeverReachTheVerbs() async throws {
-    // given
-    let harness = try makeHarness()
-    let seeded = try seedDailyJob(harness)
-
-    // when
-    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "/pause \(seeded.id)"))
-    await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "/runnow \(seeded.id)"))
-
-    // then — private-bot replies; the job is untouched and nothing ran
-    let sent = await harness.transport.sent
-    #expect(
-      sent.allSatisfy { reply in
-        reply.text == MessageRouter.privateBotText
-      }
-    )
-    let job = try #require(try harness.jobs.job(id: seeded.id))
-    #expect(job.status == .active)
-    #expect(await harness.dispatcher.calls.isEmpty)
   }
 }

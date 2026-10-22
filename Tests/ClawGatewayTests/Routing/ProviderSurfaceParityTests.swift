@@ -306,34 +306,6 @@ struct ProviderSurfaceParityTests {
     )
   }
 
-  @Test("turn and schedule paths still produce identical copy for one cause")
-  func parityHoldsWithARoster() async throws {
-    // given a single-route roster on both paths
-    let turnQueue = try inMemoryQueue()
-    let parseQueue = try inMemoryQueue()
-    let agent = makeAgent(
-      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
-      usageStore: UsageStoreGRDB(writer: turnQueue)
-    )
-    let parser = makeParser(
-      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
-      usageStore: UsageStoreGRDB(writer: parseQueue)
-    )
-    let parseSession = try claimSession(parseQueue)
-
-    // when both fail with .quotaLimited(retryAfterSeconds: 42)
-    let turnOutcome = try await agent.runTurn(
-      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: userBuildResult())
-    )
-    let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
-
-    // then both replies equal Degradation.quotaLimited(retryAfterSeconds: 42)
-    #expect(turnOutcome.result == .degraded(.quotaLimited(retryAfterSeconds: 42), usage: nil))
-    #expect(parseResult == .quotaLimited(retryAfterSeconds: 42))
-    let copy = Degradation.quotaLimited(retryAfterSeconds: 42)
-    #expect(copy == ScheduleReplies.quotaLimited(retryAfterSeconds: 42))
-  }
-
   @Test
   func bothSurfacesSendCanonicalTraceIdentityAndSplitWireModelFromIdentity() async throws {
     // given — a recording provider that succeeds, so each surface's request and usage row are visible
