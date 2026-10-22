@@ -223,7 +223,6 @@ let package = Package(
         "ClawMCP",
         "ClawCore",
         "ClawTestSupport",
-        .product(name: "Logging", package: "swift-log"),
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),
