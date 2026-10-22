@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Logging
 
 @testable import ClawGateway
@@ -9,7 +10,7 @@ struct InertApprovalParker: ApprovalParking {
   private let coordinator: ApprovalCoordinator
   private let logger: Logger
 
-  init(coordinator: ApprovalCoordinator, logger: Logger = Logger(label: "approval.parker")) {
+  init(coordinator: ApprovalCoordinator, logger: Logger = TestLog.silent) {
     self.coordinator = coordinator
     self.logger = logger
   }

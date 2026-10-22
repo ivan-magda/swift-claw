@@ -3,7 +3,6 @@ import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import GRDB
-import Logging
 import Synchronization
 import Testing
 

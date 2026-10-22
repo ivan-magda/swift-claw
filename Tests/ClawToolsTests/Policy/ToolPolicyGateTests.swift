@@ -967,7 +967,11 @@ struct GatedToolDispatcherTests {
   func wedgedToolIsAbandonedAtTimeoutNotAwaited() async {
     // given — a tool that never returns and ignores cancellation; the injected sleep makes the
     // timeout arm fire immediately, so no wall clock is involved on the green path
-    let release = WedgeRelease()
+    let release = AsyncGate()
+    // release the abandoned task so it finishes before the suite exits
+    defer {
+      release.open()
+    }
     let dispatcher = makeDispatcher(
       tools: [WedgedTool(release: release)],
       clock: ScriptedClock { _ in }
@@ -985,38 +989,13 @@ struct GatedToolDispatcherTests {
     #expect(outcome.observation.status == .error)
     #expect(outcome.observation.content.contains("timed out"))
     #expect(outcome.observation.ingestedUntrusted == false)
-
-    // release the abandoned task so it finishes before the suite exits
-    await release.release()
   }
 }
 
 /// Blocks until released and IGNORES task cancellation — models a blocking syscall
 /// (`getaddrinfo`) or hung I/O that cooperative cancellation cannot interrupt.
-actor WedgeRelease {
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-  private var released = false
-
-  func wait() async {
-    if released {
-      return
-    }
-    await withCheckedContinuation {
-      waiters.append($0)
-    }
-  }
-
-  func release() {
-    released = true
-    for waiter in waiters {
-      waiter.resume()
-    }
-    waiters.removeAll()
-  }
-}
-
 struct WedgedTool: Tool {
-  let release: WedgeRelease
+  let release: AsyncGate
 
   let definition = ToolDefinition(
     name: "wedged",
@@ -1034,7 +1013,7 @@ struct WedgedTool: Tool {
   }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    await release.wait()
+    await release.waitIgnoringCancellation()
     return ToolPayload(content: "late", status: .ok, ingestedUntrusted: false)
   }
 }

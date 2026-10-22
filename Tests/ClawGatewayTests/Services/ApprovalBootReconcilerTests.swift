@@ -103,29 +103,6 @@ struct ApprovalBootReconcilerTests {
     }
   }
 
-  /// A plain lane citizen enqueued behind a re-parked waiter — proves the FIFO queue-behind contract.
-  private actor FollowerFlag {
-    private(set) var ran = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func markRan() {
-      ran = true
-      for waiter in waiters {
-        waiter.resume()
-      }
-      waiters = []
-    }
-
-    func awaitRan() async {
-      if ran {
-        return
-      }
-      await withCheckedContinuation { continuation in
-        waiters.append(continuation)
-      }
-    }
-  }
-
   private struct Fixture {
     let queue: DatabaseQueue
     let store: ApprovalStoreGRDB
@@ -371,19 +348,19 @@ struct ApprovalBootReconcilerTests {
     _ = await env.spy.nextParkCall()
 
     // when — a plain message lands on the SAME session lane after the restart
-    let follower = FollowerFlag()
+    let follower = AsyncGate()
     _ = await env.lanes.enqueue(sessionID: env.sessionID, runID: runID + 1_000) {
-      await follower.markRan()
+      follower.open()
     }
 
     // then — it cannot run until the parked approval resolves (FIFO queue-behind survives restart):
     // the follower's task chains behind the still-suspended waiter task on the lane
-    #expect(await follower.ran == false)
+    #expect(follower.isOpen == false)
 
     // and — once the approval resolves, the queued message runs
     await env.coordinator.signal(.approved, forApprovalID: approvalID)
-    await follower.awaitRan()
-    #expect(await follower.ran == true)
+    await follower.waitIgnoringCancellation()
+    #expect(follower.isOpen == true)
   }
 
   @Test
