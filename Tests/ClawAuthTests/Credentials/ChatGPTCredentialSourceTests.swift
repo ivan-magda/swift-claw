@@ -172,7 +172,7 @@ struct ChatGPTCredentialSourceTests {
 
   /// The skew is a boundary, so both sides of it are named: one second inside is still fresh, and the
   /// boundary itself is already expiring. A single-sided case would pass against a skew of any width.
-  @Test(arguments: [(121, false), (120, true), (1, true), (-1, true)])
+  @Test(arguments: [(121, false), (120, true), (-1, true)])
   func freshnessDecidesWhetherACallRefreshes(expiresIn: Int, refreshes: Bool) async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])

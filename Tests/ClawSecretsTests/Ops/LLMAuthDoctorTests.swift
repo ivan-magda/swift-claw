@@ -147,67 +147,17 @@ struct LLMAuthDoctorTests {
 
   // MARK: - ChatGPT freshness
 
-  @Test
-  func chatGPTFreshCredentialReportsFresh() {
-    // given — comfortably beyond the skew window
-    let now = Date()
-    let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(3600))))
-
-    // when
-    let result = LLMAuthDoctor.inspect(
-      route: chatGPTRoute(),
-      staticAPIKey: nil,
-      credentialStore: store,
-      now: now
-    )
-
-    // then — literal golden
-    #expect(result.value == "provider=openai-chatgpt mode=oauth status=fresh")
-    #expect(result.ok)
-  }
-
-  @Test
-  func chatGPTExpiringWithinSkewReportsExpiring() {
-    // given — valid, but inside the 120-second skew window
-    let now = Date()
-    let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(60))))
-
-    // when
-    let result = LLMAuthDoctor.inspect(
-      route: chatGPTRoute(),
-      staticAPIKey: nil,
-      credentialStore: store,
-      now: now
-    )
-
-    // then — literal golden
-    #expect(result.value == "provider=openai-chatgpt mode=oauth status=expiring")
-    #expect(result.ok)
-  }
-
-  @Test
-  func chatGPTExpiredReportsExpiredRefreshOnUse() {
-    // given — already past expiry; the daemon refreshes on next use, doctor does not
-    let now = Date()
-    let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(-60))))
-
-    // when
-    let result = LLMAuthDoctor.inspect(
-      route: chatGPTRoute(),
-      staticAPIKey: nil,
-      credentialStore: store,
-      now: now
-    )
-
-    // then — literal golden
-    #expect(result.value == "provider=openai-chatgpt mode=oauth status=expired-refresh-on-use")
-    #expect(result.ok)
-  }
-
-  /// Pins the skew boundary to exactly 120 seconds, sourced from `ChatGPTCredentialFreshness` rather
-  /// than re-derived here: a mutant that shifts the window would break exactly one of these.
-  @Test(arguments: [(119.0, "expiring"), (120.0, "expiring"), (121.0, "fresh")])
-  func chatGPTSkewBoundaryIsExactlyOneHundredTwentySeconds(
+  /// One row per freshness case, each mapped to its status token. Where the skew boundary falls is
+  /// `ChatGPTCredentialFreshnessTests`' contract: doctor only renders the classifier's verdict.
+  @Test(arguments: [
+    // Comfortably beyond the skew window.
+    (3600.0, "fresh"),
+    // Valid, but inside the 120-second skew window.
+    (60.0, "expiring"),
+    // Already past expiry; the daemon refreshes on next use, doctor does not.
+    (-60.0, "expired-refresh-on-use"),
+  ])
+  func chatGPTCredentialReportsItsFreshnessStatus(
     offsetSeconds: Double,
     expectedStatus: String
   ) {
@@ -225,7 +175,7 @@ struct LLMAuthDoctorTests {
       now: now
     )
 
-    // then
+    // then — literal golden
     #expect(result.value == "provider=openai-chatgpt mode=oauth status=\(expectedStatus)")
     #expect(result.ok)
   }

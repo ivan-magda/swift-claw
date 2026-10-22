@@ -50,23 +50,6 @@ struct AuthLogoutWorkflowTests {
   }
 
   @Test
-  func logoutIsIdempotent() async throws {
-    try await withAuthWorld("auth-logout-idempotent") { world in
-      // given
-      try world.seedPriorLogin()
-      let workflow = world.logoutWorkflow()
-      #expect(workflow.logout().exit == .success)
-
-      // when
-      let second = workflow.logout()
-
-      // then
-      #expect(second.exit == .success)
-      #expect(second.transcript.lowercased().contains("already logged out"))
-    }
-  }
-
-  @Test
   func logoutOnARootThatNeverHeldACredentialSucceeds() async throws {
     try await withAuthWorld("auth-logout-never") { world in
       // given

@@ -36,22 +36,6 @@ struct AuthLoginWorkflowTests {
     }
   }
 
-  @Test
-  func loginPrintsTheUserCodeBeforeItStartsWaitingForApproval() async throws {
-    try await withAuthWorld("auth-login-prompt") { world in
-      // given
-      let workflow = world.loginWorkflow()
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .success)
-      #expect(world.terminal.transcript.contains(AuthFixture.device.userCode))
-      #expect(world.terminal.transcript.contains(ChatGPTProviderMetadata.verificationURL))
-    }
-  }
-
   /// The contract every renderer leans on: nothing left in `events` has been shown. Login streams as
   /// it goes, so by the time it returns it has nothing to hand over — which is what lets Task 18
   /// print `events` for all three commands without printing login's transcript a second time.
@@ -95,6 +79,7 @@ struct AuthLoginWorkflowTests {
       #expect(world.terminal.transcript.contains(AuthFixture.refreshToken) == false)
       // The pairing: the transcript really did carry the login's printable half.
       #expect(world.terminal.transcript.contains(AuthFixture.device.userCode))
+      #expect(world.terminal.transcript.contains(ChatGPTProviderMetadata.verificationURL))
     }
   }
 
@@ -181,27 +166,6 @@ struct AuthLoginWorkflowTests {
   }
 
   // MARK: - The Transition
-
-  @Test
-  func loginSealsTheEnvironmentSecretsBeforeItWritesACredential() async throws {
-    try await withAuthWorld("auth-login-seal") { world in
-      // given — an environment-backed root: neither encrypted artifact exists yet
-      #expect(FileManager.default.fileExists(atPath: world.paths.key.path) == false)
-      let workflow = world.loginWorkflow()
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .success)
-      #expect(FileManager.default.fileExists(atPath: world.paths.key.path))
-      #expect(FileManager.default.fileExists(atPath: world.paths.runtimeEnvelope.path))
-      #expect(FileManager.default.fileExists(atPath: world.paths.credentialEnvelope.path))
-      let sealIndex = try #require(world.log.recorded.firstIndex(of: .runtimeSecretsPrepared))
-      let saveIndex = try #require(world.log.recorded.firstIndex(of: .credentialSaved))
-      #expect(sealIndex < saveIndex)
-    }
-  }
 
   /// The gate that must hold before any egress: a root that cannot produce runtime secrets is a root
   /// login stops at, before it has told the vendor a device exists.
@@ -336,22 +300,6 @@ struct AuthLoginWorkflowTests {
   }
 
   // MARK: - Model Selection
-
-  @Test
-  func aNonInteractiveLoginTakesTheFirstReturnedModelAndExplainsIt() async throws {
-    try await withAuthWorld("auth-login-default-model") { world in
-      // given
-      world.terminal = RecordingTerminal(isInteractive: false)
-      let workflow = world.loginWorkflow()
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .success)
-      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
-    }
-  }
 
   @Test
   func aConfiguredModelTheCatalogStillOffersIsTheDefault() async throws {

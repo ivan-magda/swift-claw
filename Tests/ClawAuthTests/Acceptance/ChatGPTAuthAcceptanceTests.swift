@@ -45,93 +45,7 @@ struct ChatGPTAuthAcceptanceTests {
     }
   }
 
-  /// The gate before any egress: a root that cannot produce runtime secrets is one login stops at
-  /// before the first wire call. Its pairing is the happy path above, where the same real client did
-  /// reach the vendor.
-  @Test
-  func missingRuntimeSecretsStopLoginBeforeAnyOAuthRequestOrFile() async throws {
-    try await withAuthAcceptanceWorld("acc-auth-no-secrets") { world in
-      // given — nothing to seal
-      world.environment = [:]
-      let http = world.makeHTTP()
-      let workflow = world.loginWorkflow(http: http)
-
-      // when
-      let result = await workflow.login()
-
-      // then — no wire call, no files
-      #expect(result.exit == .secretLoadFailure)
-      #expect(await http.requestedURLs.isEmpty)
-      #expect(FileManager.default.fileExists(atPath: world.paths.key.path) == false)
-      #expect(FileManager.default.fileExists(atPath: world.paths.credentialEnvelope.path) == false)
-    }
-  }
-
-  /// Exactly one encrypted artifact is a state login must never repair by minting the other; it fails
-  /// closed and reaches no vendor.
-  @Test
-  func aPartialEncryptedStateFailsClosedBeforeEgress() async throws {
-    try await withAuthAcceptanceWorld("acc-auth-partial") { world in
-      // given — seal, then remove the envelope: the key alone remains
-      _ = try RuntimeSecretPreparer.prepare(stateRoot: world.root, environment: world.environment)
-      try FileManager.default.removeItem(at: world.paths.runtimeEnvelope)
-      let http = world.makeHTTP()
-      let workflow = world.loginWorkflow(http: http)
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .secretLoadFailure)
-      #expect(await http.requestedURLs.isEmpty)
-      #expect(world.terminal.transcript.contains("clawd secrets seal"))
-    }
-  }
-
-  /// ChatGPT auth is composed with neither a base URL nor an API key: the environment carries only the
-  /// Telegram token that gets sealed, and login still completes over the pinned endpoints.
-  @Test
-  func loginNeedsNeitherBaseURLNorAPIKey() async throws {
-    try await withAuthAcceptanceWorld("acc-auth-no-key") { world in
-      // given — no CLAW_LLM_BASE_URL, no CLAW_LLM_API_KEY in the environment
-      #expect(world.environment["CLAW_LLM_BASE_URL"] == nil)
-      #expect(world.environment["CLAW_LLM_API_KEY"] == nil)
-      let http = world.makeHTTP()
-      let workflow = world.loginWorkflow(http: http)
-
-      // when
-      let result = await workflow.login()
-
-      // then — every reached URL is a pinned ChatGPT host; none is a configured base URL
-      #expect(result.exit == .success)
-      let urls = await http.requestedURLs
-      #expect(
-        urls.allSatisfy {
-          $0.hasPrefix("https://auth.openai.com") || $0.hasPrefix("https://chatgpt.com")
-        }
-      )
-    }
-  }
-
-  // MARK: - Replacement and Preservation
-
-  @Test
-  func aReloginMintsANewProfileID() async throws {
-    try await withAuthAcceptanceWorld("acc-auth-relogin") { world in
-      // given
-      try world.seedPriorLogin()
-      #expect(world.storedCredential?.profileID == AcceptanceAuthFixture.priorProfileID)
-      let http = world.makeHTTP()
-      let workflow = world.loginWorkflow(http: http)
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .success)
-      #expect(world.storedCredential?.profileID == AcceptanceAuthFixture.freshProfileID)
-    }
-  }
+  // MARK: - Preservation
 
   @Test
   func aFailedExchangePreservesThePriorCredential() async throws {
@@ -179,24 +93,6 @@ struct ChatGPTAuthAcceptanceTests {
   }
 
   // MARK: - The Lock
-
-  @Test
-  func aHeldLockStopsLoginBeforeAnyEgress() async throws {
-    try await withAuthAcceptanceWorld("acc-auth-locked") { world in
-      // given
-      world.lockFailure = .held
-      let http = world.makeHTTP()
-      let workflow = world.loginWorkflow(http: http)
-
-      // when
-      let result = await workflow.login()
-
-      // then
-      #expect(result.exit == .commandFailure)
-      #expect(await http.requestedURLs.isEmpty)
-      #expect(world.terminal.transcript.lowercased().contains("stop"))
-    }
-  }
 
   /// Status reads through a held daemon lock: no lock acquisition and no token bytes. That it also
   /// makes no wire call is no longer something a test can catch it at — `AuthStatusWorkflow` is

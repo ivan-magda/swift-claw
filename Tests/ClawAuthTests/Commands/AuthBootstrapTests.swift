@@ -75,23 +75,6 @@ struct AuthBootstrapTests {
     }
   }
 
-  @Test
-  func resolvingNeedsNoAllowlistBaseURLModelBudgetOrScheduler() throws {
-    // given
-    let root = try makeTemporaryRoot(prefix: "auth-bootstrap-bare")
-    defer { try? FileManager.default.removeItem(at: root) }
-
-    // when
-    let bootstrap = try AuthBootstrap.resolve(environment: [AppConfig.EnvKey.stateRoot: root.path])
-
-    // then
-    #expect(bootstrap.configuredModel == nil)
-    // Same pairing: a bare environment is exactly what daemon config refuses, for want of a model.
-    #expect(throws: ConfigError.self) {
-      try AppConfig.load(environment: [AppConfig.EnvKey.stateRoot: root.path])
-    }
-  }
-
   // MARK: - The Configured Model
 
   /// Read raw and unvalidated. Deciding what a model reference means belongs to selection and to

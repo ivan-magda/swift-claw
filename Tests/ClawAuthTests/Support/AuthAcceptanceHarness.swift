@@ -19,9 +19,8 @@ struct AuthAcceptanceWorld: Sendable {
   /// Every scripted wire answer, keyed by URL. Defaults to the happy path: usercode, an immediate
   /// grant on the first poll, a token exchange, and a two-model catalog.
   var responses: [String: HTTPResult]
-  var environment: [String: String]
+  let environment: [String: String]
   var configuredModel: String?
-  var lockFailure: AuthMutationLockFailure?
   var mutationLock: (any AuthMutationLocking)?
   var terminal = RecordingTerminal(isInteractive: false)
   var profileID = AcceptanceAuthFixture.freshProfileID
@@ -70,7 +69,7 @@ struct AuthAcceptanceWorld: Sendable {
         configuredReasoningEffort: nil
       ),
       runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
-      mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
+      mutationLock: mutationLock ?? ScriptedLock(failure: nil, log: log),
       makeCredentialStore: makeCredentialStore,
       makeDeviceAuthorization: {
         ChatGPTDeviceAuthorization(

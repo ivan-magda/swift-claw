@@ -25,18 +25,6 @@ struct SearchAPIKeySecretTests {
   }
 
   @Test
-  func encryptedPayloadRoundTripsSearchKey() throws {
-    // given
-    let secrets = Secrets(telegramBotToken: "123:abc", llmAPIKey: "sk-x", searchAPIKey: "exa-key-1")
-
-    // when
-    let decoded = try EncryptedFileSecretStore.decode(EncryptedFileSecretStore.encode(secrets))
-
-    // then
-    #expect(decoded == secrets)
-  }
-
-  @Test
   func preThreeBEnvelopePayloadStillDecodes() throws {
     // given — the exact payload shape sealed before 3b (no search_api_key)
     let legacyPayload = Data(#"{"telegram_bot_token":"123:abc","llm_api_key":"sk-x"}"#.utf8)

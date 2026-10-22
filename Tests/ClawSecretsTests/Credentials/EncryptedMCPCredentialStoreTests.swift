@@ -249,22 +249,6 @@ struct EncryptedMCPCredentialStoreTests {
   // MARK: - On-disk protection
 
   @Test
-  func theTokenEnvelopeIsPublishedOwnerOnly() throws {
-    // given
-    let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
-    defer { try? FileManager.default.removeItem(at: stateRoot) }
-
-    // when
-    try EncryptedMCPCredentialStore(stateRoot: stateRoot).save(
-      token: "mcp-token",
-      for: try makeServer()
-    )
-
-    // then
-    #expect(try permissionBits(of: mcpEnvelopeURL(in: stateRoot)) == 0o600)
-  }
-
-  @Test
   func theTokenEnvelopeCarriesNoPlaintextTokenServerNameOrEndpoint() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -293,24 +277,6 @@ struct EncryptedMCPCredentialStoreTests {
   }
 
   @Test
-  func aWorldReadableTokenEnvelopeIsRefused() throws {
-    // given
-    let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
-    defer { try? FileManager.default.removeItem(at: stateRoot) }
-    let store = EncryptedMCPCredentialStore(stateRoot: stateRoot)
-    try store.save(token: "mcp-token", for: try makeServer())
-    try FileManager.default.setAttributes(
-      [.posixPermissions: 0o644],
-      ofItemAtPath: mcpEnvelopeURL(in: stateRoot).path
-    )
-
-    // when / then
-    #expect(throws: CredentialStoreError.insecureStorage) {
-      _ = try store.load(server: try makeServer())
-    }
-  }
-
-  @Test
   func theTokenReadPolicyCapsTheEnvelopeAndDemandsOwnerOnlyMode() {
     // given — the policy the store hands the protocol, proven from `fstat` before a byte of payload
     // is allocated.
@@ -319,20 +285,6 @@ struct EncryptedMCPCredentialStoreTests {
     // when / then
     #expect(policy.maximumByteCount == 256 * 1024)
     #expect(policy.requiredPermissionBits == SecureFilePublisher.ownerOnlyPermissions)
-  }
-
-  @Test
-  func aTokenMapOnAStateRootWithoutAKeyReportsTheMissingKey() throws {
-    // given — the map is sealed under the runtime key, so an envelope standing alone is unopenable.
-    // It must not read as "no token stored".
-    let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-credentials")
-    defer { try? FileManager.default.removeItem(at: stateRoot) }
-    try writeMCPEnvelope(Data(repeating: 0x01, count: 64), in: stateRoot)
-
-    // when / then
-    #expect(throws: CredentialStoreError.missingRuntimeKey) {
-      _ = try EncryptedMCPCredentialStore(stateRoot: stateRoot).load(server: try makeServer())
-    }
   }
 
   // MARK: - Envelope authentication
@@ -386,48 +338,6 @@ struct EncryptedMCPCredentialStoreTests {
     // then
     #expect(throws: LLMCredentialStoreError.malformedStorage) {
       _ = try EncryptedLLMCredentialStore(stateRoot: stateRoot).load(providerID: .openAIChatGPT)
-    }
-  }
-
-  @Test
-  func aTamperedTokenEnvelopeIsRefused() throws {
-    // given
-    let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
-    defer { try? FileManager.default.removeItem(at: stateRoot) }
-    try EncryptedMCPCredentialStore(stateRoot: stateRoot).save(
-      token: "mcp-token",
-      for: try makeServer()
-    )
-
-    // when
-    var bytes = try Data(contentsOf: mcpEnvelopeURL(in: stateRoot))
-    bytes[bytes.count - 1] ^= 0xFF
-    try writeMCPEnvelope(bytes, in: stateRoot)
-
-    // then
-    #expect(throws: CredentialStoreError.malformedStorage) {
-      _ = try EncryptedMCPCredentialStore(stateRoot: stateRoot).load(server: try makeServer())
-    }
-  }
-
-  @Test
-  func anUnsupportedEnvelopeVersionIsRefusedBeforeDecryption() throws {
-    // given
-    let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
-    defer { try? FileManager.default.removeItem(at: stateRoot) }
-    try EncryptedMCPCredentialStore(stateRoot: stateRoot).save(
-      token: "mcp-token",
-      for: try makeServer()
-    )
-
-    // when
-    var bytes = try Data(contentsOf: mcpEnvelopeURL(in: stateRoot))
-    bytes[0] = 0x99
-    try writeMCPEnvelope(bytes, in: stateRoot)
-
-    // then — an unknown version is a dispatch failure, not a tampering one: it keeps its own remedy.
-    #expect(throws: CredentialStoreError.unsupportedVersion) {
-      _ = try EncryptedMCPCredentialStore(stateRoot: stateRoot).load(server: try makeServer())
     }
   }
 

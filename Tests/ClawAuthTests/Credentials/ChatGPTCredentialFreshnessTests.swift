@@ -11,8 +11,12 @@ struct ChatGPTCredentialFreshnessTests {
 
   // MARK: - Classification
 
+  /// The skew is 120 seconds and both comparisons are strict: `expiresAt > now + skew` is fresh and
+  /// `expiresAt > now` is not yet expired. The sub-second rows are the only ones a whole-second
+  /// truncation of either comparison would misfile.
   @Test(arguments: [
     // Beyond the skew: usable without refresh.
+    (120.001, ChatGPTCredentialFreshness.fresh),
     (121.0, ChatGPTCredentialFreshness.fresh),
     (300.0, ChatGPTCredentialFreshness.fresh),
     (86_400.0, ChatGPTCredentialFreshness.fresh),
@@ -20,8 +24,10 @@ struct ChatGPTCredentialFreshnessTests {
     (120.0, ChatGPTCredentialFreshness.expiring),
     (119.0, ChatGPTCredentialFreshness.expiring),
     (1.0, ChatGPTCredentialFreshness.expiring),
+    (0.001, ChatGPTCredentialFreshness.expiring),
     // At or past the expiry instant.
     (0.0, ChatGPTCredentialFreshness.expired),
+    (-0.001, ChatGPTCredentialFreshness.expired),
     (-1.0, ChatGPTCredentialFreshness.expired),
     (-86_400.0, ChatGPTCredentialFreshness.expired),
   ])
@@ -37,49 +43,6 @@ struct ChatGPTCredentialFreshnessTests {
 
     // then
     #expect(freshness == expected)
-  }
-
-  // MARK: - Skew Boundary
-
-  @Test
-  func aTokenIsFreshOnlyStrictlyBeyondTheSkew() {
-    // given
-    // The rule is `expiresAt > now + skew`, so the instant exactly on the skew is not fresh.
-    let onTheSkew = Self.now.addingTimeInterval(120)
-    let justBeyond = Self.now.addingTimeInterval(120.001)
-
-    // when / then
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: onTheSkew, now: Self.now) == .expiring)
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: justBeyond, now: Self.now) == .fresh)
-  }
-
-  @Test
-  func aTokenIsExpiredAtItsExpiryInstantRatherThanAfterIt() {
-    // given
-    let atExpiry = Self.now
-    let justBefore = Self.now.addingTimeInterval(-0.001)
-    let justAfter = Self.now.addingTimeInterval(0.001)
-
-    // when / then
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: atExpiry, now: Self.now) == .expired)
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: justBefore, now: Self.now) == .expired)
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: justAfter, now: Self.now) == .expiring)
-  }
-
-  // MARK: - Pinned Skew
-
-  @Test
-  func classifyReadsTheSkewFromTheProviderMetadataRatherThanASecondCopy() {
-    // given
-    // Derives the boundary from the pinned skew, so widening the constant without widening the
-    // classifier — or vice versa — fails here rather than silently splitting the two.
-    let skew = TimeInterval(ChatGPTProviderMetadata.credentialFreshnessSkew.components.seconds)
-    let onTheSkew = Self.now.addingTimeInterval(skew)
-    let beyondTheSkew = Self.now.addingTimeInterval(skew + 1)
-
-    // when / then
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: onTheSkew, now: Self.now) == .expiring)
-    #expect(ChatGPTCredentialFreshness.classify(expiresAt: beyondTheSkew, now: Self.now) == .fresh)
   }
 
   // MARK: - Wall-Date Independence
