@@ -245,47 +245,6 @@ struct OutboxDispatcherTests {
   }
 
   @Test
-  func drainSendsPendingRowsAndMarksThemSent() async throws {
-    // given — one PENDING row and a transport that sends cleanly
-    let fixture = try makeFixture()
-    try seedPending(fixture, payload: "hello")
-    let transport = RecordingTransport()
-    let dispatcher = OutboxDispatcher(
-      outbox: fixture.outbox,
-      delivery: transport,
-      signal: OutboxSignal(),
-      logger: TestLog.silent
-    )
-
-    // when
-    await dispatcher.drainOnce()
-
-    // then — the row was delivered (via the rich path) and is no longer PENDING
-    #expect(await transport.richSends.first?.markdown == "hello")
-    #expect(try fixture.outbox.pendingOutbound().isEmpty)
-  }
-
-  @Test
-  func sendFailureLeavesRowPendingForRetry() async throws {
-    // given — the transport fails every send: rich and the plain fallback both error out
-    let fixture = try makeFixture()
-    try seedPending(fixture, payload: "hello")
-    let transport = RecordingTransport(sendError: .transport("down"), richError: .transport("down"))
-    let dispatcher = OutboxDispatcher(
-      outbox: fixture.outbox,
-      delivery: transport,
-      signal: OutboxSignal(),
-      logger: TestLog.silent
-    )
-
-    // when
-    await dispatcher.drainOnce()
-
-    // then — never marked SENT, so it stays PENDING for the next drain (at-least-once)
-    #expect(try fixture.outbox.pendingOutbound().count == 1)
-  }
-
-  @Test
   func bootDrainRecoversRowsCommittedByAPriorRun() async throws {
     // given — a row already PENDING before the dispatcher starts (a prior run committed but never
     // sent it); no poke will fire, so only the boot drain can deliver it

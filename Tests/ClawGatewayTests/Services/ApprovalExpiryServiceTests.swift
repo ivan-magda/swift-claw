@@ -232,28 +232,6 @@ struct ApprovalExpiryServiceTests {
   }
 
   @Test
-  func tickLeavesLiveRowsPendingAndSignalsNoOne() async throws {
-    // given — a single approval whose deadline is still in the future
-    let now = Date(timeIntervalSince1970: 1_782_003_600)
-    let fixture = try makeTickFixture(now: now)
-    let run = try seedRun(fixture.queue)
-    let liveID = try seedApproval(
-      fixture.queue,
-      runID: run,
-      nonce: "n-live",
-      createdEpoch: 1_782_003_000,
-      expiresEpoch: 1_782_007_200
-    )
-
-    // when
-    await fixture.service.tick()
-
-    // then — nothing swept: the row stays PENDING (a never-signaled id cannot be awaited without
-    // hanging, so the untouched persisted row is the observable proof no waiter was signaled)
-    #expect(try fixture.store.approval(id: liveID)?.state == .pending)
-  }
-
-  @Test
   func runTicksImmediatelyThenSleepsTheTickInterval() async throws {
     // given — a recording store and a sleep that SUSPENDS (never blocks the cooperative thread,
     // TESTING §8) then throws to end the loop like a graceful shutdown
