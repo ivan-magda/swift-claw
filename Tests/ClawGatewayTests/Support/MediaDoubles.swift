@@ -27,7 +27,9 @@ struct StubMediaFetcher: MediaFetching {
   let result: Result<Data, any Error & Sendable>
 
   var calls: [Call] {
-    get async { await recorder.calls }
+    get async {
+      await recorder.calls
+    }
   }
 
   init(result: Result<Data, any Error & Sendable>) {

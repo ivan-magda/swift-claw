@@ -2321,9 +2321,10 @@ entry, or one that no longer matches a finding, also fails. Unused declarations 
 an indexed build and stay outside this gate.
 
 The [dead-code workflow](../.github/workflows/dead-code.yml) covers them on macOS weekly, on
-demand, and on pull requests that change the analysis. Its Periphery job installs the archived
-MIT release at the version and checksum in `BuildTools/lint-versions.env`, builds an index store,
-and scans with tests and again without tests and `ClawTestSupport`, applying `.periphery.yml`.
+demand, and on pull requests that change the analysis or its pinned toolchain. Its Periphery job
+installs the archived MIT release at the version and checksum in `BuildTools/lint-versions.env`,
+builds an index store, and scans with tests and again without tests and `ClawTestSupport`,
+applying `.periphery.yml`.
 Product code comes first: neither job fails on test code, meaning the test targets and
 `ClawTestSupport`. The Periphery job lists test-code findings and fails on a product finding
 whose USR `BuildTools/periphery-baseline.txt` does not list;
@@ -2354,15 +2355,15 @@ documents installation.
 Apple owns general spacing, indentation and wrapping, braces, and declaration layout
 through `.swift-format`. It preserves existing line breaks so reviewed multiline layouts survive.
 The targeted SwiftFormat pass owns return-arrow and first-condition placement, attributes,
-collection trailing commas, multiline statement/function/property bodies, switch case bodies, and
-final width wrapping. SwiftLint owns the
+collection trailing commas, multiline statement/function/property/closure and `do`/`catch` bodies,
+switch case bodies, and final width wrapping. SwiftLint owns the
 hard line limit, correctness, idiom, and configured identifier/complexity limits in `.swiftlint.yml`,
 including test-specific overrides. Duplicate layout rules are disabled there. The gate's idempotence
 and editor/check/fix agreement must be verified when these owners change.
 
 Automation uses these existing tools only. Reviewers check the remaining Google/local details:
 import ordering and conditional-import group placement, blank lines between bodyless or short members, multiline
-type/extension, closure and `do`/`catch` bodies, wrapped signatures, function effect placement, vertical inheritance
+type/extension bodies, wrapped signatures, function effect placement, vertical inheritance
 lists, and argument boundaries in short calls containing multiline closures. Passing lint does not waive these rules. Do not add a
 repository-owned formatter or parser dependency merely to automate those review checks.
 

@@ -75,9 +75,17 @@ struct TelegramProgressCompositionTests {
 
     // then
     let requests = await http.recorded
-    let draftBodies = requests.filter { $0.url.hasSuffix("/sendRichMessageDraft") }
-      .map(\.body).compactMap { String(data: $0, encoding: .utf8) }
-    #expect(draftBodies.contains { $0.contains("tg-thinking") } == scenario.expectsProgress)
+    let draftBodies = requests.filter {
+      $0.url.hasSuffix("/sendRichMessageDraft")
+    }
+    .map(\.body).compactMap {
+      String(data: $0, encoding: .utf8)
+    }
+    #expect(
+      draftBodies.contains {
+        $0.contains("tg-thinking")
+      } == scenario.expectsProgress
+    )
     if scenario == .proactive {
       #expect(
         draftBodies.allSatisfy {
@@ -103,7 +111,9 @@ struct TelegramProgressCompositionTests {
     }
     if scenario != .proactive {
       #expect(
-        draftBodies.contains { $0.contains(ProgressCompositionProvider.answerText) }
+        draftBodies.contains {
+          $0.contains(ProgressCompositionProvider.answerText)
+        }
           == scenario.expectsAnswer
       )
     }
@@ -171,10 +181,26 @@ extension TelegramProgressCompositionTests {
     #expect(explanationSeen && previewSeen)
     let frames = await signals.secretFrames
     let replacement = SecretRedactor.replacement
-    #expect(frames.contains { $0.contains("Root \(replacement); MCP \(replacement)") })
-    #expect(frames.contains { $0.contains("preview: \(replacement)") })
-    #expect(frames.allSatisfy { !$0.contains(SecretProgressProvider.rootSecret) })
-    #expect(frames.allSatisfy { !$0.contains(String(SecretProgressProvider.mcpSecret.prefix(40))) })
+    #expect(
+      frames.contains {
+        $0.contains("Root \(replacement); MCP \(replacement)")
+      }
+    )
+    #expect(
+      frames.contains {
+        $0.contains("preview: \(replacement)")
+      }
+    )
+    #expect(
+      frames.allSatisfy {
+        !$0.contains(SecretProgressProvider.rootSecret)
+      }
+    )
+    #expect(
+      frames.allSatisfy {
+        !$0.contains(String(SecretProgressProvider.mcpSecret.prefix(40)))
+      }
+    )
   }
 }
 

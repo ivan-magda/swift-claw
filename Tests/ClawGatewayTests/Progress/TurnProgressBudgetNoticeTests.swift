@@ -53,7 +53,9 @@ struct TurnProgressBudgetNoticeTests {
     #expect(await probes.ready())
     await reporter?.publish(.answerPreview("unchanged owner answer"))
     #expect(await probes.advance(1))
-    let secondDraft = Task { await probes.advance(1) }
+    let secondDraft = Task {
+      await probes.advance(1)
+    }
     #expect(await drafts.started.waitUntilOpen())
     let target = try Self.seedNoticeRun(env: env, notice: notice)
 
@@ -90,7 +92,11 @@ struct TurnProgressBudgetNoticeTests {
     #expect(prematureAttempts == 0)
     #expect(await transport.sendAttempts == 1)
     let expected = notice == .daily ? Degradation.dailyCapTripped : Degradation.proactiveCapTripped
-    #expect(await transport.sent.contains { $0.text == expected } == !sendFails)
+    #expect(
+      await transport.sent.contains {
+        $0.text == expected
+      } == !sendFails
+    )
     #expect(await drafts.markdowns == Array(repeating: "unchanged owner answer", count: 3))
   }
 }

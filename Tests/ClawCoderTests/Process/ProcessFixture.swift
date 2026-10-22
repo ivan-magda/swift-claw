@@ -41,11 +41,15 @@ final class ProcessFixture: Sendable {
   }
 
   var pids: [Int32] {
-    get async { await capture.pids }
+    get async {
+      await capture.pids
+    }
   }
 
   var text: String {
-    get async { await capture.text }
+    get async {
+      await capture.text
+    }
   }
 
   var commandRunner: CoderCommandRunner {

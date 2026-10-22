@@ -91,7 +91,11 @@ struct TurnProgressDeliveryTests {
 
     // then
     #expect(try fixture.outbox.pendingOutbound().isEmpty == (branch != .markSentFailure))
-    #expect(await transport.richSends.contains { $0.markdown == "older answer" })
+    #expect(
+      await transport.richSends.contains {
+        $0.markdown == "older answer"
+      }
+    )
     if branch == .markSentFailure {
       #expect(await drafts.sent.isEmpty)
     } else {
@@ -138,7 +142,11 @@ extension TurnProgressDeliveryTests {
     #expect(started && cancelled)
     #expect(premature.isEmpty)
     #expect(result == .processed)
-    #expect(await transport.sent.contains { $0.text == "ack" })
+    #expect(
+      await transport.sent.contains {
+        $0.text == "ack"
+      }
+    )
   }
 }
 
@@ -159,7 +167,9 @@ extension TurnProgressDeliveryTests {
       ],
       httpResponses: [:],
       extraTools: [ApprovedProgressTool()],
-      notifyOutbox: { suspended.open() },
+      notifyOutbox: {
+        suspended.open()
+      },
       presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
@@ -183,7 +193,9 @@ extension TurnProgressDeliveryTests {
     )
 
     // when
-    let delivery = Task { await dispatcher.drainOnce() }
+    let delivery = Task {
+      await dispatcher.drainOnce()
+    }
     let draining = await drafts.cancelled.waitUntilOpen()
     let premature = await harness.transport.richSends
     drafts.releaseCleanup.open()
@@ -253,8 +265,12 @@ extension TurnProgressDeliveryTests {
       audit: AuditLogGRDB(writer: fixture.writer),
       coordinator: ApprovalCoordinator(),
       callbacks: transport,
-      currentPolicyVersion: { "pv" },
-      now: { Date() },
+      currentPolicyVersion: {
+        "pv"
+      },
+      now: {
+        Date()
+      },
       presentations: registry,
       logger: TestLog.silent
     )
@@ -263,7 +279,9 @@ extension TurnProgressDeliveryTests {
     )
 
     // when
-    let handling = Task { await handler.handle(callback, updateID: 99) }
+    let handling = Task {
+      await handler.handle(callback, updateID: 99)
+    }
     let draining = await drafts.cancelled.waitUntilOpen()
     let premature = await transport.sent
     drafts.releaseCleanup.open()
@@ -274,6 +292,10 @@ extension TurnProgressDeliveryTests {
     #expect(started && draining)
     #expect(premature.isEmpty)
     #expect(outcome == .storageFull)
-    #expect(await transport.sent.contains { $0.text == Degradation.storageFull })
+    #expect(
+      await transport.sent.contains {
+        $0.text == Degradation.storageFull
+      }
+    )
   }
 }

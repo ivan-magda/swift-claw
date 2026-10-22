@@ -41,7 +41,9 @@ func progressDispatcher(tool: any Tool, secrets: [String] = []) -> GatedToolDisp
     registry: ToolRegistry(tools: [tool]),
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secrets),
-      privateFileLoader: { [] },
+      privateFileLoader: {
+        []
+      },
       enabledDangerousTools: [],
       journalEnabled: false
     ),
