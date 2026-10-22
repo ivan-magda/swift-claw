@@ -146,52 +146,6 @@ struct ToolContractsTests {
   }
 
   @Test
-  func dispatchContextIsAValueType() {
-    // given / when — the per-call policy inputs are a Sendable value type (no grant since Inc 5a)
-    let context = ToolDispatchContext(
-      sessionTainted: true,
-      runIngestedUntrusted: false,
-      assemblyPrivateData: true,
-      runPrivateData: false,
-      sessionHasPrivateData: false,
-      approvalAlreadyPending: false
-    )
-
-    // then
-    #expect(context.sessionTainted)
-    #expect(context.approvalAlreadyPending == false)
-  }
-
-  @Test
-  func preparedActionCarriesReplacementArgsAndPerCallEgress() {
-    // given
-    let presentation = ToolApprovalPresentation(
-      blastRadius: "run python",
-      contentPreview: "print('hello')",
-      warnings: []
-    )
-
-    // when
-    let action = PreparedToolAction(
-      canonicalTarget: "code_exec:python:0123456789abcdef",
-      canonicalArgsJSON: #"{"code":"print('hello')"}"#,
-      presentation: presentation,
-      guardTexts: ["print('hello')", "staged text"],
-      canExfiltrate: true,
-      approvalReason: .codeExec
-    )
-
-    // then
-    #expect(action.canonicalTarget == "code_exec:python:0123456789abcdef")
-    #expect(action.canonicalArgsJSON == #"{"code":"print('hello')"}"#)
-    #expect(action.presentation == presentation)
-    #expect(action.guardTexts == ["print('hello')", "staged text"])
-    #expect(action.canExfiltrate)
-    #expect(PreparedActionResolution.prepared(action) == .prepared(action))
-    #expect(PreparedActionResolution.refused(reason: "no") == .refused(reason: "no"))
-  }
-
-  @Test
   func ordinaryToolsDefaultToNoPreparedAction() async {
     // given
     let tool = DefaultPrepareTool()

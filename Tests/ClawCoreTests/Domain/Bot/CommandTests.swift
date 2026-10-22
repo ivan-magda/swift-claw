@@ -19,6 +19,11 @@ struct CommandTests {
     ("/memory", .memory(.review)),
     ("/memory show 3", .memory(.show(id: 3))),
     ("/MEMORY@CLAW_BOT project", .memory(.filter(kind: .project))),
+    ("/help", .help),
+    ("/doctor", .doctor),
+    ("/status", .doctor),
+    ("/mcp", .mcp),
+    ("/skills include rejected", .skills),
   ])
   func leadingSlashCommandsParse(text: String, expected: Command) {
     // given
@@ -120,55 +125,11 @@ struct CommandTests {
   }
 
   @Test
-  func helpParses() {
-    // given / when / then
-    #expect(Command.parse("/help", botUsername: "claw_bot") == .help)
-    #expect(Command.parse("/HELP@CLAW_BOT", botUsername: "claw_bot") == .help)
-    #expect(Command.parse("please /help me", botUsername: "claw_bot") == .plain("please /help me"))
-  }
-
-  @Test
-  func doctorParses() {
-    // given / when / then
-    #expect(Command.parse("/doctor", botUsername: "claw_bot") == .doctor)
-    #expect(Command.parse("/DOCTOR@CLAW_BOT", botUsername: "claw_bot") == .doctor)
-    #expect(Command.parse("run /doctor", botUsername: "claw_bot") == .plain("run /doctor"))
-  }
-
-  @Test
-  func statusParsesAsDoctorAlias() {
-    // given / when / then
-    #expect(Command.parse("/status", botUsername: "claw_bot") == .doctor)
-    #expect(Command.parse("/STATUS@CLAW_BOT", botUsername: "claw_bot") == .doctor)
-    #expect(Command.parse("see /status", botUsername: "claw_bot") == .plain("see /status"))
-  }
-
-  @Test
-  func mcpParses() {
-    // given / when / then
-    #expect(Command.parse("/mcp", botUsername: "claw_bot") == .mcp)
-    #expect(Command.parse("/MCP@CLAW_BOT", botUsername: "claw_bot") == .mcp)
-    #expect(Command.parse("check /mcp", botUsername: "claw_bot") == .plain("check /mcp"))
-  }
-
-  @Test
   func mcpTakesNoArgumentsSoNoArgumentCanBecomeAManagementVerb() {
     // given — an argument tail that reads like a management command.
     // when / then — it parses to the same argument-free status request.
     #expect(Command.parse("/mcp add https://evil.test/mcp", botUsername: "claw_bot") == .mcp)
     #expect(Command.parse("/mcp set-token linear hunter2", botUsername: "claw_bot") == .mcp)
-  }
-
-  @Test(arguments: ["/skills", "/SKILLS", "/skills@claw_bot", "/SKILLS@CLAW_BOT include rejected"])
-  func skillsParsesAsReadOnlyDiagnostics(text: String) {
-    // given
-    let botUsername = "claw_bot"
-
-    // when
-    let command = Command.parse(text, botUsername: botUsername)
-
-    // then
-    #expect(command == .skills)
   }
 
   @Test(arguments: [

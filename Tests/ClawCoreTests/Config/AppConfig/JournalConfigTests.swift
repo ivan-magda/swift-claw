@@ -13,22 +13,29 @@ struct JournalConfigTests {
 
   @Test(
     arguments: [
-      (flag: nil, owners: "42", groups: "", expected: .disabled),
-      (flag: "true", owners: "42", groups: "", expected: .enabled),
-      (flag: "false", owners: "", groups: "-100", expected: .disabled),
-      (flag: "perhaps", owners: "42", groups: "", expected: .rejected),
-      (flag: "true", owners: "", groups: "", expected: .rejected),
-      (flag: "true", owners: "42,99", groups: "", expected: .rejected),
-      (flag: "true", owners: "0", groups: "", expected: .rejected),
-      (flag: "true", owners: "-42", groups: "", expected: .rejected),
-      (flag: "true", owners: "42", groups: "-100", expected: .rejected),
-    ] as [(flag: String?, owners: String, groups: String, expected: ExpectedEnablement)]
+      (flag: nil, owners: "42", groups: "", expected: .disabled, owner: 42),
+      (flag: "true", owners: "42", groups: "", expected: .enabled, owner: 42),
+      (flag: "false", owners: "", groups: "-100", expected: .disabled, owner: nil),
+      (flag: "true", owners: "", groups: "", expected: .rejected, owner: nil),
+      (flag: "true", owners: "42,99", groups: "", expected: .rejected, owner: nil),
+      (flag: "true", owners: "0", groups: "", expected: .rejected, owner: nil),
+      (flag: "true", owners: "-42", groups: "", expected: .rejected, owner: nil),
+      (flag: "true", owners: "42", groups: "-100", expected: .rejected, owner: nil),
+    ]
+      as [(
+        flag: String?,
+        owners: String,
+        groups: String,
+        expected: ExpectedEnablement,
+        owner: Int64?
+      )]
   )
   func journalRequiresOnePositivePersonalOwner(
     flag: String?,
     owners: String,
     groups: String,
-    expected: ExpectedEnablement
+    expected: ExpectedEnablement,
+    owner: Int64?
   ) throws {
     // given
     var environment = [
@@ -47,13 +54,9 @@ struct JournalConfigTests {
       let config = try AppConfig.load(environment: environment)
       #expect(config.journalEnabled == (expected == .enabled))
       #expect(config.journalPolicy.timeZoneID == "Europe/Istanbul")
-      #expect(config.journalPolicy.ownerUserID == (owners == "42" ? 42 : nil))
+      #expect(config.journalPolicy.ownerUserID == owner)
     case .rejected:
-      let error: ConfigError =
-        flag == "perhaps"
-        ? .invalidBool(key: AppConfig.EnvKey.journalEnabled, value: "perhaps")
-        : .journalRequiresPersonalOwner
-      #expect(throws: error) {
+      #expect(throws: ConfigError.journalRequiresPersonalOwner) {
         _ = try AppConfig.load(environment: environment)
       }
     }

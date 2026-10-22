@@ -8,10 +8,17 @@ struct PolicyFingerprintTests {
   // MARK: - hash(parts:)
 
   @Test
-  func hashIsDeterministicAcrossCalls() {
-    // given / when / then — same inputs, same digest (the recompute-at-resolution seam relies on it)
+  func hashPinsTheLengthPrefixedFraming() {
+    // given — each part is framed as an 8-byte big-endian UTF-8 length followed by its bytes; the
+    // vector was computed outside Swift from that rule. A framing change would void every parked
+    // approval, because resolution recomputes this digest.
     let parts = ["alpha", "beta", "gamma"]
-    #expect(PolicyFingerprint.hash(parts: parts) == PolicyFingerprint.hash(parts: parts))
+
+    // when
+    let digest = PolicyFingerprint.hash(parts: parts)
+
+    // then
+    #expect(digest == "331a849d8222d4878d78ef44b9ff23eefec924efbbf41420e3c231f6902e4b4c")
   }
 
   @Test

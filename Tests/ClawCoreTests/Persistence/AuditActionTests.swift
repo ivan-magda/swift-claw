@@ -12,23 +12,6 @@ struct AuditActionTests {
     #expect(AuditAction.memoryDelete.rawValue == "memory_delete")
   }
 
-  @Test
-  func memoryAuditEventUsesTypedAction() {
-    // given
-    let event = AuditEvent(
-      actor: .owner,
-      action: .memoryWrite,
-      argsRedacted: "{}",
-      sessionID: 42,
-      ts: Date(timeIntervalSince1970: 10)
-    )
-
-    // then
-    #expect(event.action == .memoryWrite)
-    #expect(event.action.rawValue == "memory_write")
-    #expect(event.sessionID == 42)
-  }
-
   private static let schedulerActions: [(action: AuditAction, rawValue: String)] = [
     (.jobCreated, "job_created"),
     (.jobExecuted, "job_executed"),

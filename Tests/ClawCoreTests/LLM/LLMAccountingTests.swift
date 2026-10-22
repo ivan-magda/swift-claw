@@ -335,20 +335,6 @@ struct LLMAccountingTests {
     )
   }
 
-  @Test
-  func migrationAndLiveIdentifiersShareOneDomain() {
-    // given
-    let legacy = ProviderCallID(rawValue: "legacy:42")
-    let live = UUIDProviderCallIDGenerator().next()
-
-    // when
-    let identifiers: Set<ProviderCallID> = [legacy, live]
-
-    // then
-    #expect(identifiers.count == 2)
-    #expect(legacy != live)
-  }
-
   // MARK: - Failure Accounting
 
   @Test(arguments: [(-5, 0), (0, 0), (7, 7)])

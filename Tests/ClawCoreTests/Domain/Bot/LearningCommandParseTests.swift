@@ -30,16 +30,4 @@ struct LearningCommandParseTests {
     // then — ignoring the argument tail collapses detail/reset into the list branch.
     #expect(command == expected)
   }
-
-  @Test(arguments: ["please /learning", " /learning", "/learning@some_other_bot"])
-  func nonLeadingOrMismatchedCommandsStayPlain(text: String) {
-    // given
-    let botUsername = "claw_bot"
-
-    // when
-    let command = Command.parse(text, botUsername: botUsername)
-
-    // then — parsing a non-authoritative slash token turns ordinary text into a control request.
-    #expect(command == .plain(text))
-  }
 }

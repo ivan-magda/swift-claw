@@ -80,6 +80,8 @@ struct MemoryWriteRequestTests {
     let request = try MemoryWriteBuilder.build(rawText: "likes tea", kind: .user, sessionID: 3)
 
     // then
+    #expect(request.item.kind == .user)
+    #expect(request.item.sessionID == 3)
     #expect(request.item.source == .owner)
     #expect(request.item.importance == .normal)
     #expect(request.item.sensitivity == .normal)
@@ -103,22 +105,5 @@ struct MemoryWriteRequestTests {
     #expect(request.item.importance == .high)
     #expect(request.item.sensitivity == .high)
     #expect(request.item.text == "prefers metric units")
-  }
-
-  @Test
-  func buildsOwnerNormalImportanceMemoryItem() throws {
-    // given / when
-    let request = try MemoryWriteBuilder.build(
-      rawText: "prefers focused implementation plans",
-      kind: .feedback,
-      sessionID: 5
-    )
-
-    // then
-    #expect(request.item.kind == .feedback)
-    #expect(request.item.sensitivity == .normal)
-    #expect(request.item.importance == .normal)
-    #expect(request.item.source == .owner)
-    #expect(request.item.sessionID == 5)
   }
 }
