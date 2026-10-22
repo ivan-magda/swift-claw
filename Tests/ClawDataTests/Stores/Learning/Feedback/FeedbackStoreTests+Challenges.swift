@@ -105,44 +105,43 @@ extension FeedbackStoreTests {
     )
   }
 
-  @Test
-  func challengeSubjectKindsMapToOnlyTheirLegalSignals() throws {
+  @Test(arguments: [
+    (FeedbackSubjectKind.run, OwnerSignal.resultCorrection),
+    (FeedbackSubjectKind.candidate, OwnerSignal.candidateEdit),
+  ])
+  func challengeSubjectKindsMapToOnlyTheirLegalSignals(
+    _ kind: FeedbackSubjectKind,
+    _ signal: OwnerSignal
+  ) throws {
     // given — v13 has no signal column; subject kind is the closed discriminator
-    let cases: [(FeedbackSubjectKind, OwnerSignal)] = [
-      (.run, .resultCorrection),
-      (.candidate, .candidateEdit),
-    ]
-
-    for (offset, entry) in cases.enumerated() {
-      let env = try FeedbackStoreEnvironment.make()
-      let target = env.target(
-        nonce: "kind-\(offset)",
-        signal: entry.1,
-        subject: "subject-\(offset)",
-        kind: entry.0
-      )
-      try env.seedTargets([target], chunks: [])
-      guard case .challengeOpened(let challenge) = try env.openChallenge(target) else {
-        Issue.record("expected a payload challenge")
-        continue
-      }
-      #expect(try env.eventCount() == 0)
-      #expect(try env.feedbackRevision() == 0)
-
-      // when
-      let outcome = try env.learning.consumeChallenge(
-        id: challenge.id,
-        payload: "edit",
-        now: env.now
-      )
-
-      // then — guessing one signal for both subject kinds makes one case fail
-      guard case .recorded(let event) = outcome else {
-        Issue.record("expected a payload event")
-        continue
-      }
-      #expect(event.signal == entry.1)
+    let env = try FeedbackStoreEnvironment.make()
+    let target = env.target(
+      nonce: "kind-\(kind.rawValue)",
+      signal: signal,
+      subject: "subject-\(kind.rawValue)",
+      kind: kind
+    )
+    try env.seedTargets([target], chunks: [])
+    guard case .challengeOpened(let challenge) = try env.openChallenge(target) else {
+      Issue.record("expected a payload challenge")
+      return
     }
+    #expect(try env.eventCount() == 0)
+    #expect(try env.feedbackRevision() == 0)
+
+    // when
+    let outcome = try env.learning.consumeChallenge(
+      id: challenge.id,
+      payload: "edit",
+      now: env.now
+    )
+
+    // then — guessing one signal for both subject kinds makes one case fail
+    guard case .recorded(let event) = outcome else {
+      Issue.record("expected a payload event")
+      return
+    }
+    #expect(event.signal == signal)
   }
 
   @Test

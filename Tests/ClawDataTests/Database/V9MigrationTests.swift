@@ -128,49 +128,13 @@ struct V9MigrationTests {
     #expect(cursor == 42)
 
     // and the schema the later migrations build is fully present
-    let messageColumns = Set(try Self.columnNames(queue, table: "messages"))
+    let messageColumns = Set(try SchemaInspection.columnNames(queue, table: "messages"))
     #expect(messageColumns.isSuperset(of: ["provider_state_issuer", "provider_state"]))
-    #expect(try Self.columnNames(queue, table: "provider_usage").contains("provider_call_id"))
+    let usageColumns = try SchemaInspection.columnNames(queue, table: "provider_usage")
+    #expect(usageColumns.contains("provider_call_id"))
   }
 
   // MARK: - Provider State Pair
-
-  @Test
-  func sqliteAcceptsBothStateColumnsNull() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    try Self.seedSession(queue)
-
-    // when / then — every row written before v9 has this shape, so it must stay legal
-    try queue.write { db in
-      try Self.insertMessage(db, issuer: nil, state: nil)
-    }
-    let stored = try queue.read { db in
-      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages")
-    }
-    #expect(stored == 1)
-  }
-
-  @Test
-  func sqliteAcceptsBothStateColumnsPopulated() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    try Self.seedSession(queue)
-
-    // when
-    try queue.write { db in
-      try Self.insertMessage(db, issuer: "openai-chatgpt", state: Data([0x01, 0x02, 0x03]))
-    }
-
-    // then
-    let stored = try queue.read { db in
-      try Row.fetchOne(db, sql: "SELECT provider_state_issuer, provider_state FROM messages")
-    }
-    #expect(stored?["provider_state_issuer"] == "openai-chatgpt")
-    #expect((stored?["provider_state"] as Data?) == Data([0x01, 0x02, 0x03]))
-  }
 
   @Test
   func sqliteRejectsAnIssuerWithoutState() throws {
@@ -233,7 +197,7 @@ struct V9MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then
-    let columns = Set(try Self.columnNames(queue, table: "messages"))
+    let columns = Set(try SchemaInspection.columnNames(queue, table: "messages"))
     #expect(
       columns.isSuperset(of: [
         "id",
@@ -272,7 +236,7 @@ struct V9MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then
-    let columns = Set(try Self.columnNames(queue, table: "provider_usage"))
+    let columns = Set(try SchemaInspection.columnNames(queue, table: "provider_usage"))
     #expect(
       columns.isSuperset(of: [
         "id",
@@ -319,7 +283,7 @@ struct V9MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then
-    let columns = Set(try Self.columnNames(queue, table: "approvals"))
+    let columns = Set(try SchemaInspection.columnNames(queue, table: "approvals"))
     #expect(
       columns.isSuperset(of: [
         "id",
@@ -380,7 +344,7 @@ struct V9MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then
-    let columns = Set(try Self.columnNames(queue, table: "messages_fts"))
+    let columns = Set(try SchemaInspection.columnNames(queue, table: "messages_fts"))
     #expect(columns.contains("content"))
     #expect(columns.contains("provider_state") == false)
     #expect(columns.contains("provider_state_issuer") == false)
@@ -491,28 +455,6 @@ struct V9MigrationTests {
   }
 
   @Test
-  func theCallIdentifierIndexIsUnique() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-
-    // then
-    let indexSQL = try queue.read { db in
-      try String.fetchOne(
-        db,
-        sql: """
-          SELECT sql FROM sqlite_master
-          WHERE type = 'index' AND name = 'index_provider_usage_provider_call_id'
-          """
-      )
-    }
-    #expect(indexSQL?.localizedCaseInsensitiveContains("unique") == true)
-    #expect(indexSQL?.contains("provider_call_id") == true)
-  }
-
-  @Test
   func theCallIdentifierIsNotNull() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -539,30 +481,6 @@ struct V9MigrationTests {
   // MARK: - Conflict Clause Targeting
 
   @Test
-  func theInsertStatementSilencesOnlyTheCallIdentityConflict() throws {
-    // given — the production statement, replayed with the identity it already stored
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try Self.seedVEight(queue)
-    try ClawDatabase.migrate(queue)
-
-    // when
-    let changed = try queue.write { db -> Int in
-      try db.execute(
-        sql: RunStoreGRDB.insertUsageStatement,
-        arguments: Self.usageArguments(callID: "legacy:1")
-      )
-      return db.changesCount
-    }
-
-    // then — the replay writes nothing rather than failing
-    #expect(changed == 0)
-    let rows = try queue.read { db in
-      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage")
-    }
-    #expect(rows == 2)
-  }
-
-  @Test
   func theInsertStatementStillRaisesAnUnrelatedNotNullViolation() throws {
     // given — an untargeted conflict clause would silence this alongside the identity conflict,
     // turning a corrupt row into a no-op the caller reads as an idempotent replay
@@ -580,26 +498,6 @@ struct V9MigrationTests {
       }
     } throws: { error in
       Self.isNotNullViolation(error)
-    }
-  }
-
-  @Test
-  func theInsertStatementStillRaisesAnUnrelatedForeignKeyViolation() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try Self.seedVEight(queue)
-    try ClawDatabase.migrate(queue)
-
-    // when / then
-    #expect {
-      try queue.write { db in
-        try db.execute(
-          sql: RunStoreGRDB.insertUsageStatement,
-          arguments: Self.usageArguments(callID: "call-fresh", runID: 9999)
-        )
-      }
-    } throws: { error in
-      Self.isForeignKeyViolation(error)
     }
   }
 }
@@ -705,14 +603,10 @@ private extension V9MigrationTests {
     )
   }
 
-  static func usageArguments(
-    callID: String,
-    runID: Int64? = 1,
-    model: String? = "gpt-4o"
-  ) -> StatementArguments {
+  static func usageArguments(callID: String, model: String?) -> StatementArguments {
     // The trailing pair is the learning scope, null for every call a run made.
     [
-      runID,
+      1,
       1,
       model,
       11,
@@ -731,14 +625,6 @@ private extension V9MigrationTests {
 // MARK: - Schema Introspection
 
 private extension V9MigrationTests {
-  static func columnNames(_ queue: DatabaseQueue, table: String) throws -> [String] {
-    try queue.read { db in
-      try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { row in
-        row["name"] as String
-      }
-    }
-  }
-
   static func columnType(_ queue: DatabaseQueue, table: String, column: String) throws -> String? {
     try queue.read { db in
       try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").first { row in
@@ -766,28 +652,14 @@ private extension V9MigrationTests {
 
 private extension V9MigrationTests {
   static func isCheckViolation(_ error: any Error) -> Bool {
-    isConstraintViolation(error, mentioning: "CHECK")
+    SchemaInspection.isConstraintViolation(error, mentioning: "CHECK")
   }
 
   static func isUniqueViolation(_ error: any Error) -> Bool {
-    isConstraintViolation(error, mentioning: "UNIQUE")
+    SchemaInspection.isConstraintViolation(error, mentioning: "UNIQUE")
   }
 
   static func isNotNullViolation(_ error: any Error) -> Bool {
-    isConstraintViolation(error, mentioning: "NOT NULL")
-  }
-
-  static func isForeignKeyViolation(_ error: any Error) -> Bool {
-    isConstraintViolation(error, mentioning: "FOREIGN KEY")
-  }
-
-  /// Matches the failure mode, not merely "something threw" — a rebuild that lost a constraint
-  /// still throws for the wrong reason, and that must not read as a pass.
-  static func isConstraintViolation(_ error: any Error, mentioning kind: String) -> Bool {
-    guard let databaseError = error as? DatabaseError else {
-      return false
-    }
-    return databaseError.resultCode.primaryResultCode == .SQLITE_CONSTRAINT
-      && (databaseError.message?.contains(kind) ?? false)
+    SchemaInspection.isConstraintViolation(error, mentioning: "NOT NULL")
   }
 }

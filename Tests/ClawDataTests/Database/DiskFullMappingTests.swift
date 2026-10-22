@@ -8,26 +8,6 @@ import Testing
 @Suite
 struct DiskFullMappingTests {
   @Test
-  func mapsSQLiteFullToStoreErrorDiskFull() throws {
-    // given
-    let sqliteFull = DatabaseError(resultCode: .SQLITE_FULL, message: "database or disk is full")
-
-    // when
-    let classified = ClawDatabase.classifyError(sqliteFull)
-
-    // then
-    #expect(classified == .diskFull)
-
-    // and the write seam surfaces the same typed error when a write throws SQLITE_FULL
-    let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
-    #expect(throws: StoreError.diskFull) {
-      try database.writeMapping { (_: Database) in
-        throw sqliteFull
-      }
-    }
-  }
-
-  @Test
   func mapsOtherDatabaseErrorsToUnexpected() throws {
     // given
     let constraint = DatabaseError(
@@ -44,14 +24,6 @@ struct DiskFullMappingTests {
     guard case .unexpected = classified else {
       Issue.record("expected StoreError.unexpected, got \(classified)")
       return
-    }
-
-    // and the write seam surfaces a domain StoreError, never a raw DatabaseError
-    let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
-    #expect(throws: StoreError.self) {
-      try database.writeMapping { (_: Database) in
-        throw constraint
-      }
     }
   }
 

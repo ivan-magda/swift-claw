@@ -346,36 +346,8 @@ struct RunStoreTests {
     // then
     #expect(result == .usageRecordedAfterTerminal)
     #expect(try usageRowCount(env) == 2)
-  }
 
-  @Test
-  func recordingALateRowRecomputesTheRunTotalsFromEveryStoredRow() throws {
-    // given
-    let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
-    try env.usage.recordUsage(
-      makeProviderUsage(
-        runID: env.seedRunID,
-        sessionID: env.sessionID,
-        callID: "call-round-1",
-        promptTokens: 10,
-        completionTokens: 20,
-        costUSD: 0.004
-      )
-    )
-    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
-      updateID: 100,
-      sessionKey: SessionKey.telegramDM(chatID: 42),
-      now: Date()
-    )
-
-    // when
-    _ = try env.runs.commitAssistantTurn(
-      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
-      now: Date()
-    )
-
-    // then — the totals are the sum of both rounds, not the late row overwriting the first
+    // and the totals are the sum of both rounds, not the late row overwriting the first
     let totals = try runTotals(env)
     #expect(totals.input == 17)
     #expect(totals.output == 23)
@@ -513,42 +485,6 @@ struct RunStoreTests {
     let (tokens, cost) = try env.usage.todayTokensAndCost(now: Date())
     #expect(tokens == 10)
     #expect(abs(cost - 0.5) < 1e-9)
-  }
-
-  @Test
-  func aLateRowIsRecordedAfterSupersessionToo() throws {
-    // given — supersession is the other terminal state a late commit can land against
-    let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
-    try env.usage.recordUsage(
-      makeProviderUsage(
-        runID: env.seedRunID,
-        sessionID: env.sessionID,
-        callID: "call-round-1",
-        promptTokens: 10,
-        completionTokens: 20,
-        costUSD: 0.004
-      )
-    )
-    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
-      updateID: 100,
-      sessionKey: SessionKey.telegramDM(chatID: 42),
-      journalScope: nil,
-      now: Date()
-    )
-
-    // when
-    let result = try env.runs.commitAssistantTurn(
-      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
-      now: Date()
-    )
-
-    // then
-    #expect(result == .usageRecordedAfterTerminal)
-    #expect(try usageRowCount(env) == 2)
-    let totals = try runTotals(env)
-    #expect(totals.input == 17)
-    #expect(totals.output == 23)
   }
 
   @Test

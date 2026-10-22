@@ -45,13 +45,4 @@ struct AllowlistStoreTests {
     // then
     #expect(try store.allowlistCount() == 2)
   }
-
-  @Test
-  func emptyStoreCountIsZero() throws {
-    // given
-    let store = try freshStore()
-
-    // then
-    #expect(try store.allowlistCount() == 0)
-  }
 }

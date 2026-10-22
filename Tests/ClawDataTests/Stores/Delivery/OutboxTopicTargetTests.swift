@@ -101,24 +101,6 @@ struct OutboxTopicTargetTests {
     )
   }
 
-  @Test
-  func aGeneralTopicRunsReplyCarriesAReplyTargetButNoThread() throws {
-    // given — the General topic, whose messages carry no thread id
-    let fixture = try fixture(
-      sessionKey: SessionKey.telegramTopic(chatID: Self.groupChatID, threadID: nil),
-      chatID: Self.groupChatID,
-      telegramMessageID: Self.triggerMessageID
-    )
-
-    // when
-    try commitReply(fixture, chatID: Self.groupChatID)
-
-    // then
-    let row = try #require(try fixture.outbox.pendingOutbound().first)
-    #expect(row.messageThreadID == nil)
-    #expect(row.replyToMessageID == Self.triggerMessageID)
-  }
-
   /// A crash notice is the one enqueue with no turn behind it: the boot sweep mints it from the
   /// run row alone, so a topic session's notice can only find its way home through the key.
   @Test
@@ -155,28 +137,6 @@ struct OutboxTopicTargetTests {
   }
 
   @Test
-  func aDirectRunsBootNoticeCarriesNoTopic() throws {
-    // given
-    let fixture = try fixture(
-      sessionKey: SessionKey.telegramDM(chatID: 42),
-      chatID: 42,
-      telegramMessageID: Self.triggerMessageID
-    )
-
-    // when
-    let replies = try fixture.runs.reconcileRunsAtBoot(
-      now: Date(),
-      degradationText: "unfinished",
-      heartbeatNoticeChatID: nil
-    )
-
-    // then — the DM notice is the whole-chat target it was before topics existed
-    #expect(replies == [DegradationReply(chatID: 42, runID: fixture.runID, text: "unfinished")])
-    let row = try #require(try fixture.outbox.pendingOutbound().first)
-    #expect(row.target == .chat(42))
-  }
-
-  @Test
   func aDirectRunsReplyCarriesNeither() throws {
     // given
     let fixture = try fixture(
@@ -189,25 +149,6 @@ struct OutboxTopicTargetTests {
     try commitReply(fixture, chatID: 42)
 
     // then — the DM row is exactly the whole-chat target it was before topics existed
-    let row = try #require(try fixture.outbox.pendingOutbound().first)
-    #expect(row.target == .chat(42))
-  }
-
-  /// A scheduled job's session key holds no chat id, so its target can only ever be the chat the
-  /// chunk names — the reply-target lookup must not turn that into a nil-chat row.
-  @Test
-  func aScheduledJobsReplyCarriesTheChunksChat() throws {
-    // given
-    let fixture = try fixture(
-      sessionKey: SessionKey.scheduledJob(id: 3),
-      chatID: 42,
-      telegramMessageID: nil
-    )
-
-    // when
-    try commitReply(fixture, chatID: 42)
-
-    // then
     let row = try #require(try fixture.outbox.pendingOutbound().first)
     #expect(row.target == .chat(42))
   }

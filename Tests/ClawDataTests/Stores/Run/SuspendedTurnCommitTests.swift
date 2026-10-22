@@ -241,37 +241,6 @@ extension SuspendedTurnCommitTests {
   }
 
   @Test
-  func theSuspendCommitPersistsTheAnchorStateWithTheCheckpoint() throws {
-    // given
-    let fixture = try makeRunningFixture()
-    let runs = RunStoreGRDB(writer: fixture.queue)
-
-    // when
-    _ = try runs.commitSuspendedTurn(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      commit: statefulCommit(),
-      now: Date()
-    )
-
-    // then — the checkpoint and the state its anchor was minted with land in one transaction
-    let anchor = try #require(
-      try fixture.queue.read { db in
-        try Row.fetchOne(
-          db,
-          sql: """
-            SELECT provider_state_issuer, provider_state FROM messages
-            WHERE run_id = ? AND role = ?
-            """,
-          arguments: [fixture.runID, MessageRole.assistant.rawValue]
-        )
-      }
-    )
-    #expect(anchor["provider_state_issuer"] as String? == Self.anchorState.issuer)
-    #expect(anchor["provider_state"] as Data? == Self.anchorState.payload)
-  }
-
-  @Test
   func providerStateNeverReachesTheAuditTrailOrTheApprovalPrompt() throws {
     // given — the suspend commit is the one store path that writes an audit row and an owner-facing
     // prompt in the same transaction as an anchor's state

@@ -135,32 +135,30 @@ struct FeedbackStoreTests {
     )
   }
 
-  @Test
-  func eachTargetCASPredicateFailsClosedWithoutConsuming() throws {
+  @Test(arguments: FeedbackFailureCase.allCases)
+  func eachTargetCASPredicateFailsClosedWithoutConsuming(
+    _ failureCase: FeedbackFailureCase
+  ) throws {
     // given — one independently invalid owner, chat, expiry, action, or epoch per fresh database
-    let cases: [FeedbackFailureCase] = [.owner, .chat, .expiry, .action, .epoch]
-
-    for failureCase in cases {
-      let env = try FeedbackStoreEnvironment.make()
-      let target = env.target(nonce: "predicate", signal: .resultUseful, subject: "41")
-      try env.seedTargets([target], chunks: [])
-      if failureCase == .epoch {
-        try env.setEpoch(2)
-      }
-
-      // when
-      let outcome = try env.consume(
-        env.invalidTap(target: target, failure: failureCase),
-        now: failureCase == .expiry ? target.expiresAt : env.now
-      )
-
-      // then — dropping this case's SQL predicate would append an event and consume the nonce
-      #expect(outcome == failureCase.outcome)
-      #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == nil)
-      #expect(try env.eventCount() == 0)
-      #expect(try env.feedbackRevision() == 0)
-      #expect(try env.feedbackAudits().last?.decision == failureCase.decision)
+    let env = try FeedbackStoreEnvironment.make()
+    let target = env.target(nonce: "predicate", signal: .resultUseful, subject: "41")
+    try env.seedTargets([target], chunks: [])
+    if failureCase == .epoch {
+      try env.setEpoch(2)
     }
+
+    // when
+    let outcome = try env.consume(
+      env.invalidTap(target: target, failure: failureCase),
+      now: failureCase == .expiry ? target.expiresAt : env.now
+    )
+
+    // then — dropping this case's SQL predicate would append an event and consume the nonce
+    #expect(outcome == failureCase.outcome)
+    #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == nil)
+    #expect(try env.eventCount() == 0)
+    #expect(try env.feedbackRevision() == 0)
+    #expect(try env.feedbackAudits().last?.decision == failureCase.decision)
   }
 
   @Test
