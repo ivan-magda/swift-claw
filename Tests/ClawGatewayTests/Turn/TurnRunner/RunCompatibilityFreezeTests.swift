@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -15,14 +16,7 @@ struct RunCompatibilityFreezeTests {
     // given
     let recorder = SurfaceFreezeRecorder()
     let env = try makeEnv(
-      agentOutcome: .respond(
-        ChatResponse(
-          content: "done",
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-          costFromProvider: 0.0021
-        )
-      ),
+      agentOutcome: .respond(okResponse(content: "done")),
       freezeLearningSurface: { runID, policyVersion in
         recorder.record(runID: runID, policyVersion: policyVersion)
       }

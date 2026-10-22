@@ -48,9 +48,13 @@ struct ApprovalKeyboardTests {
     )
     let deny = ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.denyVerdict)
 
-    // then — the framing must never overflow Telegram's callback_data cap (spec §4.6)
+    // then — the framing must never overflow Telegram's callback_data cap (spec §4.6), and the
+    // button data the client echoes back parses at the production nonce width
     #expect(approve.utf8.count <= 64)
     #expect(deny.utf8.count <= 64)
+    let parsed = ApprovalKeyboard.parse(approve)
+    #expect(parsed?.nonce == nonce)
+    #expect(parsed?.approve == true)
   }
 
   @Test
@@ -93,27 +97,5 @@ struct ApprovalKeyboardTests {
     #expect(first.contains("apr:AbC-1_dEfG:y"))
     #expect(first.contains("apr:AbC-1_dEfG:n"))
     #expect(first.contains("\"inline_keyboard\""))
-  }
-
-  @Test
-  func markupEmbedsCallbacksThatParseAccepts() {
-    // given — a real nonce, to prove the button data the client echoes back is exactly what
-    // parse validates (the suspend→callback round trip closes here)
-    let nonce = ApprovalNonce.generate()
-
-    // when
-    let markup = ApprovalKeyboard.markup(nonce: nonce)
-
-    // then
-    #expect(
-      markup.contains(
-        ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
-      )
-    )
-    let approve = ApprovalKeyboard.parse(
-      ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
-    )
-    #expect(approve?.nonce == nonce)
-    #expect(approve?.approve == true)
   }
 }

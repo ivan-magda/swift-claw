@@ -120,7 +120,8 @@ struct MemoryRepliesTests {
 
   @Test
   func usageAndAckCopyAreExact() {
-    // given / when / then
+    // given / when / then — the usage lines are built from the kind vocabulary and the acks
+    // branch on their inputs; fixed constants are not pinned here (TESTING §7.2)
     #expect(
       MemoryReplies.rememberUsage == "Usage: /remember [user|feedback|project|reference:] <text>"
     )
@@ -129,15 +130,6 @@ struct MemoryRepliesTests {
         Usage: /memory [user|feedback|project|reference] | \
         /memory show <id> | /memory delete <id>
         """
-    )
-    #expect(MemoryReplies.nothingToSave == "No savable text.")
-    #expect(MemoryReplies.cancelled == "Cancelled.")
-    #expect(
-      MemoryReplies.saveFailed == "Couldn't save it. Nothing was written. Run /remember again."
-    )
-    #expect(
-      MemoryReplies.deleteFailed
-        == "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
     )
     #expect(MemoryReplies.saved(id: 12) == "Saved memory 12.")
     #expect(MemoryReplies.saved(id: nil) == "Saved.")
