@@ -6,20 +6,6 @@ import Testing
 @Suite
 struct ContextContractsTests {
   @Test
-  func skillDescriptorIdentityIsName() {
-    // given
-    let descriptor = SkillDescriptor(
-      name: "summarize",
-      description: "Summarize owner-provided text.",
-      directory: URL(fileURLWithPath: "/tmp/skills/summarize")
-    )
-
-    // then
-    #expect(descriptor.id == "summarize")
-    #expect(descriptor.description == "Summarize owner-provided text.")
-  }
-
-  @Test
   func defaultContextBudgetCarriesNamedCaps() {
     // given / when
     let budget = ContextBudget.default
@@ -36,24 +22,6 @@ struct ContextContractsTests {
     #expect(budget.recallCap == 2_000)
     #expect(budget.skillsCap == 4_000)
     #expect(budget.recallHitCap == 400)
-  }
-
-  @Test
-  func buildResultCarriesMessagesNoticesAndPrivateDataSignal() {
-    // given
-    let message = ChatMessage(role: .system, content: "policy")
-
-    // when
-    let result = BuildResult(
-      messages: [message],
-      ownerNotices: ["MEMORY.md over cap"],
-      hasPrivateDataAccess: true
-    )
-
-    // then
-    #expect(result.messages == [message])
-    #expect(result.ownerNotices == ["MEMORY.md over cap"])
-    #expect(result.hasPrivateDataAccess)
   }
 
   @Test

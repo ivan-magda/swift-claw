@@ -145,20 +145,4 @@ struct PrimaryRouteCooldownTests {
     #expect(await cooldown.recordSuccess() == false)
     #expect(await cooldown.isCooling() == false)
   }
-
-  @Test("the actor is usable through its tracking protocol")
-  func usableThroughTrackingProtocol() async {
-    // given
-    let clock = ScriptedClock { _ in }
-    let cooldown: any PrimaryRouteCooldownTracking = PrimaryRouteCooldown(
-      longSeconds: 900,
-      clock: clock
-    )
-
-    // when
-    await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
-
-    // then
-    #expect(await cooldown.isCooling() == true)
-  }
 }

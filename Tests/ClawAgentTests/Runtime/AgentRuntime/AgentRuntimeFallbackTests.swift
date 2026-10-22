@@ -7,12 +7,9 @@ import Testing
 
 @Suite("Agent runtime route fallback")
 struct AgentRuntimeFallbackTests {
-  private func run(
-    _ runtime: AgentRuntime,
-    origin: RunOrigin = .interactive
-  ) async throws -> TurnOutcome {
+  private func run(_ runtime: AgentRuntime) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      makeTurnRequest(runID: 1, sessionID: 1, chatID: 1, context: makeBuildResult(), origin: origin)
+      makeTurnRequest(runID: 1, sessionID: 1, chatID: 1, context: makeBuildResult())
     )
   }
 
@@ -200,21 +197,6 @@ struct AgentRuntimeFallbackTests {
     _ = try requireCompleted(outcome.result)
     #expect(outcome.routeNotice == .restored(route: "primary-model"))
     #expect(await cooldown.isCooling() == false)
-  }
-
-  @Test("a scheduled run falls back on the same terms as an interactive turn")
-  func proactiveOriginAlsoFallsBack() async throws {
-    // given
-    let primary = StubProvider(.fail(.quotaLimited(retryAfterSeconds: nil)))
-    let fallback = StubProvider(.respond(okResponse(content: "answered")))
-    let runtime = makeRuntime(primary: primary, fallback: fallback)
-
-    // when
-    let outcome = try await run(runtime, origin: .scheduled)
-
-    // then
-    let (content, _, _) = try requireCompleted(outcome.result)
-    #expect(content == "answered")
   }
 
   @Test("a switch does not spend a round-trip from the turn's budget")

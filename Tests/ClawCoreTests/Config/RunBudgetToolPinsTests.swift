@@ -44,7 +44,7 @@ struct RunBudgetToolPinsTests {
     environment["CLAW_MAX_TURNS"] = "zero"
 
     // when / then
-    #expect(throws: ConfigError.self) {
+    #expect(throws: ConfigError.invalidBudget("zero")) {
       _ = try AppConfig.load(environment: environment)
     }
   }

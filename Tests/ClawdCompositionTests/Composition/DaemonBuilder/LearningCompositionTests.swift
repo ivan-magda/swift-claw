@@ -519,13 +519,3 @@ private struct IdleCompositionScheduleParser: ScheduleDraftParsing {
     .unparseable
   }
 }
-
-private struct IdleCompositionDoctor: DoctorReporting {
-  func report() async -> DoctorReport {
-    DoctorReport()
-  }
-
-  func scanSkills() async -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
-}

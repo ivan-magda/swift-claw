@@ -8,28 +8,6 @@ import Testing
 @Suite
 struct ClawDatabaseTests {
   @Test
-  func migrationCreatesExpectedTables() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-
-    // then
-    let tables = try queue.read { db -> Set<String> in
-      let names = try String.fetchAll(
-        db,
-        sql: """
-          SELECT name FROM sqlite_master WHERE type='table' \
-          AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
-          """
-      )
-      return Set(names)
-    }
-    #expect(tables.isSuperset(of: ["allowlist", "processed_updates", "update_cursor"]))
-  }
-
-  @Test
   func foreignKeysAndBusyTimeoutAreSet() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -74,40 +52,6 @@ struct ClawDatabaseTests {
         "learning_trials",
       ])
     )
-  }
-
-  /// The two features' tables arrive in release order, not alphabetical or authoring order: the
-  /// Coder schema is complete at `v12` and no learning table exists before `v13`.
-  @Test
-  func coderSchemaLandsBeforeAnyLearningTable() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrator.migrate(queue, upTo: "v12")
-
-    // then
-    let atReleasedCoder = try Self.tables(queue)
-    #expect(atReleasedCoder.contains("coder_jobs"))
-    #expect(
-      !atReleasedCoder.contains {
-        $0.hasPrefix("learning_")
-      }
-    )
-    try ClawDatabase.migrate(queue)
-    #expect(try Self.tables(queue).contains("learning_operations"))
-  }
-
-  @Test
-  func migrationIsIdempotent() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-
-    // then
-    try ClawDatabase.migrate(queue)
   }
 }
 

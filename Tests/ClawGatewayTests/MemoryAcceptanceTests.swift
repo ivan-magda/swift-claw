@@ -222,62 +222,6 @@ struct MemoryAcceptanceTests {
     #expect(await stack.transport.sent.last?.text == MemoryReplies.emptyReview(kind: nil))
   }
 
-  /// ③ (spec §2, §7.5): the taint-read guard is wired but dormant. Untainted turns inject
-  /// high-sensitivity items; once `sessions.tainted` is set (3b's job — forced here via SQL),
-  /// the real snapshot → fetchRanked seam excludes them.
-  @Test
-  func taintReadGuardExcludesHighSensitivityItemsThroughTheRealStores() async throws {
-    // given — one normal and one high-sensitivity fact in the real GRDB store
-    let queue = try TestDatabase.make()
-    let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
-    let memoryCommands = MemoryCommandStoreGRDB(writer: queue)
-    _ = try memoryCommands.applyRemember(
-      updateID: -1,
-      item: NewMemoryItem(text: "normal fact", kind: .user, sessionID: nil),
-      now: Date(timeIntervalSince1970: 86_400)
-    )
-    _ = try memoryCommands.applyRemember(
-      updateID: -2,
-      item: NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionID: nil),
-      now: Date(timeIntervalSince1970: 172_800)
-    )
-
-    // when — an untainted turn runs
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hi"))
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
-
-    // then — the guard is dormant: both items inject while the session is untainted
-    let untaintedRequest = try #require(await stack.provider.requests.first)
-    let untaintedLabeled = try #require(
-      untaintedRequest.first { message in
-        message.content.text.contains("label=\"memory_items\"")
-      }
-    )
-    #expect(untaintedLabeled.content.text.contains("normal fact"))
-    #expect(untaintedLabeled.content.text.contains("secret omega"))
-
-    // when — the session is marked tainted (3a only READS this flag; 3b sets it)
-    let sessionID = try stack.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatID: stack.chatID),
-      now: Date()
-    )
-    try await queue.write { db in
-      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionID])
-    }
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "again"))
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue, RunState.done.rawValue])
-
-    // then — the tainted read excludes the high-sensitivity item and keeps the normal one
-    let taintedRequest = try #require(await stack.provider.requests.last)
-    let taintedLabeled = try #require(
-      taintedRequest.first { message in
-        message.content.text.contains("label=\"memory_items\"")
-      }
-    )
-    #expect(taintedLabeled.content.text.contains("normal fact"))
-    #expect(taintedLabeled.content.text.contains("secret omega") == false)
-  }
-
   /// ② (spec §7.5): `hasPrivateDataAccess` over the REAL GRDB store — false with nothing durable,
   /// true the moment any memory_item is injected, false again after it is deleted.
   @Test

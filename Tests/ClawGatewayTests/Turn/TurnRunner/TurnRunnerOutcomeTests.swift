@@ -234,13 +234,18 @@ struct TurnRunnerOutcomeTests {
     #expect(snapshot.isTainted)
   }
 
-  @Test
-  func authenticationFailureDeliversTheExactLoginCopyAndDebitsNothing() async throws {
-    // given — the credential is refused before any inference begins (a clean, not-started head)
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.authenticationRequired),
-      dispatcher: nil
-    )
+  @Test(arguments: [
+    (ProviderError.authenticationRequired, Degradation.authenticationRequired),
+    (.quotaLimited(retryAfterSeconds: 30), Degradation.quotaLimited(retryAfterSeconds: 30)),
+    (.accessDenied, Degradation.accessDenied),
+    (.invalidProviderState, Degradation.invalidProviderState),
+  ])
+  func aNotStartedProviderFailureDeliversItsOwnCopyAndDebitsNothing(
+    failure: ProviderError,
+    expectedPayload: String
+  ) async throws {
+    // given — the provider refuses before any inference begins (a clean, not-started head)
+    let fixture = try makeFixture(provider: SequenceProvider([], then: failure), dispatcher: nil)
 
     // when
     try await fixture.runner.run(
@@ -250,232 +255,104 @@ struct TurnRunnerOutcomeTests {
       triggerMessageID: fixture.triggerMessageID
     )
 
-    // then — the pinned login sentence reaches the owner verbatim, and no usage row was written
+    // then — each failure reaches the owner as its own pinned copy (a cross-mapping, such as an
+    // access denial telling the owner to log in, fails here), and no usage row was written
     let payloads = try outboxPayloads(fixture)
-    #expect(payloads.contains(Degradation.authenticationRequired))
-    #expect(
-      payloads.contains { payload in
-        payload.contains("clawd auth login")
-      }
-    )
+    #expect(payloads.contains(expectedPayload))
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 
-  @Test
-  func quotaFailureSaysRetryNotLoginAndDebitsNothing() async throws {
-    // given
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
-      dispatcher: nil
-    )
-
-    // when
-    try await fixture.runner.run(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      chatID: 7,
-      triggerMessageID: fixture.triggerMessageID
-    )
-
-    // then — the quota reply names the retry, never the login command, and debits nothing
-    let payloads = try outboxPayloads(fixture)
-    #expect(payloads.contains(Degradation.quotaLimited(retryAfterSeconds: 30)))
-    #expect(
-      payloads.allSatisfy { payload in
-        payload.contains("clawd auth login") == false
-      }
-    )
-    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  /// One route-notice mapping: the committed result, the notice riding it, and the exact outbox
+  /// text. A `.completed` result needs a usage row bound to the fixture's session, so each case
+  /// builds its result from that session.
+  struct RouteNoticeCase: Sendable, CustomTestStringConvertible {
+    let testDescription: String
+    let result: @Sendable (_ sessionID: Int64) -> TurnResult
+    let routeNotice: RouteNotice?
+    let expected: String
   }
 
-  @Test
-  func accessDenialDoesNotTellTheOwnerToLogIn() async throws {
-    // given
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.accessDenied),
-      dispatcher: nil
-    )
-
-    // when
-    try await fixture.runner.run(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      chatID: 7,
-      triggerMessageID: fixture.triggerMessageID
-    )
-
-    // then — the access reply never names the login recovery, and debits nothing
-    let payloads = try outboxPayloads(fixture)
-    #expect(payloads.contains(Degradation.accessDenied))
-    #expect(
-      payloads.allSatisfy { payload in
-        payload.contains("clawd auth login") == false
-      }
-    )
-    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  private static let primaryRoute = "openai-chatgpt/gpt-5.4"
+  private static let fallbackRoute = "gpt-5.4"
+  private static let answered: @Sendable (_ sessionID: Int64) -> TurnResult = { sessionID in
+    .completed(content: "answer", usage: usageFixture(sessionID: sessionID), providerState: nil)
   }
 
-  @Test
-  func rejectedReplayStateGivesNewGuidanceAndDebitsNothing() async throws {
-    // given
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.invalidProviderState),
-      dispatcher: nil
-    )
+  static let routeNoticeCases = [
+    RouteNoticeCase(
+      testDescription: "a switched turn appends the route notice to the reply",
+      result: answered,
+      routeNotice: .switched(from: primaryRoute, to: fallbackRoute),
+      expected: "answer\n\n"
+        + Degradation.routeSwitched(from: primaryRoute, to: fallbackRoute)
+    ),
+    RouteNoticeCase(
+      testDescription: "a turn with no route notice sends the reply unchanged",
+      result: answered,
+      routeNotice: nil,
+      expected: "answer"
+    ),
+    RouteNoticeCase(
+      testDescription: "a restored turn tells the owner the primary is answering again",
+      result: answered,
+      routeNotice: .restored(route: primaryRoute),
+      expected: "answer\n\n\(Degradation.routeRestored(route: primaryRoute))"
+    ),
+    // The combination task 7 left as this task's signal: a non-nil switch notice riding a
+    // `.degraded` result.
+    RouteNoticeCase(
+      testDescription: "a switch that also fails tells the owner the backup was tried too",
+      result: { _ in
+        .degraded(.providerUnavailable, usage: nil)
+      },
+      routeNotice: .switched(from: primaryRoute, to: fallbackRoute),
+      expected: "\(Degradation.providerUnavailable)\n\n\(Degradation.fallbackAlsoFailed)"
+    ),
+    // `.restored` means the primary alone answered this round, so "I tried the backup model too"
+    // would be false; only a `.switched` notice earns that sentence.
+    RouteNoticeCase(
+      testDescription: "a restored turn that still degrades does not claim a backup was tried",
+      result: { _ in
+        .degraded(.outputTruncated, usage: nil)
+      },
+      routeNotice: .restored(route: primaryRoute),
+      expected: Degradation.outputTruncated
+    ),
+    // `routeNotice` is turn-scoped: a switch earlier this turn is still owed to the owner even
+    // though the round that tripped the cap produced no answer.
+    RouteNoticeCase(
+      testDescription: "a budget-stopped turn that already switched still tells the owner",
+      result: { _ in
+        .budgetStopped(cap: BudgetGate.perRunToolCallCap)
+      },
+      routeNotice: .switched(from: primaryRoute, to: fallbackRoute),
+      expected: "\(Degradation.budget(cap: BudgetGate.perRunToolCallCap))\n\n"
+        + "\(Degradation.routeSwitched(from: primaryRoute, to: fallbackRoute))"
+    ),
+    RouteNoticeCase(
+      testDescription: "a budget-stopped turn with no route notice sends the reply unchanged",
+      result: { _ in
+        .budgetStopped(cap: BudgetGate.perRunToolCallCap)
+      },
+      routeNotice: nil,
+      expected: Degradation.budget(cap: BudgetGate.perRunToolCallCap)
+    ),
+  ]
 
-    // when
-    try await fixture.runner.run(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      chatID: 7,
-      triggerMessageID: fixture.triggerMessageID
-    )
-
-    // then — safe /new guidance, never a login prompt, and debits nothing
-    let payloads = try outboxPayloads(fixture)
-    #expect(payloads.contains(Degradation.invalidProviderState))
-    #expect(
-      payloads.contains { payload in
-        payload.contains("/new")
-      }
-    )
-    #expect(
-      payloads.allSatisfy { payload in
-        payload.contains("clawd auth login") == false
-      }
-    )
-    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
-  }
-
-  @Test("a switched turn appends the route notice to the reply")
-  func switchedTurnAppendsNotice() async throws {
+  @Test(arguments: routeNoticeCases)
+  func aRouteNoticeMapsToItsExactOwnerCopy(_ testCase: RouteNoticeCase) async throws {
     // given
     let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
     let outcome = TurnOutcome(
-      result: .completed(
-        content: "answer",
-        usage: usageFixture(sessionID: fixture.sessionID),
-        providerState: nil
-      ),
-      routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
+      result: testCase.result(fixture.sessionID),
+      routeNotice: testCase.routeNotice
     )
 
     // when
     let sent = try await runCommit(fixture, outcome)
 
     // then
-    #expect(sent.contains("answer"))
-    #expect(sent.contains("gpt-5.4"))
-  }
-
-  @Test("a turn with no route notice sends the reply unchanged")
-  func unswitchedTurnIsUnchanged() async throws {
-    // given
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .completed(
-        content: "answer",
-        usage: usageFixture(sessionID: fixture.sessionID),
-        providerState: nil
-      ),
-      routeNotice: nil
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(sent == "answer")
-  }
-
-  @Test("a restored turn tells the owner the primary is answering again")
-  func restoredTurnAppendsNotice() async throws {
-    // given
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .completed(
-        content: "answer",
-        usage: usageFixture(sessionID: fixture.sessionID),
-        providerState: nil
-      ),
-      routeNotice: .restored(route: "openai-chatgpt/gpt-5.4")
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(sent == "answer\n\n\(Degradation.routeRestored(route: "openai-chatgpt/gpt-5.4"))")
-  }
-
-  @Test("a switch that also fails tells the owner the backup was tried too")
-  func switchedThenDegradedAppendsFallbackAlsoFailed() async throws {
-    // given — the exact combination task 7 left as this task's signal: a non-nil switch notice
-    // riding a `.degraded` result.
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .degraded(.providerUnavailable, usage: nil),
-      routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(sent == "\(Degradation.providerUnavailable)\n\n\(Degradation.fallbackAlsoFailed)")
-  }
-
-  @Test("a restored turn that still degrades does not claim a backup was tried")
-  func restoredThenDegradedOmitsFallbackAlsoFailed() async throws {
-    // given — `.restored` means the primary alone answered this round, so "I tried the backup
-    // model too" would be false; only a `.switched` notice earns that sentence.
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .degraded(.outputTruncated, usage: nil),
-      routeNotice: .restored(route: "openai-chatgpt/gpt-5.4")
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(sent == Degradation.outputTruncated)
-  }
-
-  @Test("a budget-stopped turn that already switched still tells the owner")
-  func budgetStoppedWithSwitchAppendsNotice() async throws {
-    // given — `routeNotice` is turn-scoped: a switch earlier this turn is still owed to the owner
-    // even though the round that tripped the cap produced no answer.
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .budgetStopped(cap: BudgetGate.perRunToolCallCap),
-      routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(
-      sent == "\(Degradation.budget(cap: BudgetGate.perRunToolCallCap))\n\n"
-        + "\(Degradation.routeSwitched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4"))"
-    )
-  }
-
-  @Test("a budget-stopped turn with no route notice sends the reply unchanged")
-  func budgetStoppedWithNoNoticeIsUnchanged() async throws {
-    // given
-    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .budgetStopped(cap: BudgetGate.perRunToolCallCap),
-      routeNotice: nil
-    )
-
-    // when
-    let sent = try await runCommit(fixture, outcome)
-
-    // then
-    #expect(sent == Degradation.budget(cap: BudgetGate.perRunToolCallCap))
+    #expect(sent == testCase.expected)
   }
 
   @Test("a refusal on a guessed price names the model the owner has to price")

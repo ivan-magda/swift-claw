@@ -609,11 +609,12 @@ struct OpenAICompatibleProviderTests {
     // cannot resolve early by luck
     let gate = AsyncGate()
     defer { gate.open() }
+    let hold = ScriptedStreamHold(release: gate)
     let exec = ScriptedHTTPExecutor([
       .blockedStream(
         HTTPStreamHead(statusCode: 200, headers: [:]),
         [Data("data: [DONE]\n\n".utf8)],
-        ScriptedStreamHold(release: gate)
+        hold
       ),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -621,9 +622,7 @@ struct OpenAICompatibleProviderTests {
 
     // Let the producer get inside its exchange; cancelling before the request is dispatched would
     // test the authorization path instead of the join.
-    while await exec.recorded.isEmpty {
-      await Task.yield()
-    }
+    await hold.started.wait()
 
     // when
     let joined = CompletionFlag()

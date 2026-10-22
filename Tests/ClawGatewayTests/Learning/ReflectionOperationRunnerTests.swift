@@ -149,31 +149,10 @@ struct ReflectionOperationRunnerTests {
     #expect(try env.failureCode() == .carrierPolicyDenied)
   }
 
-  @Test
-  func candidateSecretLeakFailsAfterOneCallWithoutPersistingBytes() async throws {
+  @Test(arguments: CandidateSecret.allCases)
+  func candidateSecretNeverPersists(_ spelling: CandidateSecret) async throws {
     // given
-    let secret = "secret-in-candidate-99"
-    let env = try ReflectionRunEnvironment.make(
-      reply: """
-        {"schema_version":1,"candidate":{"lessons":["Keep \(secret)"]}}
-        """,
-      secretValues: [secret]
-    )
-
-    // when
-    await env.runner.runReflection(trigger: env.trigger, now: env.now)
-
-    // then — checking only the outbound carrier would persist a newly generated secret verbatim
-    #expect(await env.provider.requests.count == 1)
-    #expect(try env.operationState() == .failed)
-    #expect(try env.failureCode() == .schemaInvalid)
-    #expect(try env.rowCount("learning_candidates") == 0)
-  }
-
-  @Test(arguments: JSONEscapedSecret.allCases)
-  func candidateSecretWithJSONEscapingNeverPersists(_ escaped: JSONEscapedSecret) async throws {
-    // given
-    let secret = escaped.value
+    let secret = spelling.value
     let env = try ReflectionRunEnvironment.make(
       reply: try candidateReply(lesson: "Keep \(secret) out of durable lessons."),
       secretValues: [secret]
@@ -182,8 +161,9 @@ struct ReflectionOperationRunnerTests {
     // when
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
 
-    // then — scanning only JSON-encoded bytes misses secrets whose quote, slash, or newline is
-    // escaped; the paid call still closes and charges without persisting candidate or lesson bytes
+    // then — checking only the outbound carrier would persist a newly generated secret, and
+    // scanning only JSON-encoded bytes misses secrets whose quote, slash, or newline is escaped;
+    // the paid call still closes and charges without persisting candidate or lesson bytes
     #expect(await env.provider.requests.count == 1)
     #expect(try env.operationState() == .failed)
     #expect(try env.failureCode() == .schemaInvalid)
@@ -296,13 +276,16 @@ private extension ReflectionOperationRunnerTests {
   }
 }
 
-enum JSONEscapedSecret: CaseIterable, Sendable {
+enum CandidateSecret: CaseIterable, Sendable {
+  case plain
   case quote
   case backslash
   case newline
 
   var value: String {
     switch self {
+    case .plain:
+      "secret-in-candidate-99"
     case .quote:
       "secret\"quoted"
     case .backslash:

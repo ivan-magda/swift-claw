@@ -27,7 +27,8 @@ struct ConversationalWindowTests {
     role: String,
     content: String,
     toolCalls: String? = nil,
-    toolCallID: String? = nil
+    toolCallID: String? = nil,
+    provenance: Provenance? = nil
   ) throws -> Int64 {
     try queue.write { db in
       try db.execute(
@@ -39,7 +40,7 @@ struct ConversationalWindowTests {
           sessionID,
           role,
           content,
-          role == "tool" ? "untrusted" : "trusted",
+          (provenance ?? (role == "tool" ? .untrusted : .trusted)).rawValue,
           Date(),
           toolCalls,
           toolCallID,
@@ -197,7 +198,8 @@ struct ConversationalWindowTests {
 
   @Test
   func recallExcludesToolRows() throws {
-    // given — a tool row and an assistant row both matching the query, in another session
+    // given — a tool row and an assistant row both matching the query, in another session. The
+    // tool row is trusted so the provenance filter cannot hide it: only the role filter does.
     let fixture = try makeFixture()
     let otherSession = try fixture.store.loadOrCreateSession(sessionKey: "tg:dm:2", now: Date())
     _ = try insert(
@@ -205,7 +207,8 @@ struct ConversationalWindowTests {
       sessionID: otherSession,
       role: "tool",
       content: "quokka page body",
-      toolCallID: "c1"
+      toolCallID: "c1",
+      provenance: .trusted
     )
     _ = try insert(
       fixture.queue,

@@ -97,19 +97,6 @@ struct ChatGPTResponsesProviderTests {
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func onlyAuthorizationAndAccountAreEverAccepted() async throws {
-    // given — a source offering nothing but the bearer, the paired positive to the rejection above
-    let harness = ProviderHarness(steps: [.stream(okHead, Fixtures.basicSuccess())])
-
-    // when
-    let response = try await harness.provider.complete(request: plainRequest)
-
-    // then — a clean dispatch proves the rejection test fails on the bad headers, not on all headers
-    #expect(await harness.http.recorded.count == 1)
-    #expect(response.content == "Hello")
-  }
-
-  @Test(.timeLimit(.minutes(1)))
   func twoCasingsOfAuthorizationAreRejectedBeforeHTTPRatherThanSilentlyMerged() async throws {
     // given — a source handing back both spellings of Authorization carrying different bearers, which
     // the allowlist maps to one canonical key

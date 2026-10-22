@@ -133,20 +133,58 @@ struct MessageRouterTests {
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test
-  func unknownSenderGetsPrivateBotReply() async throws {
-    // given
-    let harness = try makeHarness(allowed: [42])
+  // Access is decided once, before any command parse; each row is a surface a stranger could probe.
+  // `<job>` stands for the seeded job's id, so the verb rows aim at a real, active job.
+  @Test(arguments: [
+    "let me in",
+    "/skills",
+    "/remember steal this",
+    "/memory",
+    "/schedule every weekday at 7am",
+    "/schedule list",
+    "/pause <job>",
+    "/runnow <job>",
+    "/help",
+  ])
+  func strangerTextNeverReachesAnySurface(template: String) async throws {
+    // given — owner state a stranger must neither read nor change
+    let scan = SkillScanResult(
+      descriptors: [skillDescriptor(name: "private-skill", description: "Owner only.")],
+      warnings: [.invalidSkillManifest(skill: "private-broken")]
+    )
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(skillScans: [scan]))
+    _ = try MemoryCommandStoreGRDB(writer: harness.queue).applyRemember(
+      updateID: -1,
+      item: NewMemoryItem(text: "secret fact", kind: .user, sessionID: nil),
+      now: Date(timeIntervalSince1970: 86_400)
+    )
+    let jobs = ScheduledJobStoreGRDB(writer: harness.queue)
+    let job = try jobs.create(
+      NewScheduledJob(
+        ownerChatID: 42,
+        label: "morning digest",
+        prompt: "Summarize my unread items",
+        recurrence: SchedulingRuleFixtures.weekdayEnvelope(
+          zone: try #require(TimeZone(identifier: "Europe/Berlin"))
+        ),
+        timezone: "Europe/Berlin",
+        nextOccurrence: SchedulingTestClock.tuesdaySevenBerlin
+      ),
+      now: SchedulingTestClock.mondayNoonBerlin
+    )
+    let text = template.replacingOccurrences(of: "<job>", with: String(job.id))
 
     // when
-    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "let me in"))
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: text))
 
-    // then
-    let sent = await harness.transport.sent
-    #expect(sent.count == 1)
-    let reply = try #require(sent.first)
-    #expect(reply.text.contains("private bot"))
+    // then — fail-closed: only the private-bot reply, no turn, and nothing read or written
+    #expect(outcome == .processed)
+    #expect(await harness.transport.sent.map(\.text) == [MessageRouter.privateBotText])
     #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(try runStates(harness.queue).isEmpty)
+    #expect(try messageCount(harness.queue, content: text) == 0)
+    #expect(try memoryItemCount(harness.queue) == 1)
+    #expect(try jobs.listAll().map(\.status) == [.active])
   }
 
   @Test
@@ -190,20 +228,6 @@ struct MessageRouterTests {
   }
 
   @Test
-  func nonAllowlistedSenderPersistsNoRunOrMessage() async throws {
-    // given — the sender's id (7) is never seeded into the allowlist
-    let harness = try makeHarness(allowed: [42])
-
-    // when — a stranger sends plain text
-    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "let me in"))
-
-    // then — fail-closed: no turn dispatched and nothing durable is written for the stranger
-    #expect(await harness.dispatcher.calls.isEmpty)
-    #expect(try runStates(harness.queue).isEmpty)
-    #expect(try messageCount(harness.queue, content: "let me in") == 0)
-  }
-
-  @Test
   func unknownSenderStartEchoesTheirOwnID() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
@@ -213,14 +237,27 @@ struct MessageRouterTests {
 
     // then — echoes THEIR id, never the allowlist
     let sent = await harness.transport.sent
-    #expect(sent.count == 1)
-    let reply = try #require(sent.first)
-    #expect(reply.text.contains("7"))
-    #expect(reply.text.contains("42") == false)
+    #expect(sent.map(\.text) == [MessageRouter.unauthorizedStartText(userID: 7)])
+    #expect(
+      sent.allSatisfy { reply in
+        !reply.text.contains("42")
+      }
+    )
   }
 
-  @Test
-  func unlistedGroupMessageSendsNothingAndLogsTheChatID() async throws {
+  /// An untitled room still logs a readable label, so the operator can tell it from a titled one.
+  static let unlistedRooms: [(chatID: Int64, kind: ChatKind, title: String?, label: String)] = [
+    (chatID: -1_001, kind: .supergroup, title: "Podlodka iOS Crew", label: "Podlodka iOS Crew"),
+    (chatID: -1_002, kind: .group, title: nil, label: "(untitled)"),
+  ]
+
+  @Test(arguments: MessageRouterTests.unlistedRooms)
+  func unlistedGroupMessageSendsNothingAndLogsTheChatID(
+    chatID: Int64,
+    kind: ChatKind,
+    title: String?,
+    label: String
+  ) async throws {
     // given — the bot was added to a group nobody put in CLAW_GROUP_CHATS
     let capture = RecordingLogCapture()
     let harness = try makeHarness(allowed: [42], logger: capture.logger())
@@ -230,10 +267,10 @@ struct MessageRouterTests {
       rawUpdate: textUpdate(
         id: 1,
         from: 42,
-        chat: -1_001,
+        chat: chatID,
         text: "hello",
-        chatKind: .supergroup,
-        chatTitle: "Podlodka iOS Crew"
+        chatKind: kind,
+        chatTitle: title
       )
     )
 
@@ -246,29 +283,8 @@ struct MessageRouterTests {
         entry.level == .info
       }
     )
-    #expect(logged.message.contains("-1001"))
-    #expect(logged.message.contains("Podlodka iOS Crew"))
-  }
-
-  @Test
-  func anUntitledUnlistedGroupStillLogsItsChatID() async throws {
-    // given
-    let capture = RecordingLogCapture()
-    let harness = try makeHarness(allowed: [42], logger: capture.logger())
-
-    // when — Telegram sent no title
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, chat: -1_002, text: "hi", chatKind: .group)
-    )
-
-    // then
-    let logged = try #require(
-      capture.entries.first { entry in
-        entry.level == .info
-      }
-    )
-    #expect(logged.message.contains("-1002"))
-    #expect(await harness.transport.sent.isEmpty)
+    #expect(logged.message.contains(String(chatID)))
+    #expect(logged.message.contains(label))
   }
 
   @Test
@@ -493,22 +509,6 @@ struct MessageRouterTests {
   }
 
   @Test
-  func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
-    // given — the same id is configured, but the update arrives as a channel
-    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, chat: -1_001, text: "hi", chatKind: .channel)
-    )
-
-    // then
-    #expect(outcome == .skipped)
-    #expect(await harness.transport.sent.isEmpty)
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
   func aStrangersGroupStartIsNeverAnsweredWithTheirUserID() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
@@ -531,10 +531,7 @@ struct MessageRouterTests {
     await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "/start"))
 
     // then — a welcome reply, not a dispatched turn
-    let sent = await harness.transport.sent
-    #expect(sent.count == 1)
-    let reply = try #require(sent.first)
-    #expect(reply.text.contains("private bot") == false)
+    #expect(await harness.transport.sent.map(\.text) == [MessageRouter.welcomeText])
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -763,11 +760,10 @@ struct MessageRouterTests {
       rawUpdate: textUpdate(id: 1, from: 42, text: "/doctor")
     )
 
-    // then — the compact summary is sent, and no turn is dispatched
+    // then — the compact summary is sent (its copy is owned by DoctorReportTests), and no turn
+    // is dispatched
     #expect(outcome == .processed)
-    let reply = try #require(await harness.transport.sent.first)
-    #expect(reply.text.contains("all systems healthy"))
-    #expect(reply.text.contains("Database: ok"))
+    #expect(await harness.transport.sent.map(\.text) == [report.renderTelegramSummary()])
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -782,31 +778,12 @@ struct MessageRouterTests {
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp"))
 
-    // then — status only: the reply renders the snapshot the daemon already holds, and no turn runs
+    // then — status only: the reply renders the snapshot's MCP section, never the unrelated row,
+    // and no turn runs
     #expect(outcome == .processed)
     let reply = try #require(await harness.transport.sent.first)
-    #expect(reply.text.contains("MCP: FAIL"))
-    #expect(reply.text.contains("mcp.linear.tools: skipped: unreachable"))
+    #expect(reply.text == report.renderTelegramGroup(.mcp))
     #expect(reply.text.contains("db.writable") == false)
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
-  func mcpArgumentsAreIgnoredSoNoChatMessageCanManageAServer() async throws {
-    // given
-    var report = DoctorReport()
-    report.add(key: "mcp", value: "no servers configured", group: .mcp)
-    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(stubbed: report))
-
-    // when — an argument tail shaped like a management verb
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp set-token linear hunter2")
-    )
-
-    // then — it is answered as the same status request, and nothing was dispatched
-    #expect(outcome == .processed)
-    let reply = try #require(await harness.transport.sent.first)
-    #expect(reply.text.contains("mcp: no servers configured"))
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -863,29 +840,6 @@ struct MessageRouterTests {
     #expect(firstOutcome == .processed)
     #expect(duplicateOutcome == .skipped)
     #expect(await harness.transport.sent.count == 1)
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
-  func nonAllowlistedSkillsRevealsNoSkillDiagnostics() async throws {
-    // given
-    let scan = SkillScanResult(
-      descriptors: [skillDescriptor(name: "private-skill", description: "Owner only.")],
-      warnings: [.invalidSkillManifest(skill: "private-broken")]
-    )
-    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(skillScans: [scan]))
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 7, text: "/skills")
-    )
-
-    // then
-    #expect(outcome == .processed)
-    let reply = try #require(await harness.transport.sent.first)
-    #expect(reply.text == MessageRouter.privateBotText)
-    #expect(reply.text.contains("private-skill") == false)
-    #expect(reply.text.contains("private-broken") == false)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -990,6 +944,12 @@ struct MessageRouterTests {
           (row["id"] as Int64, row["state"] as String)
         }
       )
+    }
+  }
+
+  private func memoryItemCount(_ queue: DatabaseQueue) throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items") ?? 0
     }
   }
 

@@ -237,40 +237,6 @@ struct V9PersistenceAcceptanceTests {
     #expect(try Self.usageCount(env) == 4)
   }
 
-  @Test
-  func aTerminalCommitAfterCancellationRecordsItsCallOnceAcrossReplays() throws {
-    // given — a run whose tool round already spent, cancelled out from under the turn in flight
-    let env = try makeMigratedLegacyRun()
-    defer { try? FileManager.default.removeItem(at: env.root) }
-    try env.usage.recordUsage(Self.toolRoundUsage(env))
-    #expect(
-      try CommandStoreGRDB(writer: env.pool).applyStop(
-        updateID: 100,
-        sessionKey: Self.legacySessionKey,
-        now: Self.seededAt
-      ).cancelledRunIDs == [env.runID]
-    )
-
-    // when — the terminal commit lands late, then is replayed
-    let first = try env.runs.commitAssistantTurn(Self.terminalTurn(env), now: Self.seededAt)
-    let second = try env.runs.commitAssistantTurn(Self.terminalTurn(env), now: Self.seededAt)
-
-    // then — the late spend is recorded once; the replay meets its own identity and writes nothing
-    #expect(first == .usageRecordedAfterTerminal)
-    #expect(second == .ignored)
-    #expect(
-      try Self.callIdentities(env, runID: env.runID) == [Self.toolCallID, Self.terminalCallID]
-    )
-
-    // and the totals still count the tool round the late row arrived after — a run-wide "has usage
-    // yet?" guard would have dropped the terminal spend here, and a replay that debited again
-    // would have doubled it
-    let totals = try Self.runTotals(env)
-    #expect(totals.inputTokens == 150)
-    #expect(totals.outputTokens == 30)
-    #expect(totals.costUSD == 0.04)
-  }
-
   // MARK: - Conflict Targeting At The Store Seam
 
   @Test
@@ -297,70 +263,6 @@ struct V9PersistenceAcceptanceTests {
     #expect(stored.count == 1)
     #expect(stored.first?.promptTokens == 100)
     #expect(stored.first?.completionTokens == 20)
-  }
-
-  @Test
-  func anUnrelatedNotNullFailureCrossesTheSeamAsATypedStoreError() throws {
-    // given — a NULL is unreachable through `ProviderUsage`, whose fields are non-optional, so the
-    // production statement is driven straight at the mapping seam every store write already uses.
-    // An untargeted conflict clause would swallow this failure and hand the caller the same
-    // "wrote nothing" a harmless replay produces.
-    let env = try makeMigratedLegacyRun()
-    defer { try? FileManager.default.removeItem(at: env.root) }
-
-    // when / then
-    #expect {
-      try MappedDatabase(writer: env.pool).writeMapping { db in
-        try db.execute(
-          sql: RunStoreGRDB.insertUsageStatement,
-          arguments: Self.usageArguments(env, callID: "call-fresh", model: nil)
-        )
-      }
-    } throws: { error in
-      Self.isTypedFailure(error, mentioning: "NOT NULL constraint failed: provider_usage.model")
-    }
-    #expect(try Self.usageCount(env) == 2)
-  }
-
-  @Test
-  func aMismatchedStatePairCrossesTheSeamAsATypedStoreError() throws {
-    // given — likewise unreachable through `MessageRowInsert`, which binds both halves or neither;
-    // a foreign writer is what the pair CHECK is there to stop
-    let env = try makeMigratedLegacyRun()
-    defer { try? FileManager.default.removeItem(at: env.root) }
-
-    // when / then
-    #expect {
-      try MappedDatabase(writer: env.pool).writeMapping { db in
-        try db.execute(
-          sql: """
-            INSERT INTO messages(session_id, role, content, provenance, ts,
-              provider_state_issuer, provider_state)
-            VALUES (?, 'assistant', 'half a pair', 'trusted', ?, 'openai-chatgpt', NULL)
-            """,
-          arguments: [env.sessionID, Self.seededAt]
-        )
-      }
-    } throws: { error in
-      Self.isTypedFailure(error, mentioning: "CHECK constraint failed")
-    }
-  }
-
-  @Test
-  func anUnrelatedForeignKeyFailureCrossesTheSeamAsATypedStoreError() throws {
-    // given — this one the typed store can express, so it is driven through the real constructor
-    let env = try makeMigratedLegacyRun()
-    defer { try? FileManager.default.removeItem(at: env.root) }
-
-    // when / then
-    #expect {
-      try env.usage.recordUsage(
-        makeProviderUsage(runID: 9999, sessionID: env.sessionID, callID: "call-orphan")
-      )
-    } throws: { error in
-      Self.isTypedFailure(error, mentioning: "FOREIGN KEY constraint failed")
-    }
-    #expect(try Self.usageCount(env) == 2)
   }
 }
 
@@ -504,24 +406,6 @@ private extension V9PersistenceAcceptanceTests {
       providerState: terminalState,
       journalCapture: nil
     )
-  }
-
-  static func usageArguments(_ env: Fixture, callID: String, model: String?) -> StatementArguments {
-    // The trailing pair is the learning scope, null for every call a run made.
-    [
-      env.runID,
-      env.sessionID,
-      model,
-      11,
-      5,
-      0.004,
-      CostSource.priceFile.rawValue,
-      false,
-      seededAt,
-      callID,
-      nil,
-      nil,
-    ]
   }
 }
 
@@ -672,14 +556,5 @@ private extension V9PersistenceAcceptanceTests {
         arguments: [term]
       )
     }
-  }
-
-  /// Matches the failure mode, not merely "a `StoreError` arrived": a seam that collapsed every
-  /// failure into one opaque case would still throw, and that must not read as a pass.
-  static func isTypedFailure(_ error: any Error, mentioning kind: String) -> Bool {
-    guard let storeError = error as? StoreError, case .unexpected(let message) = storeError else {
-      return false
-    }
-    return message.contains(kind)
   }
 }

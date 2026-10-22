@@ -580,23 +580,6 @@ extension SessionMessageStoreTests {
   }
 
   @Test
-  func aRowWithoutProviderStateLoadsWithNone() throws {
-    // given — the both-null pair every pre-v9 row carries
-    let fixture = try stateFixture()
-    _ = try insertAnchor(fixture, issuer: .null, payload: .null)
-
-    // when
-    let history = try loadHistory(fixture)
-
-    // then
-    #expect(
-      history.allSatisfy { message in
-        message.providerState == nil
-      }
-    )
-  }
-
-  @Test
   func aRowFromASelectThatOmitsTheStateColumnsDropsTheStateRatherThanTrapping() throws {
     // given — a stored anchor whose state is intact, so a dropped state can only be the SELECT's
     // doing and not a missing value

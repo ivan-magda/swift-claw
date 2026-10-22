@@ -358,11 +358,17 @@ struct UsageStoreTests {
     // row must not reach the caller wearing the same "already recorded, nothing to do" face
     let env = try Self.fixture()
 
-    // when / then
-    #expect(throws: StoreError.self) {
+    // when / then — the failure keeps its cause, so a seam that collapsed every failure into one
+    // opaque case would not read as a pass
+    #expect {
       try env.usage.recordUsage(
         Self.usage(callID: "call-orphan", runID: 9999, sessionID: env.sessionID)
       )
+    } throws: { error in
+      guard let storeError = error as? StoreError, case .unexpected(let message) = storeError else {
+        return false
+      }
+      return message.contains("FOREIGN KEY constraint failed")
     }
     #expect(try Self.rowCount(env.queue) == 0)
   }

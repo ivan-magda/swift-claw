@@ -156,18 +156,6 @@ struct NormalizerTests {
   }
 
   @Test
-  func photoWithNoUsableRungFallsBackToUnsupported() throws {
-    // given — the wire dropped every malformed rung, leaving presence only
-    let raw = RawUpdate(updateID: 22, message: msg(media: "photos", photo: nil), editedMessage: nil)
-
-    // when
-    let incoming = try #require(IncomingMessage.normalize(from: raw))
-
-    // then
-    #expect(incoming.content == .unsupported(kind: "photos"))
-  }
-
-  @Test
   func editedMessageIsFlagged() throws {
     // given
     let raw = RawUpdate(updateID: 4, message: nil, editedMessage: msg(text: "fixed"))

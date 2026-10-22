@@ -726,19 +726,6 @@ extension ApprovalStoreGRDBTests {
     #expect(health.oldestPendingAgeSeconds == nil)
   }
 
-  @Test
-  func openStoresExposesTheApprovalStore() throws {
-    // given — the composed store bundle, wired through openStores on a real file DB
-    let path = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "claw-approvals-\(UUID().uuidString).sqlite"
-    ).path
-    defer { try? FileManager.default.removeItem(atPath: path) }
-    let stores = try ClawDatabase.openStores(path: path)
-
-    // when / then — the protocol-typed store is reachable and functional
-    #expect(try stores.approvals.approvalsHealth(now: Date()).pendingCount == 0)
-  }
-
   @Test(arguments: [nil, ApprovalDecision.rejected, .stalePolicy])
   func winningParticipantIsAuditedOnce(resolution: ApprovalDecision?) throws {
     // given

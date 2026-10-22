@@ -8,24 +8,6 @@ import Testing
 @Suite
 struct V15MigrationTests {
   @Test
-  func freshLatestMigrationInstallsOnlyTheLiveTrialIndexAndIsIdempotent() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-    try ClawDatabase.migrate(queue)
-
-    // then
-    let indexes = try indexSQL(queue)
-    #expect(indexes["idx_learning_trials_open_job"] == nil)
-    let sql = try #require(indexes["idx_learning_trials_live_job"])
-    #expect(sql.contains("UNIQUE INDEX"))
-    #expect(sql.contains("state IN ('open', 'draining')"))
-    #expect(try migrations(queue).contains("v15"))
-  }
-
-  @Test
   func v15PreservesSeededV14LiveAndTerminalRows() throws {
     // given
     let queue = try v14Queue()

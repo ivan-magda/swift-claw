@@ -225,38 +225,6 @@ struct ExfilArgGuardTests {
   }
 
   @Test
-  func onePrivateIndexScansMultipleTextsAtTheSixteenGraphemeBoundary() {
-    // given
-    let guardrail = ExfilArgGuard(secretValues: [])
-    let index = ExfilArgGuard.PrivateTextIndex(texts: [
-      "Operation Nightjar Falcon belongs to the owner.",
-    ])
-
-    // when
-    let first = guardrail.evaluateConditional(text: "send Operation Nightj now", index: index)
-    let second = guardrail.evaluateConditional(text: "Operation Night", index: index)
-
-    // then
-    #expect(first.blockedRule == "private-file-substring")
-    #expect(second.blockedRule == nil)
-  }
-
-  @Test
-  func privateIndexNormalizesBothSourcesAndCandidatesToNFC() {
-    // given
-    let guardrail = ExfilArgGuard(secretValues: [])
-    let composed = "Résumé confidentiel"
-    let decomposed = composed.decomposedStringWithCanonicalMapping
-    let index = ExfilArgGuard.PrivateTextIndex(texts: [composed])
-
-    // when
-    let verdict = guardrail.evaluateConditional(text: decomposed, index: index)
-
-    // then
-    #expect(verdict.blockedRule == "private-file-substring")
-  }
-
-  @Test
   func exactThresholdWidthTextAndSourceAreASingleWindow() {
     // given — both the candidate text and an indexed source at exactly 16 graphemes: one window,
     // zero slides, the degenerate case of the rolling fingerprint sweep

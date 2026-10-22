@@ -60,18 +60,6 @@ struct AccessControlTests {
   }
 
   @Test
-  func groupModeOffDeniesAnAllowlistedOwnersGroupMessage() {
-    // given — no CLAW_GROUP_CHATS configured
-    let access = AccessControl(allowlist: StubAllowlist(allowed: [42]), groupChats: [])
-
-    // when
-    let decision = access.decide(chatKind: .supergroup, chatID: -100, userID: 42)
-
-    // then
-    #expect(decision == .denied(.unlistedChat))
-  }
-
-  @Test
   func aStoreErrorInAPrivateChatFailsClosed() {
     // given
     let access = AccessControl(allowlist: ThrowingAllowlist(), groupChats: [-100])

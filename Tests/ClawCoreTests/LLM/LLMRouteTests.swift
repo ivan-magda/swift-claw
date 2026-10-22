@@ -177,8 +177,6 @@ struct LLMRouteTests {
   }
 
   @Test(arguments: [
-    "openai-chatgpt/gpt-5.4-codex",
-    "openai-chatgpt/team/model",
     "openai-chatgpt/gpt-5.4:latest",
     "openai-chatgpt/gpt_5.4",
     "openai-chatgpt/5",

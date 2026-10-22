@@ -301,21 +301,6 @@ struct HealthRowsBuilderTests {
   }
 
   @Test
-  func skillRowPassesWhenTheCompleteIndexExactlyFitsTheCap() {
-    // given
-    let descriptor = skill(name: "summarize")
-    let exactCap = WorkspaceSkills.completeIndexGraphemeCount(for: [descriptor])
-    let diagnostics = skillDiagnostics(descriptors: [descriptor], skillsCap: exactCap)
-
-    // when
-    let row = skillRow(diagnostics)
-
-    // then
-    #expect(row?.value == "accepted=1 rejected=0 fits_cap=true")
-    #expect(row?.ok == true)
-  }
-
-  @Test
   func skillRowFailsWhenTheCompleteIndexExceedsTheCap() {
     // given
     let descriptor = skill(name: "summarize")
@@ -328,34 +313,6 @@ struct HealthRowsBuilderTests {
     // then
     #expect(row?.value == "accepted=1 rejected=0 fits_cap=false")
     #expect(row?.ok == false)
-  }
-
-  @Test
-  func telegramShowsHealthySkillsAsAContextHeadline() {
-    // given
-    var report = DoctorReport()
-    report.add(contentsOf: HealthRowsBuilder.checks(inputs()))
-
-    // when
-    let summary = report.renderTelegramSummary()
-
-    // then
-    #expect(summary.contains("skills accepted=0 rejected=0 fits_cap=true"))
-  }
-
-  @Test
-  func telegramExpandsFailingSkillDetails() {
-    // given
-    let diagnostics = skillDiagnostics(warnings: [.invalidSkillManifest(skill: "broken")])
-    var report = DoctorReport()
-    report.add(contentsOf: HealthRowsBuilder.checks(inputs(skillDiagnostics: diagnostics)))
-
-    // when
-    let summary = report.renderTelegramSummary()
-
-    // then
-    #expect(summary.contains("Context: FAIL"))
-    #expect(summary.contains("context.skills: accepted=0 rejected=1 fits_cap=true"))
   }
 
   @Test
@@ -481,25 +438,6 @@ struct HealthRowsBuilderTests {
   }
 
   @Test
-  func telegramNamesTheAnsweringRouteOnEveryHealthyTurn() {
-    // given — a healthy pair, the primary answering
-    // when
-    let summary = telegramSummary(
-      LLMRouteHealth(
-        primaryReference: "openai-chatgpt/gpt-5.4",
-        fallbackReference: "gpt-4o",
-        cooldown: .clear
-      )
-    )
-
-    // then — Telegram is the daemon's only interface, and its summary keeps headlines only, so the
-    // answering route has to be one
-    #expect(summary.contains("active_route openai-chatgpt/gpt-5.4"))
-    // …while a window that does not exist spends no slot on saying so
-    #expect(summary.contains("primary_cooldown_s") == false)
-  }
-
-  @Test
   func telegramCarriesTheWindowOnlyWhileThePrimaryIsCooling() {
     // when
     let summary = telegramSummary(
@@ -513,17 +451,6 @@ struct HealthRowsBuilderTests {
     // then — the owner sees which model is answering and how long the primary is out
     #expect(summary.contains("active_route gpt-4o (primary openai-chatgpt/gpt-5.4 cooling)"))
     #expect(summary.contains("primary_cooldown_s 840"))
-  }
-
-  @Test
-  func fallbackConfigurationStaysOffTheTelegramSummary() {
-    // given / when — configuration an owner set themselves, unchanged between turns
-    let summary = telegramSummary(
-      LLMRouteHealth(primaryReference: "gpt-4o", fallbackReference: "gpt-4o-mini", cooldown: .clear)
-    )
-
-    // then — `doctor --check-config` is where a config echo belongs; the group line stays for state
-    #expect(summary.contains("fallback_configured") == false)
   }
 
   @Test

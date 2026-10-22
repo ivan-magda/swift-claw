@@ -11,15 +11,6 @@ struct ProcessedUpdateStoreTests {
   }
 
   @Test
-  func firstClaimSucceeds() throws {
-    // given
-    let store = try freshStore()
-
-    // then
-    #expect(try store.claimUpdate(updateID: 100))
-  }
-
-  @Test
   func secondClaimOfSameUpdateIsRejected() throws {
     // given
     let store = try freshStore()

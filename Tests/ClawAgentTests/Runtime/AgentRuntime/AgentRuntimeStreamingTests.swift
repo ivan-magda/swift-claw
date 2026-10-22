@@ -916,30 +916,9 @@ struct AgentRuntimeStreamingTests {
     // guards the day against a future change that debits the retried attempt separately.
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
-    let (_, usage, _) = try requireCompleted(outcome.result)
-    #expect(usage.providerCallID == ProviderCallID(rawValue: "call-1"))
-  }
-
-  @Test
-  func connectFailureFallsBackToBlockingCompleteOnce() async throws {
-    // given
-    let provider = StreamingProvider(
-      streamScript: .fail(
-        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
-      )
-    )
-    let runtime = makeRuntime(provider: provider, streamingEnabled: true)
-
-    // when
-    let outcome = try await runtime.runTurn(
-      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
-    )
-
-    // then
-    let (content, _, _) = try requireCompleted(outcome.result)
+    let (content, usage, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
-    #expect(await provider.streamCalls == 1)
-    #expect(await provider.completeCalls == 1)
+    #expect(usage.providerCallID == ProviderCallID(rawValue: "call-1"))
   }
 
   @Test

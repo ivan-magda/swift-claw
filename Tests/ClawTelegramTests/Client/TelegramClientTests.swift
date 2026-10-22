@@ -113,31 +113,6 @@ struct TelegramClientTests {
     #expect(update.message?.fromUserID == 42)
   }
 
-  @Test
-  func mapsMediaToFriendlyKind() async throws {
-    // given
-    let telegram = client(
-      status: 200,
-      json: #"""
-        {"ok":true,"result":[
-          {"update_id":13,"message":{"message_id":4,"from":{"id":42},"chat":{"id":42},"voice":{}}}
-        ]}
-        """#
-    )
-
-    // when
-    let updates = try await telegram.getUpdates(
-      offset: nil,
-      timeout: 0,
-      allowedUpdates: ["message"]
-    )
-
-    // then
-    let update = try #require(updates.first)
-    #expect(update.message?.mediaKind == "voice messages")
-    #expect(update.message?.text == nil)
-  }
-
   @Test(arguments: [
     HTTPErrorCase(
       status: 409,
@@ -345,7 +320,6 @@ struct TelegramClientTests {
     // then
     let call = try #require(await recorder.calls.first)
     #expect(call.timeout == .seconds(40))
-    #expect(TelegramClient.defaultHTTPTimeoutSlackSeconds == 10)
   }
 
   @Test

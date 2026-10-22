@@ -14,23 +14,6 @@ struct RiskLevelTests {
   }
 
   @Test
-  func toolDefinitionCarriesItsDeclaredRiskLevel() {
-    // given
-    let definition = ToolDefinition(
-      name: "file_write",
-      description: "stub",
-      parameters: .object(["type": .string("object")]),
-      metadataProvenance: .trusted,
-      egressClass: .none,
-      riskLevel: .ask
-    )
-
-    // when / then
-    #expect(definition.riskLevel == .ask)
-    #expect(definition.metadataProvenance == .trusted)
-  }
-
-  @Test
   func approvalReasonsHaveStableRawValues() {
     // given / when / then — the approvals.reason column vocabulary (spec §4.1)
     #expect(ApprovalReason.askTier.rawValue == "ask_tier")

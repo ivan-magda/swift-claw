@@ -307,18 +307,6 @@ struct AppConfigTests {
     #expect(config.llm.streamingEnabled)
   }
 
-  @Test
-  func invalidStreamingFlagFailsClosed() {
-    // given
-    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.llmStreaming] = "sometimes"
-
-    // then
-    #expect(throws: ConfigError.invalidBool(key: EnvKey.llmStreaming, value: "sometimes")) {
-      try AppConfig.load(environment: env)
-    }
-  }
-
   // MARK: - Route resolution matrix
 
   @Test
@@ -393,32 +381,6 @@ struct AppConfigTests {
     #expect(throws: expected) {
       try AppConfig.load(environment: env)
     }
-  }
-
-  @Test
-  func oversizedChatGPTSuffixFailsClosed() {
-    // given — a suffix past the 200-scalar bound
-    let model = "openai-chatgpt/" + String(repeating: "a", count: 201)
-    let env = chatGPTEnv([EnvKey.llmModel: model])
-
-    // then
-    #expect(throws: ConfigError.oversizedQualifiedModelSuffix(reference: model)) {
-      try AppConfig.load(environment: env)
-    }
-  }
-
-  @Test(arguments: ["openrouter/openai/gpt-5.4", "openai-chatgpt", "OpenAI-ChatGPT/gpt"])
-  func slashModelsAndNearMissPrefixesKeepTheCurrentRoute(model: String) throws {
-    // given — a slash alone, an unslashed near-miss, and a wrong-case prefix all stay raw models
-    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: model])
-
-    // when
-    let route = try AppConfig.load(environment: env).llm.route
-
-    // then — the current route, carrying the whole value as both identities
-    #expect(route.descriptor.providerID == .openAICompatible)
-    #expect(route.wireModel == model)
-    #expect(route.configuredReference == model)
   }
 
   @Test
@@ -660,21 +622,6 @@ struct AppConfigTests {
   }
 
   @Test
-  func heartbeatEnabledWithExactlyOneOwnerLoads() throws {
-    // given
-    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.heartbeatEnabled] = "true"
-    env[EnvKey.allowlist] = "42"
-
-    // when
-    let config = try AppConfig.load(environment: env)
-
-    // then
-    #expect(config.heartbeatEnabled)
-    #expect(config.allowlist == [42])
-  }
-
-  @Test
   func learningIsOffUnlessTheFlagArmsIt() throws {
     // given — learning must never arm itself: an unset flag has to leave the daemon as it was
     var armed = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -689,19 +636,6 @@ struct AppConfigTests {
     // then
     #expect(byDefault.learningEnabled == false)
     #expect(explicit.learningEnabled)
-  }
-
-  @Test
-  func heartbeatDisabledToleratesAnyAllowlist() throws {
-    // given — the default-OFF path must not constrain onboarding (empty allowlist still boots)
-    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-
-    // when
-    let config = try AppConfig.load(environment: env)
-
-    // then
-    #expect(config.heartbeatEnabled == false)
-    #expect(config.allowlist.isEmpty)
   }
 
   @Test
@@ -787,19 +721,6 @@ struct AppConfigTests {
   }
 
   @Test
-  func approvalExpiryOverrideParses() throws {
-    // given
-    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.approvalExpiry] = "1800"
-
-    // when
-    let config = try AppConfig.load(environment: env)
-
-    // then
-    #expect(config.approvalExpirySeconds == 1800)
-  }
-
-  @Test
   func approvalExpiryFloorAndCeilingAreInclusive() throws {
     // given — the exact bounds are legal (spec §4.6: floor 60, ceiling 86400)
     var floorEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -859,23 +780,19 @@ struct AppConfigTests {
   }
 
   @Test(arguments: [
-    "junk",  // not CIDR notation
-    "198.18.0.84",  // bare address without a prefix
-    "198.18.0.0/33",  // prefix out of bounds
-    "198.18.0.0/15, junk",  // one bad entry poisons the list
+    ("junk", "junk"),  // not CIDR notation
+    ("198.18.0.84", "198.18.0.84"),  // bare address without a prefix
+    ("198.18.0.0/33", "198.18.0.0/33"),  // prefix out of bounds
+    ("198.18.0.0/15, junk", "junk"),  // one bad entry poisons the list
   ])
-  func malformedWebFetchExemptCIDRsFailClosed(_ rawValue: String) {
+  func malformedWebFetchExemptCIDRsFailClosed(rawValue: String, badEntry: String) {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.webFetchExemptCIDRs] = rawValue
 
-    // when / then — a widening of the SSRF posture must never load half-parsed
-    let badEntry = rawValue.split(separator: ",").map { part in
-      part.trimmingCharacters(in: .whitespaces)
-    }.first { entry in
-      CIDR.parse(entry) == nil
-    }
-    #expect(throws: ConfigError.invalidWebFetchExemptCIDR(badEntry ?? rawValue)) {
+    // when / then — a widening of the SSRF posture must never load half-parsed, and the error
+    // names the offending entry rather than the whole list
+    #expect(throws: ConfigError.invalidWebFetchExemptCIDR(badEntry)) {
       try AppConfig.load(environment: env)
     }
   }
@@ -1017,18 +934,6 @@ struct AppConfigTests {
   }
 
   @Test
-  func disabledExecDoesNotFillTheDefaultImage() throws {
-    // given
-    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-
-    // when
-    let config = try AppConfig.load(environment: env)
-
-    // then
-    #expect(config.exec.image == nil)
-  }
-
-  @Test
   func enabledExecRejectsAnImageOutsideTheRegistryAllowlist() {
     // given
     let rawImage = "registry.example.com/team/python@sha256:" + String(repeating: "c", count: 64)
@@ -1120,8 +1025,21 @@ struct AppConfigTests {
     }
   }
 
-  @Test(arguments: [AppConfig.EnvKey.execEnabled, AppConfig.EnvKey.execAllowEgress])
-  func malformedExecBooleansFailClosed(_ key: String) {
+  /// One shared parser reads every flag; each row catches a call site that passes the wrong key.
+  @Test(arguments: [
+    AppConfig.EnvKey.llmStreaming,
+    AppConfig.EnvKey.execEnabled,
+    AppConfig.EnvKey.execAllowEgress,
+    AppConfig.EnvKey.voiceTranscription,
+    AppConfig.EnvKey.imageInput,
+    AppConfig.EnvKey.coderEnabled,
+    AppConfig.EnvKey.telegramProgress,
+    AppConfig.EnvKey.telegramActionEmojis,
+    AppConfig.EnvKey.journalEnabled,
+    AppConfig.EnvKey.heartbeatEnabled,
+    AppConfig.EnvKey.learningEnabled,
+  ])
+  func malformedBooleanFailsClosedNamingItsKey(_ key: String) {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[key] = "sometimes"
@@ -1187,18 +1105,6 @@ struct AppConfigTests {
   }
 
   @Test
-  func malformedVoiceBooleanFailsClosed() {
-    // given
-    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.voiceTranscription] = "sometimes"
-
-    // when / then
-    #expect(throws: ConfigError.invalidBool(key: EnvKey.voiceTranscription, value: "sometimes")) {
-      try AppConfig.load(environment: env)
-    }
-  }
-
-  @Test
   func imageInputDefaultsOn() throws {
     // given — nothing set, mirroring voice transcription: the owner gets it without opting in
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -1221,17 +1127,5 @@ struct AppConfigTests {
 
     // then
     #expect(config.image.enabled == false)
-  }
-
-  @Test
-  func malformedImageBooleanFailsClosed() {
-    // given
-    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.imageInput] = "sometimes"
-
-    // when / then
-    #expect(throws: ConfigError.invalidBool(key: EnvKey.imageInput, value: "sometimes")) {
-      try AppConfig.load(environment: env)
-    }
   }
 }

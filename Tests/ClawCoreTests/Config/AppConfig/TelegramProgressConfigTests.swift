@@ -6,7 +6,7 @@ import Testing
 @Suite
 struct TelegramProgressConfigTests {
   @Test
-  func telegramProgressDefaultsOnAndRejectsInvalidValues() throws {
+  func telegramProgressDefaultsOnAndParsesAnOptOut() throws {
     // given
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -27,13 +27,5 @@ struct TelegramProgressConfigTests {
     // then
     #expect(defaultConfig.telegramProgressEnabled)
     #expect(disabledConfig.telegramProgressEnabled == false)
-    #expect(throws: ConfigError.invalidBool(key: AppConfig.EnvKey.telegramProgress, value: "maybe"))
-    {
-      _ = try AppConfig.load(
-        environment: environment.merging([AppConfig.EnvKey.telegramProgress: "maybe"]) { _, new in
-          new
-        }
-      )
-    }
   }
 }

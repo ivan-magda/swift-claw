@@ -33,20 +33,6 @@ struct DoctorReportTests {
   }
 
   @Test
-  func textRenderShowsGroupHeaderAndKeys() {
-    // given
-    var report = DoctorReport()
-    report.add(key: "config", value: "OK", group: .config)
-
-    // when
-    let text = report.renderText()
-
-    // then
-    #expect(text.contains("Config"))
-    #expect(text.contains("config"))
-  }
-
-  @Test
   func passingGroupRendersRollupWithoutRowMarkers() {
     // given
     var report = DoctorReport()
@@ -279,23 +265,6 @@ struct DoctorReportTests {
   }
 
   @Test
-  func jsonIncludesGroupAndTopLevelOk() {
-    // given
-    var report = DoctorReport()
-    report.add(key: "config", value: "OK", group: .config)
-    report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
-
-    // when
-    let json = report.renderJSON()
-
-    // then
-    #expect(json.contains("\"config\""))
-    #expect(json.contains("\"group\""))
-    #expect(json.contains("\"spend\""))
-    #expect(json.contains("\"ok\""))
-  }
-
-  @Test
   func jsonPreservesEverySkillHealthField() throws {
     // given
     let diagnostics = SkillDiagnostics(
@@ -314,7 +283,8 @@ struct DoctorReportTests {
       }
     )
 
-    // then
+    // then: the top-level verdict rolls up the failing row, not just the row's own flag
+    #expect(payload.ok == false)
     #expect(row.value.contains("accepted=0"))
     #expect(row.value.contains("rejected=1"))
     #expect(row.value.contains("fits_cap=true"))
@@ -325,5 +295,6 @@ struct DoctorReportTests {
 }
 
 private struct DoctorJSONPayload: Decodable {
+  let ok: Bool
   let checks: [DoctorReport.Check]
 }

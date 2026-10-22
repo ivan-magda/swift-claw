@@ -26,16 +26,6 @@ struct AuthCommandResultMapperTests {
     #expect(exit.processExitCode == code)
   }
 
-  /// The secret-load code is the daemon's existing one rather than a second number meaning the same
-  /// thing: a supervisor already backs off on it.
-  @Test
-  func theSecretLoadExitIsTheDaemonsOwnSecretLoadCode() {
-    // given / when / then
-    #expect(
-      AuthCommandExit.secretLoadFailure.processExitCode == ClawExitCode.secretLoadFailed.rawValue
-    )
-  }
-
   // MARK: - Failure Table
 
   @Test

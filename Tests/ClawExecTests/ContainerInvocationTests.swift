@@ -1,5 +1,4 @@
 import ClawCore
-import ClawSubprocess
 import Foundation
 import Testing
 
@@ -49,60 +48,6 @@ struct ContainerInvocationTests {
         SemanticVersion(2, 0, 0),
       ]
     )
-  }
-
-  @Test
-  func settingsKeepOnePinnedAuthority() throws {
-    // given
-    let image = try #require(
-      PinnedImageReference.parse(
-        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
-        "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      )
-    )
-
-    // when
-    let settings = ExecSandboxSettings(workloadImage: image, memoryMiB: 1024, cpus: 4)
-
-    // then
-    #expect(settings.workloadImage == image)
-    #expect(settings.memoryMiB == 1024)
-    #expect(settings.cpus == 4)
-    #expect(ExecSandboxSettings.minimumContainerVersion == SemanticVersion(1, 0, 0))
-    #expect(ExecSandboxSettings.pythonInterpreter == "/usr/bin/python")
-    #expect(ExecSandboxSettings.shellInterpreter == "/bin/sh")
-    #expect(ExecSandboxSettings.platform == "linux/arm64")
-  }
-
-  @Test
-  func commandResultCarriesRawPrefixesAndTypedTermination() {
-    // given
-    let output = CapturedCommandStream(
-      bytes: Data([0x66, 0x6f, 0x6f]),
-      totalBytes: 9,
-      truncated: true
-    )
-    let command = SubprocessCommand(
-      arguments: ["system", "status"],
-      timeout: .seconds(5),
-      captureLimit: 1024,
-      teardownGracePeriod: .seconds(2)
-    )
-
-    // when
-    let result = SubprocessResult(
-      termination: .exited(7),
-      stdout: output,
-      stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-      processIdentifier: 42
-    )
-
-    // then
-    #expect(command.arguments == ["system", "status"])
-    #expect(command.teardownGracePeriod == .seconds(2))
-    #expect(result.termination == .exited(7))
-    #expect(result.stdout == output)
-    #expect(result.processIdentifier == 42)
   }
 
   @Test

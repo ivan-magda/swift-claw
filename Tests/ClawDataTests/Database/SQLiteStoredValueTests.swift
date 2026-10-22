@@ -10,7 +10,6 @@ struct SQLiteStoredValueTests {
   func exactStorageClassMatrix() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
     let row = try queue.read { db in
       try #require(
         try Row.fetchOne(
@@ -41,88 +40,69 @@ struct SQLiteStoredValueTests {
     #expect(nullableInt.value == nil)
     #expect(nullableDouble.value == nil)
     #expect(nullableString.value == nil)
-    #expect(nonnullableDecodersRejectNull(in: row))
-    #expect(nullableDecodersRejectMissingColumn(in: row))
-    #expect(nullableDecodersRejectWrongStorageClass(in: row))
-    #expect(booleanDomainIsExact(in: row))
+    expectNonnullableDecodersRejectNull(in: row)
+    expectNullableDecodersRejectMissingColumn(in: row)
+    expectNullableDecodersRejectWrongStorageClass(in: row)
+    expectBooleanDomainIsExact(in: row)
     #expect(SQLiteStoredValue.data(in: row, column: "blob_value") == Data([0x01]))
     #expect(SQLiteStoredValue.data(in: row, column: "text_value") == nil)
     #expect(SQLiteStoredValue.int64(in: row, column: "one_value") == 1)
     #expect(SQLiteStoredValue.int(in: row, column: "one_value") == 1)
-    #expect(nativeIntsRespectPlatformRange(in: row))
+    expectNativeIntsRespectPlatformRange(in: row)
     #expect(SQLiteStoredValue.string(in: row, column: "text_value") == "1")
-    #expect(doublesUseNumericStorageClasses(in: row))
+    expectDoublesUseNumericStorageClasses(in: row)
   }
 }
 
 // MARK: - Stored Value Assertions
 
 private extension SQLiteStoredValueTests {
-  func nonnullableDecodersRejectNull(in row: Row) -> Bool {
-    SQLiteStoredValue.int64(in: row, column: "null_value") == nil
-      && SQLiteStoredValue.int(in: row, column: "null_value") == nil
-      && isAbsent(SQLiteStoredValue.boolean(in: row, column: "null_value"))
-      && SQLiteStoredValue.double(in: row, column: "null_value") == nil
-      && SQLiteStoredValue.string(in: row, column: "null_value") == nil
-      && SQLiteStoredValue.data(in: row, column: "null_value") == nil
+  func expectNonnullableDecodersRejectNull(in row: Row) {
+    #expect(SQLiteStoredValue.int64(in: row, column: "null_value") == nil)
+    #expect(SQLiteStoredValue.int(in: row, column: "null_value") == nil)
+    #expect(SQLiteStoredValue.boolean(in: row, column: "null_value") == nil)
+    #expect(SQLiteStoredValue.double(in: row, column: "null_value") == nil)
+    #expect(SQLiteStoredValue.string(in: row, column: "null_value") == nil)
+    #expect(SQLiteStoredValue.data(in: row, column: "null_value") == nil)
   }
 
-  func nullableDecodersRejectMissingColumn(in row: Row) -> Bool {
-    isAbsent(SQLiteStoredValue.nullableInt64(in: row, column: "missing_value"))
-      && isAbsent(SQLiteStoredValue.nullableInt(in: row, column: "missing_value"))
-      && isAbsent(SQLiteStoredValue.nullableDouble(in: row, column: "missing_value"))
-      && isAbsent(SQLiteStoredValue.nullableString(in: row, column: "missing_value"))
+  func expectNullableDecodersRejectMissingColumn(in row: Row) {
+    #expect(SQLiteStoredValue.nullableInt64(in: row, column: "missing_value") == nil)
+    #expect(SQLiteStoredValue.nullableInt(in: row, column: "missing_value") == nil)
+    #expect(SQLiteStoredValue.nullableDouble(in: row, column: "missing_value") == nil)
+    #expect(SQLiteStoredValue.nullableString(in: row, column: "missing_value") == nil)
   }
 
-  func nullableDecodersRejectWrongStorageClass(in row: Row) -> Bool {
-    isAbsent(SQLiteStoredValue.nullableInt64(in: row, column: "text_value"))
-      && isAbsent(SQLiteStoredValue.nullableInt(in: row, column: "text_value"))
-      && isAbsent(SQLiteStoredValue.nullableDouble(in: row, column: "text_value"))
-      && isAbsent(SQLiteStoredValue.nullableString(in: row, column: "blob_value"))
+  func expectNullableDecodersRejectWrongStorageClass(in row: Row) {
+    #expect(SQLiteStoredValue.nullableInt64(in: row, column: "text_value") == nil)
+    #expect(SQLiteStoredValue.nullableInt(in: row, column: "text_value") == nil)
+    #expect(SQLiteStoredValue.nullableDouble(in: row, column: "text_value") == nil)
+    #expect(SQLiteStoredValue.nullableString(in: row, column: "blob_value") == nil)
   }
 
-  func booleanDomainIsExact(in row: Row) -> Bool {
-    guard case .falseValue? = SQLiteStoredValue.boolean(in: row, column: "zero_value"),
-          case .trueValue? = SQLiteStoredValue.boolean(in: row, column: "one_value")
-    else {
-      return false
-    }
-    return isAbsent(SQLiteStoredValue.boolean(in: row, column: "two_value"))
-      && isAbsent(SQLiteStoredValue.boolean(in: row, column: "text_value"))
+  func expectBooleanDomainIsExact(in row: Row) {
+    #expect(SQLiteStoredValue.boolean(in: row, column: "zero_value") == .falseValue)
+    #expect(SQLiteStoredValue.boolean(in: row, column: "one_value") == .trueValue)
+    #expect(SQLiteStoredValue.boolean(in: row, column: "two_value") == nil)
+    #expect(SQLiteStoredValue.boolean(in: row, column: "text_value") == nil)
   }
 
-  func nativeIntsRespectPlatformRange(in row: Row) -> Bool {
+  func expectNativeIntsRespectPlatformRange(in row: Row) {
     let expected = Int(exactly: Int64.max)
-    let decoded = SQLiteStoredValue.int(in: row, column: "maximum_integer")
+    #expect(SQLiteStoredValue.int(in: row, column: "maximum_integer") == expected)
     let nullable = SQLiteStoredValue.nullableInt(in: row, column: "maximum_integer")
-    switch (expected, nullable) {
-    case (.some(let expected), .some(let nullable)):
-      return decoded == expected && nullable.value == expected
-    case (nil, nil):
-      return decoded == nil
-    default:
-      return false
+    if let expected {
+      #expect(nullable?.value == expected)
+    } else {
+      #expect(nullable == nil)
     }
   }
 
-  func doublesUseNumericStorageClasses(in row: Row) -> Bool {
-    guard let nullableInteger = SQLiteStoredValue.nullableDouble(in: row, column: "one_value"),
-          let nullableReal = SQLiteStoredValue.nullableDouble(in: row, column: "real_value")
-    else {
-      return false
-    }
-    return SQLiteStoredValue.double(in: row, column: "one_value") == 1
-      && SQLiteStoredValue.double(in: row, column: "real_value") == 1.5
-      && SQLiteStoredValue.double(in: row, column: "text_value") == nil
-      && nullableInteger.value == 1 && nullableReal.value == 1.5
-  }
-
-  func isAbsent<Value>(_ value: Value?) -> Bool {
-    switch value {
-    case nil:
-      true
-    case .some:
-      false
-    }
+  func expectDoublesUseNumericStorageClasses(in row: Row) {
+    #expect(SQLiteStoredValue.double(in: row, column: "one_value") == 1)
+    #expect(SQLiteStoredValue.double(in: row, column: "real_value") == 1.5)
+    #expect(SQLiteStoredValue.double(in: row, column: "text_value") == nil)
+    #expect(SQLiteStoredValue.nullableDouble(in: row, column: "one_value")?.value == 1)
+    #expect(SQLiteStoredValue.nullableDouble(in: row, column: "real_value")?.value == 1.5)
   }
 }

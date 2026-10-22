@@ -9,21 +9,7 @@ struct BudgetBreakerTests {
   /// A fixed instant so the per-UTC-day latch is deterministic across calls.
   private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
-  @Test("the daily-USD trip notifies once, then latches for the rest of the UTC day")
-  func notifiesOnceWhenDailyUSDCapIsTripped() async {
-    // given
-    let breaker = BudgetBreaker(budget: .default)
-
-    // when
-    let first = await breaker.shouldNotifyTrip(todayTokens: 0, todayUSD: 10.0, now: now)
-    let second = await breaker.shouldNotifyTrip(todayTokens: 0, todayUSD: 10.0, now: now)
-
-    // then
-    #expect(first)
-    #expect(!second)
-  }
-
-  @Test("the latch resets on the next UTC day, so the trip notifies again")
+  @Test("the daily-USD trip notifies once, latches for the UTC day, then resets on the next")
   func notifiesAgainAfterUTCDayRollover() async {
     // given
     let breaker = BudgetBreaker(budget: .default)

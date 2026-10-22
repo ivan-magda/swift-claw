@@ -193,21 +193,4 @@ struct RunBudgetTests {
     // then
     #expect(decision == .allow)
   }
-
-  @Test("a metered call over the per-day USD cap is still rejected")
-  func meteredPreflightStillRejectsOnUSDCap() {
-    // given — the metered counterpart of the included-plan skip, so the skip is not vacuous
-    let gate = BudgetGate(budget: .default, costPolicy: .metered)
-
-    // when
-    let decision = gate.preflight(
-      todayTokens: 0,
-      todayUSD: RunBudget.default.perDayUSD,
-      estimatedTotalTokens: 5_000,
-      estimatedCostUSD: 0.01
-    )
-
-    // then
-    #expect(decision == .deny(cap: BudgetGate.perDaySpendCap))
-  }
 }

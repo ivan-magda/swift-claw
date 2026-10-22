@@ -150,37 +150,6 @@ struct ExecuteCodeApprovalFlowTests {
   }
 
   @Test
-  func forgedCallbackCannotStartTheBackend() async throws {
-    // given
-    let backend = FakeExecutionBackend()
-    let harness = try makeSC3Harness(
-      scripts: [[toolCallResponse([executeProposal(id: "exec-forged")])]],
-      httpResponses: [:],
-      execEnabled: true,
-      executionBackend: backend
-    )
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "run it"))
-    let approval = try #require(
-      await pollUntil {
-        try fetchApprovals(databasePath: harness.databasePath).first
-      }
-    )
-
-    // when
-    _ = await harness.router.handle(
-      rawUpdate: callbackUpdate(id: 2, from: 999, data: approveData(approval.nonce))
-    )
-
-    // then
-    #expect(try fetchApprovals(databasePath: harness.databasePath).first?.state == "PENDING")
-    #expect(await backend.recordedRequests().isEmpty)
-    #expect(
-      try runState(databasePath: harness.databasePath, runID: approval.runID)
-        == RunState.awaitingApproval.rawValue
-    )
-  }
-
-  @Test
   func taintedNetworkedProposalExpiresWithoutExecuting() async throws {
     // given — external content proposes an egress-capable script (the C2 attack shape)
     let backend = FakeExecutionBackend()

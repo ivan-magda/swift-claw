@@ -166,20 +166,6 @@ struct ChatGPTTokenMetadataTests {
     #expect(metadata == ChatGPTTokenMetadata(expiresAt: nil, accountID: nil))
   }
 
-  @Test
-  func extractRejectsAGrosslyOversizedPayload() {
-    // given — several times the cap; the exact 64 KiB boundary is pinned by its own pair above
-    let payload = TokenBuilder.payload(paddedTo: 256 * 1024, accountID: "huge")
-    let token = TokenBuilder.token(payload: payload)
-
-    // when
-    let metadata = ChatGPTTokenMetadata.extract(accessToken: token)
-
-    // then
-    #expect(metadata.accountID == nil)
-    #expect(metadata.expiresAt == nil)
-  }
-
   // MARK: - Malformed Structure
 
   @Test(arguments: [

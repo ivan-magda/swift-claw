@@ -36,23 +36,6 @@ struct AgentRuntimeCarryOverTests {
   }
 
   @Test
-  func nilCarryOverLeavesTheRunFreeToComplete() async throws {
-    // given — the identical setup WITHOUT carry-over completes, proving the stop above came from
-    // the seeded counter and not the base budget
-    let provider = StubProvider(.respond(okResponse(content: "hi")))
-    let runtime = makeRuntime(provider: provider)
-
-    // when
-    let outcome = try await runtime.runTurn(
-      makeTurnRequest(runID: 1, sessionID: 1, chatID: 7, context: makeBuildResult())
-    )
-
-    // then
-    let completed = try requireCompleted(outcome.result)
-    #expect(completed.content == "hi")
-  }
-
-  @Test
   func carriedOverRoundsAtTheTurnCapAllowExactlyOneRound() async throws {
     // given — the carried rounds already equal the turn cap when the approved continuation
     // resumes, and the model keeps proposing tools

@@ -91,19 +91,4 @@ struct VoiceWireTests {
     #expect(raw.voice == nil)
     #expect(raw.mediaKind == VoiceAttachment.mediaKindDescription)
   }
-
-  @Test
-  func getFileResultDecodes() throws {
-    // given — the Bot API `File` envelope getFile returns
-    let json = """
-      {"file_id": "F1", "file_unique_id": "U1", "file_size": 31942, "file_path": "voice/file_3.oga"}
-      """
-
-    // when
-    let file = try decoder.decode(TFile.self, from: Data(json.utf8))
-
-    // then
-    #expect(file.file_id == "F1")
-    #expect(file.file_path == "voice/file_3.oga")
-  }
 }

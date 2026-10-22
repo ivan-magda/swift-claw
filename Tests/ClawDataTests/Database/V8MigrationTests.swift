@@ -6,14 +6,6 @@ import Testing
 
 @Suite
 struct V8MigrationTests {
-  private func columnNames(_ queue: DatabaseQueue, table: String) throws -> [String] {
-    try queue.read { db in
-      try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { row in
-        row["name"] as String
-      }
-    }
-  }
-
   /// Seeds one session + one run via raw SQL so approvals rows have valid FK targets.
   private func seedSessionAndRun(_ queue: DatabaseQueue, state: String = "RUNNING") throws {
     try queue.write { db in
@@ -58,7 +50,7 @@ struct V8MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then — the required spec §4.1 columns (superset; order and extras not pinned)
-    let approvalColumns = Set(try columnNames(queue, table: "approvals"))
+    let approvalColumns = Set(try SchemaInspection.columnNames(queue, table: "approvals"))
     #expect(
       approvalColumns.isSuperset(of: [
         "id",
@@ -81,33 +73,10 @@ struct V8MigrationTests {
         "resolved_ts",
       ])
     )
-    #expect(try columnNames(queue, table: "runs").contains("policy_version"))
-    #expect(try columnNames(queue, table: "sessions").contains("has_private_data"))
-    let outboundColumns = Set(try columnNames(queue, table: "outbound_deliveries"))
+    #expect(try SchemaInspection.columnNames(queue, table: "runs").contains("policy_version"))
+    #expect(try SchemaInspection.columnNames(queue, table: "sessions").contains("has_private_data"))
+    let outboundColumns = Set(try SchemaInspection.columnNames(queue, table: "outbound_deliveries"))
     #expect(outboundColumns.isSuperset(of: ["approval_id", "reply_markup"]))
-  }
-
-  @Test
-  func pendingPerRunIndexIsUniqueAndPartial() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-
-    // then — UNIQUE + WHERE in sqlite_master (the V6 partial-index idiom)
-    let indexSQL = try queue.read { db in
-      try String.fetchOne(
-        db,
-        sql: """
-          SELECT sql FROM sqlite_master
-          WHERE type = 'index' AND name = 'index_approvals_pending_run'
-          """
-      )
-    }
-    #expect(indexSQL?.localizedCaseInsensitiveContains("unique") == true)
-    #expect(indexSQL?.localizedCaseInsensitiveContains("where") == true)
-    #expect(indexSQL?.contains("run_id") == true)
   }
 
   @Test
@@ -121,10 +90,12 @@ struct V8MigrationTests {
     }
 
     // when / then — a second PENDING row for the same run violates the partial UNIQUE index
-    #expect(throws: (any Error).self) {
+    #expect {
       try queue.write { db in
         try self.insertApproval(db, runID: 1, nonce: "nonce-b")
       }
+    } throws: { error in
+      SchemaInspection.isConstraintViolation(error, mentioning: "UNIQUE")
     }
 
     // and a RESOLVED row does not block a fresh PENDING one (the index is partial)
@@ -149,10 +120,12 @@ struct V8MigrationTests {
     }
 
     // when / then
-    #expect(throws: (any Error).self) {
+    #expect {
       try queue.write { db in
         try self.insertApproval(db, runID: 1, nonce: "nonce-a")
       }
+    } throws: { error in
+      SchemaInspection.isConstraintViolation(error, mentioning: "UNIQUE")
     }
   }
 

@@ -172,7 +172,6 @@ let package = Package(
         "ClawData",
         "ClawCore",
         "ClawTestSupport",
-        .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "GRDB", package: "GRDB.swift"),
       ]
     ),
