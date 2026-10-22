@@ -1,7 +1,6 @@
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Logging
 import Testing
 
 @testable import ClawMCP
@@ -154,10 +153,7 @@ private extension MCPTransportLifecycleTests {
     http: any HTTPExecuting & HTTPStreaming
   ) throws -> MCPStreamableHTTPTransport {
     let config = try MCPServerConfig(name: "test", url: "https://mcp.example.com/mcp")
-    let logger = Logger(label: "test.silent") { _ in
-      SwiftLogNoOpLogHandler()
-    }
-    return MCPStreamableHTTPTransport(server: config, http: http, logger: logger)
+    return MCPStreamableHTTPTransport(server: config, http: http, logger: TestLog.silent)
   }
 
   static func joinHeldDisconnect(

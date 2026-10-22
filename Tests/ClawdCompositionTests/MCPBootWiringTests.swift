@@ -2,8 +2,8 @@ import ClawCore
 import ClawGateway
 import ClawMCP
 import ClawSecrets
+import ClawTestSupport
 import Foundation
-import Logging
 import Testing
 
 @testable import clawd
@@ -66,9 +66,7 @@ struct MCPBootInputsTests {
     // when
     let logging = RunCommand.makeBootLogging(secrets: secrets, mcp: inputs) { values in
       capture.record(values)
-      return Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      return TestLog.silent
     }
 
     // then

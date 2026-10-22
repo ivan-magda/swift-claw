@@ -139,9 +139,7 @@ enum ChatGPTProviderTestSupport {
       credentials: any LLMCredentialSource = ChatGPTProviderTestSupport.defaultCredentials,
       credentialProfileID: UUID? = ChatGPTProviderTestSupport.fixedProfileID,
       retryBudget: Int = 3,
-      logger: Logger = Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      logger: Logger = TestLog.silent
     ) {
       let http = ScriptedHTTPExecutor(steps)
       self.http = http

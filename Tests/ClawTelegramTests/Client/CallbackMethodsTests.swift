@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -16,16 +17,16 @@ struct CallbackMethodsTests {
     result: HTTPResult
   ) -> (
     client: TelegramClient,
-    recorder: RecordingHTTPExecutor.Recorder
+    http: RecordingHTTPExecutor
   ) {
-    let recorder = RecordingHTTPExecutor.Recorder()
-    let executor = RecordingHTTPExecutor(recorder: recorder, result: result)
-    let client = TelegramClient(token: "T", http: executor, baseURL: "https://example.test")
-    return (client, recorder)
+    let http = RecordingHTTPExecutor(cannedResult: result)
+    let client = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
+    return (client, http)
   }
 
-  private func bodyObject(_ data: Data) throws -> [String: Any] {
-    try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+  private func bodyObject(_ data: Data?) throws -> [String: Any] {
+    let data = try #require(data)
+    return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
   }
 
   @Test
@@ -37,7 +38,7 @@ struct CallbackMethodsTests {
     try await harness.client.answerCallbackQuery(id: "cbq-1", text: "already handled")
 
     // then
-    let call = try #require(await harness.recorder.calls.first)
+    let call = try #require(await harness.http.requests.first)
     #expect(call.url.hasSuffix("/answerCallbackQuery"))
     let body = try bodyObject(call.body)
     #expect(body["callback_query_id"] as? String == "cbq-1")
@@ -53,7 +54,7 @@ struct CallbackMethodsTests {
     try await harness.client.answerCallbackQuery(id: "cbq-2", text: nil)
 
     // then — a nil toast is omitted, not sent as JSON null
-    let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
+    let body = try bodyObject(try #require(await harness.http.requests.first).body)
     #expect(body["callback_query_id"] as? String == "cbq-2")
     #expect(body["text"] == nil)
   }
@@ -68,7 +69,7 @@ struct CallbackMethodsTests {
     try await harness.client.editMessageReplyMarkup(chatID: 7, messageID: 500, replyMarkup: markup)
 
     // then — reply_markup rides as a JSON OBJECT (decoded from the string), never a string
-    let call = try #require(await harness.recorder.calls.first)
+    let call = try #require(await harness.http.requests.first)
     #expect(call.url.hasSuffix("/editMessageReplyMarkup"))
     let body = try bodyObject(call.body)
     #expect(body["chat_id"] as? Int == 7)
@@ -87,7 +88,7 @@ struct CallbackMethodsTests {
     try await harness.client.editMessageReplyMarkup(chatID: 7, messageID: 500, replyMarkup: nil)
 
     // then
-    let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
+    let body = try bodyObject(try #require(await harness.http.requests.first).body)
     #expect(body["reply_markup"] == nil)
   }
 
@@ -112,7 +113,7 @@ struct CallbackMethodsTests {
 
     // then
     #expect(messageID == 123)
-    let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
+    let body = try bodyObject(try #require(await harness.http.requests.first).body)
     let replyMarkup = try #require(body["reply_markup"] as? [String: Any])
     #expect(replyMarkup["inline_keyboard"] != nil)
   }
@@ -132,7 +133,7 @@ struct CallbackMethodsTests {
     _ = try await harness.client.sendMessage(chatID: 7, text: "hi")
 
     // then — no keyboard key leaks onto non-approval replies
-    let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
+    let body = try bodyObject(try #require(await harness.http.requests.first).body)
     #expect(body["reply_markup"] == nil)
     #expect(body["text"] as? String == "hi")
   }

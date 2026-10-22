@@ -8,7 +8,6 @@ import ClawTools
 import ClawWorkspace
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import clawd
@@ -244,7 +243,7 @@ struct MCPCompositionAcceptanceTests {
       now: {
         Date()
       },
-      logger: Self.silentLogger
+      logger: TestLog.silent
     ).executeApproved(approval(run, recorded: recorded))
 
     // then
@@ -347,10 +346,6 @@ private typealias RemoteTool = ScriptedMCPHTTPServer.RemoteTool
 // MARK: - MCP Composition Fixtures
 
 private extension MCPCompositionAcceptanceTests {
-  static let silentLogger = Logger(label: "test") { _ in
-    SwiftLogNoOpLogHandler()
-  }
-
   /// A taint-free, no-private-data context: the ask tier is then the only thing that can park a
   /// call, which is what makes the approval below an assertion about the MCP tier and nothing else.
   static let untaintedContext = ToolDispatchContext(

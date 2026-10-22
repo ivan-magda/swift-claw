@@ -7,12 +7,12 @@ import Testing
 
 @Suite
 struct TopicDeliveryTests {
-  private func makeClient(_ executor: ClawTestSupport.RecordingHTTPExecutor) -> TelegramClient {
+  private func makeClient(_ executor: RecordingHTTPExecutor) -> TelegramClient {
     TelegramClient(token: "T", http: executor, baseURL: "https://example.test")
   }
 
-  private func makeExecutor() -> ClawTestSupport.RecordingHTTPExecutor {
-    ClawTestSupport.RecordingHTTPExecutor(
+  private func makeExecutor() -> RecordingHTTPExecutor {
+    RecordingHTTPExecutor(
       cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
@@ -22,7 +22,7 @@ struct TopicDeliveryTests {
   }
 
   private func body(
-    _ executor: ClawTestSupport.RecordingHTTPExecutor
+    _ executor: RecordingHTTPExecutor
   ) async throws -> [String: Any] {
     let raw = try #require(await executor.lastBody)
     return try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])

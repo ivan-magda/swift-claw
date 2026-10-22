@@ -7,7 +7,6 @@ import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import clawd
@@ -624,9 +623,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
       config: config,
       secrets: Secrets(telegramBotToken: "token", llmAPIKey: nil, searchAPIKey: nil),
       stores: try EnvironmentLoader.openStores(config: config),
-      logger: Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      logger: TestLog.silent
     )
     composition.makeClients = {
       instrumentedClients(recorder: recorder)

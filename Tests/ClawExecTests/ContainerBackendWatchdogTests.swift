@@ -1,5 +1,6 @@
 import ClawCore
 import ClawSubprocess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -16,9 +17,7 @@ struct ContainerBackendWatchdogTests {
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
         // A wedged foreground CLI: never returns until the watchdog cancels the losing racer.
-        while !Task.isCancelled {
-          await Task.yield()
-        }
+        await suspendUntilCancelled()
         return commandResult(.cancelled)
       }
       return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
@@ -52,14 +51,14 @@ struct ContainerBackendWatchdogTests {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
-    let wedge = WedgeGate()
+    let wedge = AsyncGate()
     defer { wedge.open() }
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
         // A truly wedged foreground CLI: never returns and never observes cancellation
         // until the test releases it after the assertions.
-        await wedge.wait()
+        await wedge.waitIgnoringCancellation()
         return commandResult(.cancelled)
       }
       return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
@@ -93,7 +92,7 @@ struct ContainerBackendWatchdogTests {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
-    let wedge = WedgeGate()
+    let wedge = AsyncGate()
     defer { wedge.open() }
     let runner = ScriptedCommandRunner { command, history in
       switch command.arguments.first {
@@ -103,7 +102,7 @@ struct ContainerBackendWatchdogTests {
       case "stop":
         // A wedged first cleanup rung: never returns and never observes cancellation
         // until the test releases it after the assertions.
-        await wedge.wait()
+        await wedge.waitIgnoringCancellation()
         return commandResult(.exited(0))
       case "system":
         return jsonCommandResult(#"{"status":"running"}"#)

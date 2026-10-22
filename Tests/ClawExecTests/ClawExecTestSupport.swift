@@ -50,39 +50,6 @@ actor ScriptedCommandRunner: SubprocessRunning {
   }
 }
 
-/// Parks callers until released; `wait()` deliberately never observes cancellation so tests
-/// can wedge a scripted runner, and `open()` is synchronous so a test's `defer` can always
-/// release every parked continuation — none may outlive the test.
-final class WedgeGate: @unchecked Sendable {
-  private let lock = NSLock()
-  private var isOpen = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-
-  func wait() async {
-    await withCheckedContinuation { continuation in
-      lock.lock()
-      guard !isOpen else {
-        lock.unlock()
-        continuation.resume()
-        return
-      }
-      waiters.append(continuation)
-      lock.unlock()
-    }
-  }
-
-  func open() {
-    lock.lock()
-    isOpen = true
-    let pending = waiters
-    waiters.removeAll()
-    lock.unlock()
-    for waiter in pending {
-      waiter.resume()
-    }
-  }
-}
-
 func commandResult(
   _ termination: SubprocessTermination,
   stdout: Data = Data(),
@@ -263,29 +230,6 @@ struct NoopCommandRunner: SubprocessRunning {
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
       processIdentifier: 1
     )
-  }
-}
-
-actor AsyncGate {
-  private var isOpen = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-
-  func wait() async {
-    if isOpen {
-      return
-    }
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
-    }
-  }
-
-  func open() {
-    isOpen = true
-    let pending = waiters
-    waiters.removeAll()
-    for continuation in pending {
-      continuation.resume()
-    }
   }
 }
 

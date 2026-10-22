@@ -147,9 +147,7 @@ func makeRuntime(
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-  logger: Logger = Logger(label: "test.silent") { _ in
-    SwiftLogNoOpLogHandler()
-  },
+  logger: Logger = TestLog.silent,
   clock: any Clock<Duration> = ContinuousClock(),
   now: @escaping @Sendable () -> ContinuousClock.Instant = {
     ContinuousClock.now

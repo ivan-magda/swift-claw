@@ -26,9 +26,7 @@ private var instantDeadlineClock: ScriptedClock {
 /// no timer that can fire on its own.
 private var deadlineParkedUntilCancelledClock: ScriptedClock {
   ScriptedClock { _ in
-    while !Task.isCancelled {
-      await Task.yield()
-    }
+    await suspendUntilCancelled()
   }
 }
 
@@ -37,14 +35,6 @@ private var deadlineParkedUntilCancelledClock: ScriptedClock {
 private func gatedDeadlineClock(_ gate: TypingReleaseGate) -> ScriptedClock {
   ScriptedClock { _ in
     await gate.awaitRelease()
-  }
-}
-
-/// Spins until this child is cancelled — the deterministic stand-in for a provider the deadline
-/// cancels, with no sleep.
-private func awaitCancellation() async {
-  while !Task.isCancelled {
-    await Task.yield()
   }
 }
 
@@ -81,7 +71,7 @@ private let neverReadingConsume:
     async -> StreamConsumerOutcome = {
       _,
       _ in
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .cut
     }
 
@@ -222,7 +212,7 @@ struct ProviderDeadlineCoordinatorTests {
       deadlineSeconds: 180,
       clock: instantDeadlineClock
     ) {
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .failed(
         ProviderFailure(
           cause: .terminal(status: nil, message: "cancelled before send"),
@@ -245,7 +235,7 @@ struct ProviderDeadlineCoordinatorTests {
       deadlineSeconds: 180,
       clock: instantDeadlineClock
     ) {
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .failed(CancellationError())
     }
 
@@ -263,7 +253,7 @@ struct ProviderDeadlineCoordinatorTests {
       deadlineSeconds: 180,
       clock: instantDeadlineClock
     ) {
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .failed(ProviderError.terminal(status: 400, message: "bad request"))
     }
 
@@ -280,7 +270,7 @@ struct ProviderDeadlineCoordinatorTests {
       deadlineSeconds: 180,
       clock: instantDeadlineClock
     ) {
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .failed(ProviderInferenceCancellation(observing: 7))
     }
 
@@ -301,7 +291,7 @@ struct ProviderDeadlineCoordinatorTests {
       deadlineSeconds: 180,
       clock: instantDeadlineClock
     ) {
-      await awaitCancellation()
+      await suspendUntilCancelled()
       return .response(expected)
     }
 
@@ -316,9 +306,7 @@ struct ProviderDeadlineCoordinatorTests {
     // drained" is observable rather than inferred from the test merely finishing
     let timerCancelled = CompletionFlag()
     let recordingClock = ScriptedClock { _ in
-      while !Task.isCancelled {
-        await Task.yield()
-      }
+      await suspendUntilCancelled()
       await timerCancelled.markDone()
     }
     let expected = racedResponse(content: "provider first")

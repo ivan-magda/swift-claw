@@ -228,7 +228,10 @@ let package = Package(
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),
-    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore", "ClawSubprocess"]),
+    .testTarget(
+      name: "ClawExecTests",
+      dependencies: ["ClawExec", "ClawCore", "ClawSubprocess", "ClawTestSupport"]
+    ),
     .testTarget(name: "ClawSubprocessTests", dependencies: ["ClawSubprocess", "ClawTestSupport"]),
     .testTarget(
       name: "ClawCoderTests",

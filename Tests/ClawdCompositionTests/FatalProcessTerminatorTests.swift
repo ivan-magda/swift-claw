@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Logging
 import Testing
@@ -19,7 +20,7 @@ struct FatalProcessTerminatorTests {
     // when / then — the sentinel escaping proves control left through `terminate()` before any
     // return; a `-> Never` function that fell through could not have thrown.
     #expect(throws: FatalExitSentinel.self) {
-      try terminator.fatalLaneDrainTimeout(activeRunIDs: [1, 2, 3], logger: SilentLog.logger)
+      try terminator.fatalLaneDrainTimeout(activeRunIDs: [1, 2, 3], logger: TestLog.silent)
     }
     #expect(recorded.value == 1)
   }
@@ -46,12 +47,6 @@ struct FatalProcessTerminatorTests {
     let logged = capture.messages.joined(separator: "\n")
     #expect(logged.contains("7"))
     #expect(logged.contains("42"))
-  }
-}
-
-private enum SilentLog {
-  static let logger = Logger(label: "test.silent") { _ in
-    SwiftLogNoOpLogHandler()
   }
 }
 

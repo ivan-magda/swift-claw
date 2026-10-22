@@ -8,7 +8,6 @@ import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
-import Logging
 
 @testable import clawd
 
@@ -78,9 +77,7 @@ enum CompositionAcceptance {
       transport: TelegramClient(token: secrets.telegramBotToken, http: http),
       botIdentity: nil,
       mcp: mcp,
-      logger: Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      },
+      logger: TestLog.silent,
       makeManagedStore: {
         CompositionAcceptance.freshCredentialStore(present: false)
       }
@@ -308,9 +305,7 @@ struct CompositionAcceptanceHarness {
       config: config,
       secrets: secrets,
       stores: stores,
-      logger: Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      logger: TestLog.silent
     )
     composition.makeClients = {
       RuntimeHTTPClients { _ in

@@ -1,5 +1,6 @@
 import ClawCore
 import ClawSubprocess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -13,6 +14,7 @@ struct ContainerBackendExecutionTests {
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let firstRunGate = AsyncGate()
+    defer { firstRunGate.open() }
     let admissions = ExecutionAdmissionRecorder()
     let runner = ScriptedCommandRunner { command, history in
       switch command.arguments.first {
@@ -22,7 +24,7 @@ struct ContainerBackendExecutionTests {
           $0.arguments.first == "run"
         }.count
         if runNumber == 1 {
-          await firstRunGate.wait()
+          await firstRunGate.waitIgnoringCancellation()
         }
         return commandResult(.exited(Int32(runNumber)))
       case "system":
@@ -56,7 +58,7 @@ struct ContainerBackendExecutionTests {
     #expect(blockedRunCommands.count == 1)
 
     // when
-    await firstRunGate.open()
+    firstRunGate.open()
     let results = await [first.value, second.value, third.value]
 
     // then
@@ -315,9 +317,7 @@ struct ContainerBackendExecutionTests {
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
-        while !Task.isCancelled {
-          await Task.yield()
-        }
+        await suspendUntilCancelled()
         return commandResult(.cancelled)
       }
       return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
@@ -361,6 +361,7 @@ struct ContainerBackendExecutionTests {
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let firstRunGate = AsyncGate()
+    defer { firstRunGate.open() }
     let admissions = ExecutionAdmissionRecorder()
     let runner = ScriptedCommandRunner { command, history in
       switch command.arguments.first {
@@ -370,7 +371,7 @@ struct ContainerBackendExecutionTests {
           $0.arguments.first == "run"
         }.count
         if runNumber == 1 {
-          await firstRunGate.wait()
+          await firstRunGate.waitIgnoringCancellation()
         }
         return commandResult(.exited(Int32(runNumber)))
       case "system":
@@ -395,7 +396,7 @@ struct ContainerBackendExecutionTests {
 
     // when
     queued.cancel()
-    await firstRunGate.open()
+    firstRunGate.open()
     _ = await first.value
     let result = await queued.value
 

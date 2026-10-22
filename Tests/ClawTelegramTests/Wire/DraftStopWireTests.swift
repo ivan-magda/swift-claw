@@ -1,5 +1,6 @@
 import ClawCore
 import ClawTelegram
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -66,8 +67,8 @@ private extension DraftStopWireTests {
   func getUpdates(json: String) async throws -> [RawUpdate] {
     let telegram = TelegramClient(
       token: "T",
-      http: MockHTTPExecutor(
-        result: HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))
+      http: RecordingHTTPExecutor(
+        cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))
       ),
       baseURL: "https://example.test"
     )

@@ -1,7 +1,6 @@
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Logging
 import MCP
 import Testing
 
@@ -110,9 +109,7 @@ struct MCPServerSessionLifecycleTests {
         return transport
       },
       clientVersion: "0.0.0-test",
-      logger: Logger(label: "test.silent") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      logger: TestLog.silent
     )
     let opening = Task {
       try await session.connect()
@@ -166,9 +163,7 @@ private extension MCPServerSessionLifecycleTests {
 }
 
 private actor GatedReceiveTransport: Transport {
-  nonisolated let logger = Logger(label: "test.silent") { _ in
-    SwiftLogNoOpLogHandler()
-  }
+  nonisolated let logger = TestLog.silent
 
   nonisolated let receiving = AsyncGate()
   nonisolated let cleaningUp = AsyncGate()
@@ -208,9 +203,7 @@ private actor GatedReceiveTransport: Transport {
 }
 
 private actor GatedHandshakeTransport: Transport {
-  nonisolated let logger = Logger(label: "test.silent") { _ in
-    SwiftLogNoOpLogHandler()
-  }
+  nonisolated let logger = TestLog.silent
 
   nonisolated let entered = AsyncGate()
   nonisolated let cancelled = AsyncGate()
