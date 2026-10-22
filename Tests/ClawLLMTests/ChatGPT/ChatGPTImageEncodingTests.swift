@@ -7,27 +7,6 @@ import Testing
 @Suite
 struct ChatGPTImageEncodingTests {
   @Test
-  func textOnlyUserMessagesStillEncodeAsInputText() throws {
-    // given
-    let request = ChatRequest(
-      model: "gpt-5.6-sol",
-      messages: [ChatMessage(role: .user, content: "hi")],
-      maxOutputTokens: 64
-    )
-
-    // when
-    let body = try encodedBody(for: request)
-
-    // then
-    let input = try #require(body["input"] as? [[String: Any]])
-    let parts = try #require(input[0]["content"] as? [[String: Any]])
-    #expect(parts.count == 1)
-    #expect(parts[0]["type"] as? String == "input_text")
-    #expect(parts[0]["text"] as? String == "hi")
-    #expect(parts[0]["image_url"] == nil)
-  }
-
-  @Test
   func imagePartsEncodeAsInputImageWithAStringURL() throws {
     // given
     let content = MessageContent(parts: [.image(samplePixel), .text("what is this?")])

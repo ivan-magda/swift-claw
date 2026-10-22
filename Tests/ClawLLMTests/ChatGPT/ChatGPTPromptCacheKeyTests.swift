@@ -9,22 +9,6 @@ import Testing
 /// but never reaches the body would still leave every run cache-cold.
 @Suite
 struct ChatGPTPromptCacheKeyTests {
-  /// The key over a known prefix, byte for byte. The expectation was computed from the specified
-  /// encoding — length-prefixed UTF-8 segments, first twelve digest bytes as hex — independently of
-  /// the Swift that produces it, so the two agreeing means the encoding is the one specified rather
-  /// than merely self-consistent.
-  @Test
-  func cacheKeyMatchesTheGoldenVector() throws {
-    // given
-    let request = makeRequest(instructions: ["You are helpful.", "Be brief."], tools: [])
-
-    // when
-    let key = try cacheKey(for: request)
-
-    // then
-    #expect(key == "swift-claw:cbcece245430edb08f8e6a62")
-  }
-
   /// Two runs of the same static prefix share a cache entry however their sessions differ; the
   /// session travels in a header instead. A key that folded the session in would make every
   /// recurring proactive run cache-cold.
@@ -77,6 +61,9 @@ struct ChatGPTPromptCacheKeyTests {
     #expect(toolNames(in: reversedBody) == ["clock", "web_fetch"])
   }
 
+  /// Both keys are golden vectors computed from the specified encoding (length-prefixed UTF-8
+  /// segments, first twelve digest bytes as hex) independently of the Swift that produces them, so
+  /// agreement means the encoding is the one specified rather than merely self-consistent.
   @Test
   func cacheKeyChangesWithInstructions() throws {
     // given

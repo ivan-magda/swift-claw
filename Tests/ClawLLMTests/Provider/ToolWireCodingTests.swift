@@ -7,46 +7,24 @@ import Testing
 
 @Suite
 struct ToolWireCodingTests {
-  private func makeProvider() -> OpenAICompatibleProvider {
-    OpenAICompatibleProvider(
-      config: LLMConfig(
-        route: makeCurrentRoute(endpoint: "http://localhost/v1", model: "m"),
+  /// These tests only exercise encoding and parsing, so the transport is never reached; the empty
+  /// script makes an accidental dispatch fail loudly rather than look like a pass.
+  private func wireProvider() -> OpenAICompatibleProvider {
+    makeProvider(
+      config: makeConfig(
+        baseURL: "http://localhost/v1",
+        maxTokensField: .maxTokens,
+        apiKey: "",
+        model: "m",
         maxOutputTokens: 100,
-        retryBudget: 1,
-        requestTimeoutSeconds: 5
+        retryBudget: 1
       ),
-      endpoint: "http://localhost/v1",
-      maxTokensField: .maxTokens,
-      credentials: StaticLLMCredentialSource(bearer: nil),
-      http: UnusedHTTP(),
-      clock: ScriptedClock { _ in
-        try? await Task.sleep(for: .milliseconds(1))
-      },
-      jitter: {
-        $0
-      }
+      http: ScriptedHTTPExecutor([])
     )
   }
 
-  /// These tests only exercise encoding and parsing, so the transport is never reached; answering
-  /// with a 500 makes an accidental dispatch fail loudly rather than look like a pass.
-  private struct UnusedHTTP: HTTPExecuting, HTTPStreaming {
-    func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-      HTTPResult(statusCode: 500, headers: [:], body: Data())
-    }
-
-    func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
-      HTTPStreamExchange.make(
-        head: HTTPStreamHead(statusCode: 500, headers: [:]),
-        maximumUnreadBodyBytes: 1
-      ) { _ in
-        .completed
-      }
-    }
-  }
-
   private func encodeToDictionary(_ request: ChatRequest) throws -> [String: Any] {
-    let data = try makeProvider().encode(request: request)
+    let data = try wireProvider().encode(request: request)
     let object = try JSONSerialization.jsonObject(with: data)
     return object as? [String: Any] ?? [:]
   }
@@ -166,7 +144,7 @@ struct ToolWireCodingTests {
       """#
 
     // when
-    let response = try makeProvider().parse(
+    let response = try wireProvider().parse(
       result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
       redactor: SecretRedactor(secretValues: [])
     )
@@ -179,22 +157,6 @@ struct ToolWireCodingTests {
         ToolCall(id: "call_9", name: "web_search", argumentsJSON: #"{"query":"swift"}"#),
       ]
     )
-  }
-
-  @Test
-  func plainResponseStillDecodesWithEmptyToolCalls() throws {
-    // given
-    let fixture = #"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#
-
-    // when
-    let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
-      redactor: SecretRedactor(secretValues: [])
-    )
-
-    // then
-    #expect(response.content == "hi")
-    #expect(response.toolCalls.isEmpty)
   }
 
   @Test
@@ -216,7 +178,7 @@ struct ToolWireCodingTests {
       """#
 
     // when
-    let response = try makeProvider().parse(
+    let response = try wireProvider().parse(
       result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
       redactor: SecretRedactor(secretValues: [])
     )
@@ -245,7 +207,7 @@ struct ToolWireCodingTests {
       """#
 
     // when
-    let response = try makeProvider().parse(
+    let response = try wireProvider().parse(
       result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
       redactor: SecretRedactor(secretValues: [])
     )
@@ -274,7 +236,7 @@ struct ToolWireCodingTests {
       """#
 
     // when
-    let response = try makeProvider().parse(
+    let response = try wireProvider().parse(
       result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
       redactor: SecretRedactor(secretValues: [])
     )

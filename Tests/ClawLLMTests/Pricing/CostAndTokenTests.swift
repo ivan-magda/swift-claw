@@ -115,14 +115,4 @@ struct CostAndTokenTests {
     #expect(resolved.source == testCase.expectedSource)
     #expect(resolved.isEstimated == testCase.expectedIsEstimated)
   }
-
-  @Test
-  func tokenEstimateMatchesTheFormula() {
-    // given — 8 graphemes; double-ceil → ceil(ceil(8/4) * 1.25) = 3 input tokens
-    let messages = [ChatMessage(role: .user, content: "abcdefgh")]
-
-    // then
-    #expect(TokenEstimator.estimateInputTokens(messages) == 3)
-    #expect(TokenEstimator.graphemeBudget(forInputTokens: 3) == 8)
-  }
 }

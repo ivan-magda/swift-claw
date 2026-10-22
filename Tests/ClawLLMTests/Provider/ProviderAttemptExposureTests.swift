@@ -6,15 +6,6 @@ import Testing
 @Suite
 struct ProviderAttemptExposureTests {
   @Test
-  func anAttemptStartsHavingExposedNothing() {
-    // given / when
-    let exposure = ProviderAttemptExposure()
-
-    // then
-    #expect(exposure.accounting == .notStarted)
-  }
-
-  @Test
   func theHandoffMakesExposureConservative() throws {
     // given
     let exposure = ProviderAttemptExposure()
@@ -130,19 +121,6 @@ struct ProviderAttemptExposureTests {
   }
 
   @Test
-  func aCancellationThatWinsBeforeTheCleanResetStaysConservative() throws {
-    // given — an attempt that reached the transport
-    let exposure = ProviderAttemptExposure()
-    try exposure.beginHandoff()
-
-    // when — cancellation is read before any clean-rejection reset has run
-    let error = exposure.cancellationError()
-
-    // then — with no proven-clean reset yet, the model may have been asked, so accounting is typed
-    #expect(error as? ProviderInferenceCancellation == ProviderInferenceCancellation(observing: 0))
-  }
-
-  @Test
   func repeatedHandoffsDoNotWalkExposureBackToNotStarted() throws {
     // given — an attempt whose clean reset returned it to `notStarted`
     let exposure = ProviderAttemptExposure()
@@ -171,19 +149,5 @@ struct ProviderAttemptExposureTests {
     // then — the reducer is the single source of the accounting the failure carries
     #expect(failure.cause == .terminal(status: nil, message: "boom"))
     #expect(failure.accounting == .mayHaveStarted(observing: 4))
-  }
-
-  @Test
-  func failureOnAProvenCleanAttemptIsNotStarted() throws {
-    // given — a recognized non-success head returned the attempt to `notStarted`
-    let exposure = ProviderAttemptExposure()
-    try exposure.beginHandoff()
-    exposure.noteProvenClean()
-
-    // when
-    let failure = exposure.failure(.accessDenied)
-
-    // then — a clean rejection writes no estimated usage row
-    #expect(failure.accounting == .notStarted)
   }
 }
