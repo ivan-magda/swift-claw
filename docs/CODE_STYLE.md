@@ -114,7 +114,7 @@ Use the compiler and formatter bundled with the pinned distribution:
 
 | Platform | Distribution | Compiler identity | Apple formatter report |
 | --- | --- | --- | --- |
-| macOS | Xcode **27.0**, build **27A266a** | Apple Swift **6.4**, `swiftlang-6.4.0.34.1 clang-2100.3.34.1` | `main` |
+| macOS | Xcode **27.1**, build **27A9275** | Apple Swift **6.4**, `swiftlang-6.4.0.34.1 clang-2100.3.34.1` | `main` |
 | Linux | Official **Swift 6.4.0** release (`swift:6.4.0-noble`) | Swift **6.4**, `swift-6.4-RELEASE` | `main` |
 
 [`.swift-version`](../.swift-version) pins the Swift version; the remaining pins live in
@@ -136,7 +136,7 @@ Adjust `DEVELOPER_DIR` if you installed Xcode elsewhere. The lint gate uses
 
 Install SwiftLint **0.65.1** from its
 [official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
-when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.62.1** from
+when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.64.0** from
 the locked BuildTools dependency, so the first run needs network access. It checks prerequisites
 before changing source; you do not need a global `swiftformat` install. A whole-repository
 check also needs Python 3 for its dead-code stage; macOS includes it with the Xcode tools.
