@@ -101,36 +101,40 @@ struct ProviderRosterFactoryTests {
   }
 
   @Test("the fallback bearer never reaches the primary route")
-  func bearersAreRouteScoped() throws {
-    // given
+  func bearersAreRouteScoped() async throws {
+    // given — two static-bearer routes, so each request's Authorization header names the loader its
+    // route was composed with
     let primary = makeCurrentRoute(endpoint: "https://primary.example/v1")
     let fallback = makeCurrentRoute(endpoint: "https://fallback.example/v1")
-    var primaryBearerReads = 0
-    var fallbackBearerReads = 0
-
-    // when
-    _ = try ProviderStackFactory.makeRoster(
+    let http = ScriptedHTTPExecutor([okStep(), okStep()])
+    let stack = try ProviderStackFactory.makeRoster(
       primaryRoute: primary,
       fallbackRoute: fallback,
       settings: settings(route: primary),
       loadStaticBearer: {
-        primaryBearerReads += 1
-        return "primary-key"
+        "primary-key"
       },
       loadFallbackBearer: {
-        fallbackBearerReads += 1
-        return "fallback-key"
+        "fallback-key"
       },
       makeManagedCredentialStore: {
         ScriptedCredentialStore(.value(nil))
       },
-      http: ScriptedHTTPExecutor([]),
+      http: http,
       buildVersion: "test"
     )
 
+    // when
+    _ = try await stack.roster.primary.provider.complete(request: sampleRequest)
+    _ = try await #require(stack.roster.fallback).provider.complete(request: sampleRequest)
+
     // then
-    #expect(primaryBearerReads == 1)
-    #expect(fallbackBearerReads == 1)
+    let recorded = await http.recorded
+    try #require(recorded.count == 2)
+    #expect(recorded[0].url.hasPrefix("https://primary.example/v1"))
+    #expect(recorded[0].headers["Authorization"] == "Bearer primary-key")
+    #expect(recorded[1].url.hasPrefix("https://fallback.example/v1"))
+    #expect(recorded[1].headers["Authorization"] == "Bearer fallback-key")
   }
 
   // MARK: - Quota-retry flag wiring

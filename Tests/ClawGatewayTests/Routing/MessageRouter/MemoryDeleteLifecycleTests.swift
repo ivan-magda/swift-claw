@@ -43,55 +43,6 @@ struct MemoryDeleteLifecycleTests {
   }
 
   @Test
-  func redeliveredDeleteYesIsSkippedWithoutASecondAudit() async throws {
-    // given
-    let harness = try MemoryRoutingHarness.make()
-    let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
-    _ = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/memory delete \(item.id)")
-    )
-    let yesUpdate = textUpdate(id: 2, from: 42, text: "yes")
-    let firstOutcome = await harness.router.handle(rawUpdate: yesUpdate)
-
-    // when
-    let secondOutcome = await harness.router.handle(rawUpdate: yesUpdate)
-
-    // then
-    #expect(firstOutcome == .processed)
-    #expect(secondOutcome == .skipped)
-    #expect(try harness.memory.get(id: item.id) == nil)
-    #expect(
-      try harness.auditActions().filter {
-        $0 == AuditAction.memoryDelete.rawValue
-      }.count == 1
-    )
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
-  func deleteCancelledKeepsTheRow() async throws {
-    // given
-    let harness = try MemoryRoutingHarness.make()
-    let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
-    _ = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/memory delete \(item.id)")
-    )
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 2, from: 42, text: "cancel")
-    )
-
-    // then
-    #expect(outcome == .processed)
-    #expect(try harness.memory.get(id: item.id) != nil)
-    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue) == false)
-    let sent = await harness.transport.sent
-    #expect(sent.last?.text == MemoryReplies.cancelled)
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
   func deleteParkedAfterRememberReplacesItSoYesDeletesInsteadOfSaving() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()

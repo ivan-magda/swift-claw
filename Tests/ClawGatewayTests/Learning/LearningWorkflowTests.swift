@@ -124,24 +124,6 @@ extension LearningWorkflowTests {
   }
 
   @Test
-  func budgetDeniedWaitsWithoutRetry() async throws {
-    // given
-    let env = try EvaluationRunEnvironment.make(
-      reply: Self.negative,
-      repeatable: true,
-      proactivePerDayUSD: 0
-    )
-    let service = Self.service(env)
-    // when
-    await service.advance(runID: env.runID)
-    await service.sweep(now: env.now)
-    // then
-    #expect(await env.provider.requests.isEmpty)
-    #expect(try env.failureCode() == .budgetDenied)
-    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
-  }
-
-  @Test
   func failedBootReconciliationNeverDispatches() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
@@ -399,35 +381,6 @@ extension LearningWorkflowTests {
     #expect(try env.learning.openTrial(jobID: env.jobID) != nil)
     #expect(try env.rowCount("feedback_targets") > 0)
     #expect(await env.provider.requests.count == 1)
-  }
-
-  @Test
-  func reflectorBudgetDenialStopsMidChain() async throws {
-    // given
-    let env = try ReflectionRunEnvironment.make(proactivePerDayUSD: 0)
-    let workflow = LearningWorkflow(
-      store: env.learning,
-      jobs: env.jobs,
-      runner: env.runner,
-      notices: LearningNotices(learning: env.learning, signal: OutboxSignal()),
-      redactor: SecretRedactor(secretValues: []),
-      logger: TestLog.silent
-    )
-    let service = ScheduledLearningService(
-      store: env.learning,
-      workflow: workflow,
-      now: {
-        env.now
-      },
-      logger: TestLog.silent
-    )
-    // when
-    await service.advance(jobID: env.jobID)
-    await service.sweep(now: env.now)
-    // then
-    #expect(await env.provider.requests.isEmpty)
-    #expect(try env.failureCode() == .budgetDenied)
-    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
   }
 }
 

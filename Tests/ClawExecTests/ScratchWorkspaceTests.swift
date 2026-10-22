@@ -6,6 +6,53 @@ import Testing
 
 @Suite
 struct ScratchWorkspaceTests {
+  /// One violation per case: `validate` throws at its first failing guard, so a request that
+  /// stacked several would let any one guard be deleted while the next still threw.
+  enum InvalidRequestCase: CaseIterable {
+    case pathEscapingInput
+    case reservedEntrypointNameAsInput
+    case caseFoldedDuplicateInputs
+    case executableInput
+    case entrypointNamedForAnotherLanguage
+    case readOnlyEntrypoint
+
+    var request: ExecutionRequest {
+      switch self {
+      case .pathEscapingInput:
+        requestWith(inputs: [Self.input("../escape")])
+      case .reservedEntrypointNameAsInput:
+        requestWith(inputs: [Self.input(".clawd-entrypoint.payload")])
+      case .caseFoldedDuplicateInputs:
+        requestWith(inputs: [Self.input("Readme"), Self.input("README")])
+      case .executableInput:
+        requestWith(inputs: [StagedFile(name: "input", bytes: Data(), mode: .readExecute)])
+      case .entrypointNamedForAnotherLanguage:
+        requestWith(language: .sh)
+      case .readOnlyEntrypoint:
+        requestWith(
+          entrypoint: StagedFile(
+            name: ".clawd-entrypoint.py",
+            bytes: Data("print('ok')".utf8),
+            mode: .readOnly
+          )
+        )
+      }
+    }
+
+    var reason: String {
+      switch self {
+      case .pathEscapingInput, .reservedEntrypointNameAsInput:
+        "invalid staged input name"
+      case .caseFoldedDuplicateInputs:
+        "duplicate staged input name"
+      case .executableInput:
+        "staged input mode is not read-only"
+      case .entrypointNamedForAnotherLanguage, .readOnlyEntrypoint:
+        "invalid execution entrypoint"
+      }
+    }
+  }
+
   @Test
   func materializerCreatesPrivateRootsExactFilesAndExternalCidfile() throws {
     // given
@@ -37,37 +84,21 @@ struct ScratchWorkspaceTests {
     #expect(!workspace.cidFile.path.hasPrefix(workspace.directory.path + "/"))
   }
 
-  @Test
-  func materializerRejectsPathReservedAndCaseFoldedCollisionsBeforeRunDirectory() throws {
+  @Test(arguments: InvalidRequestCase.allCases)
+  func materializerRejectsEachInvalidRequestBeforeRunDirectory(
+    _ invalidCase: InvalidRequestCase
+  ) throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }
-    let badInputs = [
-      StagedFile(name: "../escape", bytes: Data(), mode: .readOnly),
-      StagedFile(name: ".clawd-entrypoint.payload", bytes: Data(), mode: .readOnly),
-      StagedFile(name: "Readme", bytes: Data(), mode: .readOnly),
-      StagedFile(name: "README", bytes: Data(), mode: .readOnly),
-    ]
-    let request = ExecutionRequest(
-      language: .python,
-      entrypoint: pythonEntrypoint(),
-      inputs: badInputs,
-      network: false,
-      timeout: .seconds(1)
-    )
 
-    // when
-    let result = Result {
+    // when / then
+    #expect(throws: ScratchWorkspaceError.invalidRequest(invalidCase.reason)) {
       try ScratchWorkspace.create(
         stateRoot: fixture.root,
         identity: try fixedIdentity(),
-        request: request
+        request: invalidCase.request
       )
-    }
-
-    // then
-    #expect(throws: ScratchWorkspaceError.self) {
-      try result.get()
     }
     let runDirectory = fixture.root.appending(path: "exec-scratch").appending(
       path: try fixedIdentity().identifier
@@ -98,33 +129,6 @@ struct ScratchWorkspaceTests {
     }
     let scratchRoot = root.appending(path: "exec-scratch")
     #expect(!FileManager.default.fileExists(atPath: scratchRoot.path))
-  }
-
-  @Test
-  func materializerRejectsWrongEntrypointNameAndModes() throws {
-    // given
-    let fixture = try ScratchFixture()
-    defer { fixture.remove() }
-    let request = ExecutionRequest(
-      language: .sh,
-      entrypoint: StagedFile(
-        name: ".clawd-entrypoint.py",
-        bytes: Data("echo no".utf8),
-        mode: .readOnly
-      ),
-      inputs: [StagedFile(name: "input", bytes: Data(), mode: .readExecute)],
-      network: false,
-      timeout: .seconds(1)
-    )
-
-    // when / then
-    #expect(throws: ScratchWorkspaceError.self) {
-      try ScratchWorkspace.create(
-        stateRoot: fixture.root,
-        identity: try fixedIdentity(),
-        request: request
-      )
-    }
   }
 
   @Test
@@ -191,5 +195,27 @@ struct ScratchWorkspaceTests {
     // then
     #expect(!FileManager.default.fileExists(atPath: workspace.directory.path))
     #expect(!FileManager.default.fileExists(atPath: workspace.cidFile.path))
+  }
+}
+
+// MARK: - Invalid Request Builders
+
+private extension ScratchWorkspaceTests.InvalidRequestCase {
+  static func input(_ name: String) -> StagedFile {
+    StagedFile(name: name, bytes: Data(), mode: .readOnly)
+  }
+
+  func requestWith(
+    language: ExecLanguage = .python,
+    entrypoint: StagedFile = pythonEntrypoint(),
+    inputs: [StagedFile] = []
+  ) -> ExecutionRequest {
+    ExecutionRequest(
+      language: language,
+      entrypoint: entrypoint,
+      inputs: inputs,
+      network: false,
+      timeout: .seconds(1)
+    )
   }
 }

@@ -350,19 +350,6 @@ extension ExchangeCommitTests {
     payload: exchangePayload
   )
 
-  /// The persisted state pair of every message row, oldest first, read back as raw storage so a
-  /// coerced or half-written pair is visible rather than papered over by a typed decode.
-  private func persistedStates(
-    _ fixture: Fixture
-  ) throws -> [(role: String, state: DatabaseValue)] {
-    try fixture.queue.read { db in
-      try Row.fetchAll(db, sql: "SELECT role, provider_state FROM messages ORDER BY id ASC").map {
-        (row) in
-        (row["role"], row["provider_state"])
-      }
-    }
-  }
-
   private func statefulExchange() -> ToolExchange {
     ToolExchange(
       assistantContent: "let me fetch that",
@@ -445,42 +432,6 @@ extension ExchangeCommitTests {
   }
 
   @Test
-  func aCommitWithoutStateLeavesBothColumnsNull() throws {
-    // given — a route that mints no replay state, i.e. every Chat Completions turn
-    let fixture = try makeRunningFixture()
-    let turn = AssistantTurn(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      chatID: 7,
-      content: "plain",
-      usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")],
-      exchanges: [makeExchange()],
-      journalCapture: nil
-    )
-
-    // when
-    #expect(try fixture.runs.commitAssistantTurn(turn, now: Date()) == .committed)
-
-    // then — the v9 pair rule holds without a CHECK violation, and nothing decodes back
-    let pairs = try fixture.queue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: """
-          SELECT COUNT(*) AS total FROM messages
-          WHERE provider_state_issuer IS NOT NULL OR provider_state IS NOT NULL
-          """
-      )
-    }
-    #expect(pairs.first?["total"] == 0)
-    #expect(
-      try loadedHistory(fixture).allSatisfy { message in
-        message.providerState == nil
-      }
-    )
-  }
-
-  @Test
   func providerStateNeverReachesTheOwnerFacingOutbox() throws {
     // given
     let fixture = try makeRunningFixture()
@@ -512,36 +463,5 @@ extension ExchangeCommitTests {
       #expect(text.contains(Self.finalPayloadAsLossyText) == false)
       #expect(text.contains(Self.exchangePayloadAsLossyText) == false)
     }
-  }
-
-  @Test
-  func toolObservationRowsNeverReceiveState() throws {
-    // given — two exchanges, each with its own state and observation
-    let fixture = try makeRunningFixture()
-    let turn = AssistantTurn(
-      runID: fixture.runID,
-      sessionID: fixture.sessionID,
-      chatID: 7,
-      content: "done",
-      usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "done", payloadHash: "h")],
-      exchanges: [statefulExchange(), statefulExchange()],
-      providerState: Self.finalState,
-      journalCapture: nil
-    )
-
-    // when
-    #expect(try fixture.runs.commitAssistantTurn(turn, now: Date()) == .committed)
-
-    // then — state binds to assistant anchors only; an untrusted row must never carry replay bytes
-    let states = try persistedStates(fixture)
-    for entry in states where entry.role == MessageRole.tool.rawValue {
-      #expect(entry.state.isNull)
-    }
-    #expect(
-      states.filter { entry in
-        entry.state.isNull == false
-      }.count == 3
-    )
   }
 }

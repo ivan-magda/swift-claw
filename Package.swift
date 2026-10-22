@@ -172,7 +172,6 @@ let package = Package(
         "ClawData",
         "ClawCore",
         "ClawTestSupport",
-        .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "GRDB", package: "GRDB.swift"),
       ]
     ),
@@ -293,7 +292,6 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),
-        .product(name: "Logging", package: "swift-log"),
       ]
     ),
   ]

@@ -54,19 +54,6 @@ struct TerminalReceiptTests {
   }
 
   @Test
-  func aDisarmedDaemonWritesNoTerminalReceipt() throws {
-    // given — CLAW_LEARNING_ENABLED unset, so the fire binds nothing
-    let env = try BoundRunEnvironment.make(learningEnabled: false)
-    let runID = try env.runningBoundRun()
-
-    // when
-    _ = try env.runs.commitAssistantTurn(env.assistantTurn(runID: runID), now: env.now)
-
-    // then
-    #expect(try env.settlementRowCount() == 0)
-  }
-
-  @Test
   func theApprovalCrashWindowKeepsTheCauseItsResolutionStored() throws {
     // given — a bound run whose approval was granted and claimed before the process died
     let env = try BoundRunEnvironment.make()

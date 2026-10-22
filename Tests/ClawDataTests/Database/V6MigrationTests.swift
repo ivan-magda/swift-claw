@@ -6,14 +6,6 @@ import Testing
 
 @Suite
 struct V6MigrationTests {
-  private func columnNames(_ queue: DatabaseQueue, table: String) throws -> [String] {
-    try queue.read { db in
-      try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { row in
-        row["name"] as String
-      }
-    }
-  }
-
   @Test
   func vSixCreatesTheSchedulingTablesAndRunColumns() throws {
     // given
@@ -23,7 +15,7 @@ struct V6MigrationTests {
     try ClawDatabase.migrate(queue)
 
     // then — the required §4.1 columns are present (superset; order and extra columns not pinned)
-    let scheduledJobColumns = Set(try columnNames(queue, table: "scheduled_jobs"))
+    let scheduledJobColumns = Set(try SchemaInspection.columnNames(queue, table: "scheduled_jobs"))
     #expect(
       scheduledJobColumns.isSuperset(of: [
         "id",
@@ -41,11 +33,13 @@ struct V6MigrationTests {
       ])
     )
 
-    let runColumns = try columnNames(queue, table: "runs")
+    let runColumns = try SchemaInspection.columnNames(queue, table: "runs")
     #expect(runColumns.contains("origin"))
     #expect(runColumns.contains("job_id"))
 
-    let schedulerStateColumns = Set(try columnNames(queue, table: "scheduler_state"))
+    let schedulerStateColumns = Set(
+      try SchemaInspection.columnNames(queue, table: "scheduler_state")
+    )
     #expect(
       schedulerStateColumns.isSuperset(of: [
         "id",
@@ -94,10 +88,12 @@ struct V6MigrationTests {
     }
 
     // then
-    #expect(throws: (any Error).self) {
+    #expect {
       try queue.write { db in
         try db.execute(sql: "INSERT INTO scheduler_state(id) VALUES (2)")
       }
+    } throws: { error in
+      SchemaInspection.isConstraintViolation(error, mentioning: "CHECK")
     }
     let skipped = try queue.read { db in
       try Int.fetchOne(

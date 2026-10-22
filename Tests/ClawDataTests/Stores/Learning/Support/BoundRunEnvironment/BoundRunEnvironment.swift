@@ -17,10 +17,7 @@ struct BoundRunEnvironment {
   let sessionID: Int64
   let now: Date
 
-  static func make(
-    learningEnabled: Bool = true,
-    databasePath: String? = nil
-  ) throws -> BoundRunEnvironment {
+  static func make(databasePath: String? = nil) throws -> BoundRunEnvironment {
     let writer: any DatabaseWriter
     if let databasePath {
       writer = try DatabaseQueue(
@@ -30,15 +27,12 @@ struct BoundRunEnvironment {
     } else {
       writer = try TestDatabase.make()
     }
-    return try make(learningEnabled: learningEnabled, writer: writer)
+    return try make(writer: writer)
   }
 
-  static func make(
-    learningEnabled: Bool = true,
-    writer: any DatabaseWriter
-  ) throws -> BoundRunEnvironment {
+  static func make(writer: any DatabaseWriter) throws -> BoundRunEnvironment {
     try ClawDatabase.migrate(writer)
-    let jobs = ScheduledJobStoreGRDB(writer: writer, learningEnabled: learningEnabled)
+    let jobs = ScheduledJobStoreGRDB(writer: writer, learningEnabled: true)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try jobs.create(
       NewScheduledJob(

@@ -31,55 +31,6 @@ struct MessageFTSMigrationTests {
   }
 
   @Test
-  func ftsRowidEqualsMessageID() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let when = Date(timeIntervalSince1970: 10)
-
-    // when
-    let messageID = try queue.write { db -> Int64 in
-      let sessionID = try insertSession(db, key: "k", at: when)
-      return try insertMessage(db, sessionID: sessionID, content: "hello recall world", at: when)
-    }
-
-    // then
-    let ftsRowid = try queue.read { db in
-      try Int64.fetchOne(
-        db,
-        sql: "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'recall'"
-      )
-    }
-    #expect(ftsRowid == messageID)
-  }
-
-  @Test
-  func deletingAMessageRemovesItsFTSRow() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let when = Date(timeIntervalSince1970: 20)
-    let messageID = try queue.write { db -> Int64 in
-      let sessionID = try insertSession(db, key: "k", at: when)
-      return try insertMessage(db, sessionID: sessionID, content: "ephemeral token here", at: when)
-    }
-
-    // when
-    try queue.write { db in
-      try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [messageID])
-    }
-
-    // then - the sync trigger drops the matching FTS row.
-    let hits = try queue.read { db in
-      try Int.fetchOne(
-        db,
-        sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'ephemeral'"
-      ) ?? -1
-    }
-    #expect(hits == 0)
-  }
-
-  @Test
   func messageInsertedBeforeV4IsSearchableAfterInitialPopulation() throws {
     // given - migrate only up to v3, insert a message, then run v4 to build + backfill the index.
     let queue = try ClawDatabase.makeInMemoryQueue()

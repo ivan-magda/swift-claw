@@ -196,47 +196,28 @@ struct ScheduleInteractionTests {
     #expect(try harness.jobs.listAll().isEmpty)
   }
 
-  @Test
-  func authenticationParseFailureGivesTheExactLoginCopyAndArmsNothing() async throws {
-    // given — the parse fails because the credential is gone
-    let harness = try makeHarness(parseResults: [.authenticationRequired])
-
-    // when
-    await parkDraft(harness)
-
-    // then — the schedule surface hands the owner the same pinned login sentence a turn does
-    #expect(await harness.transport.sent.last?.text == ScheduleReplies.authenticationRequired)
-    #expect(await harness.transport.sent.last?.text == Degradation.authenticationRequired)
-    #expect(try harness.jobs.listAll().isEmpty)
-  }
-
-  @Test
-  func quotaParseFailureSaysRetryNotLogin() async throws {
+  // Each row is one arm of `ScheduleReplies.providerFailure`; the expected copy is the owner-facing
+  // Degradation sentence, so a swapped arm or a reply home that drifts from the turn copy fails.
+  @Test(arguments: [
+    (ScheduleDraftParseResult.providerUnavailable, Degradation.providerUnavailable),
+    (.authenticationRequired, Degradation.authenticationRequired),
+    (.accessDenied, Degradation.accessDenied),
+    (.quotaLimited(retryAfterSeconds: 30), Degradation.quotaLimited(retryAfterSeconds: 30)),
+  ])
+  func providerParseFailureGivesItsTypedCopyAndArmsNothing(
+    result: ScheduleDraftParseResult,
+    expectedReply: String
+  ) async throws {
     // given
-    let harness = try makeHarness(parseResults: [.quotaLimited(retryAfterSeconds: 30)])
+    let harness = try makeHarness(parseResults: [result])
 
     // when
     await parkDraft(harness)
 
-    // then — the quota reply names the retry, never the login command
-    let reply = try #require(await harness.transport.sent.last?.text)
-    #expect(reply == ScheduleReplies.quotaLimited(retryAfterSeconds: 30))
-    #expect(reply.contains("clawd auth login") == false)
-    #expect(try harness.jobs.listAll().isEmpty)
-  }
-
-  @Test
-  func accessDeniedParseFailureNeverTellsTheOwnerToLogIn() async throws {
-    // given
-    let harness = try makeHarness(parseResults: [.accessDenied])
-
-    // when
-    await parkDraft(harness)
-
-    // then
-    let reply = try #require(await harness.transport.sent.last?.text)
-    #expect(reply == ScheduleReplies.accessDenied)
-    #expect(reply.contains("clawd auth login") == false)
+    // then — the typed reply, nothing parked, nothing armed
+    let sessionID = try ownerSessionID(harness)
+    #expect(await harness.transport.sent.last?.text == expectedReply)
+    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
     #expect(try harness.jobs.listAll().isEmpty)
   }
 
@@ -253,17 +234,5 @@ struct ScheduleInteractionTests {
     #expect(reply == CommandReplies.help)
     #expect(reply.contains("/skills"))
     #expect(reply.contains("/learning"))
-  }
-
-  @Test
-  func strangersGetNoHelp() async throws {
-    // given
-    let harness = try makeHarness()
-
-    // when
-    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "/help"))
-
-    // then — never reveal capabilities to a stranger
-    #expect(await harness.transport.sent.last?.text == MessageRouter.privateBotText)
   }
 }

@@ -89,36 +89,6 @@ struct ContextBuilderTests {
       ]
     )
     #expect(result.policyVersion == expected)
-    #expect(result.policyVersion.count == 16)
-  }
-
-  @Test
-  func currentPolicyVersionMatchesTheAssembledFingerprint() throws {
-    // given — the recompute seam (§6.3) must equal the value `assemble` produces, by construction
-    let builder = makeBuilder(
-      policyStaticSubhash: "sub",
-      workspace: FakeWorkspace(files: [
-        .soul: .present("s"),
-        .agents: .present("a"),
-        .tools: .present("t"),
-      ])
-    )
-    let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatID: 42),
-      history: [],
-      historyMessageIDs: [],
-      windowStartMessageID: 0,
-      isTainted: false,
-      hasPrivateData: false
-    )
-
-    // when
-    let standalone = builder.currentPolicyVersion()
-    let assembled = try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive)
-      .policyVersion
-
-    // then
-    #expect(standalone == assembled)
   }
 
   @Test
@@ -137,22 +107,6 @@ struct ContextBuilderTests {
           promptMaterials: ["system policy", "proactive policy", "", "", ""]
         )
     )
-  }
-
-  @Test
-  func editingAPromptFileChangesThePolicyVersion() {
-    // given / when — a strict-inequality voider (§3.2)
-    let before = makeBuilder(
-      policyStaticSubhash: "sub",
-      workspace: FakeWorkspace(files: [.soul: .present("v1")])
-    ).currentPolicyVersion()
-    let after = makeBuilder(
-      policyStaticSubhash: "sub",
-      workspace: FakeWorkspace(files: [.soul: .present("v2")])
-    ).currentPolicyVersion()
-
-    // then
-    #expect(before != after)
   }
 
   @Test

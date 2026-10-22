@@ -23,8 +23,8 @@ struct HeartbeatAckTests {
 
   @Test
   func leadingAndTrailingTokensBothStrip() {
-    // given
-    let content = "HEARTBEAT_OK all quiet HEARTBEAT_OK"
+    // given — the remainder fits the cap only once BOTH markers are stripped (313 chars with one)
+    let content = "HEARTBEAT_OK " + String(repeating: "x", count: 300) + " HEARTBEAT_OK"
 
     // when / then
     #expect(HeartbeatAck.isAck(content))
@@ -37,18 +37,8 @@ struct HeartbeatAckTests {
     let oneOver = "HEARTBEAT_OK " + String(repeating: "x", count: 301)
 
     // when / then
-    #expect(HeartbeatAck.maxAckChars == 300)
     #expect(HeartbeatAck.isAck(exactlyAtCap))
     #expect(HeartbeatAck.isAck(oneOver) == false)
-  }
-
-  @Test
-  func longSubstantiveTextIsNotAnAck() {
-    // given
-    let report = String(repeating: "the backup target disk is failing — ", count: 12)
-
-    // when / then
-    #expect(HeartbeatAck.isAck(report) == false)
   }
 
   @Test
@@ -61,8 +51,9 @@ struct HeartbeatAckTests {
   @Test
   func embeddedTokenDoesNotStrip() {
     // given — only ONE leading and ONE trailing token strip; an embedded token is content, so no
-    // token is present as a leading/trailing marker here — this is not an ack.
-    let content = "prefix HEARTBEAT_OK " + String(repeating: "y", count: 300)
+    // token is present as a leading/trailing marker here — this is not an ack. The tail is short,
+    // so only the missing marker (not the length cap) can make this false.
+    let content = "prefix HEARTBEAT_OK suffix"
 
     // when / then
     #expect(HeartbeatAck.isAck(content) == false)

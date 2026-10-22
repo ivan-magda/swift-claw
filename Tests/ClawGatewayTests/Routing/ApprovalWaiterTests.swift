@@ -568,7 +568,7 @@ struct ApprovalWaiterTests {
         arguments: [env.observationMessageID]
       )
     }
-    #expect(observation == "The approval was voided because the policy changed before it ran.")
+    #expect(observation == ApprovalWaiter.deniedObservationContent(for: .stalePolicy))
     let auditDecision = try await env.queue.read { db in
       try String.fetchOne(
         db,

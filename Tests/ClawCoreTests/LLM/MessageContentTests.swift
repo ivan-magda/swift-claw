@@ -32,13 +32,4 @@ struct MessageContentTests {
     #expect(content.text == "what is this?")
     #expect(content.images == [pixel])
   }
-
-  @Test
-  func chatMessageStillAcceptsAPlainString() {
-    // given / when — the compatibility guarantee for every existing construction site
-    let message = ChatMessage(role: .user, content: "hi")
-
-    // then
-    #expect(message.content == MessageContent("hi"))
-  }
 }

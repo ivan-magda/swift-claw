@@ -29,29 +29,6 @@ struct ChatGPTProviderStateCodecTests {
     #expect(issuer == Self.goldenIssuer)
   }
 
-  /// The hashes are a function of the profile ID and the model text alone, so the same pair renders
-  /// the same identity on every process — the property the derive-on-restart rule rests on.
-  @Test
-  func profileAndModelHashesAreStable() {
-    // given
-    let first = ChatGPTReplayIdentity(
-      profileID: Self.profileID,
-      wireModel: Self.wireModel,
-      epoch: Self.epoch
-    )
-    let second = ChatGPTReplayIdentity(
-      profileID: Self.profileID,
-      wireModel: Self.wireModel,
-      epoch: Self.otherEpoch
-    )
-
-    // then
-    #expect(first.credentialProfileHash == second.credentialProfileHash)
-    #expect(first.wireModelHash == second.wireModelHash)
-    #expect(first.credentialProfileHash == "11e594f481958c10e3015d0bf0447a22")
-    #expect(first.wireModelHash == "b0a9d642d12f553129c39513f7ce2605")
-  }
-
   /// The issuer travels no further than this daemon's own database, but it is still an identity: a
   /// value that is exactly a fixed version and three hashed fields has nowhere to hide the profile
   /// or the account the state was minted for.

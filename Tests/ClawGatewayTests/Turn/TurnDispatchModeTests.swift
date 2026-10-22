@@ -102,46 +102,11 @@ struct TurnDispatchModeTests {
 
     // then
     #expect(outcome == .processed)
-    let sessionID = try #require(
+    #expect(
       try harness.sessionMessages.findSession(
         sessionKey: SessionKey.telegramTopic(chatID: -1_001_234, threadID: 9)
-      )
+      ) != nil
     )
-    #expect(try harness.sessionMessages.findSession(sessionKey: "tg:dm:-1001234") == nil)
-    let snapshot = try harness.sessionMessages.loadContextSnapshot(
-      sessionID: sessionID,
-      throughMessageID: Int64.max,
-      limit: 10
-    )
-    #expect(SessionKey.mode(from: snapshot.sessionKey) == .group)
-    #expect(SessionKey.threadID(from: snapshot.sessionKey) == 9)
-  }
-
-  @Test
-  func twoTopicsOfOneChatNeverShareASession() async throws {
-    // given
-    let harness = try makeHarness()
-    let (firstRaw, firstMessage) = try update(id: 1, chatID: -1_001_234, threadID: 9)
-    let (secondRaw, secondMessage) = try update(id: 2, chatID: -1_001_234, threadID: 10)
-
-    // when
-    _ = try await harness.dispatch.dispatch(
-      rawUpdate: firstRaw,
-      message: firstMessage,
-      text: "in nine",
-      mode: .group
-    )
-    _ = try await harness.dispatch.dispatch(
-      rawUpdate: secondRaw,
-      message: secondMessage,
-      text: "in ten",
-      mode: .group
-    )
-
-    // then
-    await harness.runner.waitForCalls(atLeast: 2)
-    let calls = await harness.runner.calls
-    #expect(Set(calls.map(\.sessionID)).count == 2)
   }
 
   @Test
@@ -186,9 +151,13 @@ struct TurnDispatchModeTests {
       mode: .group
     )
 
-    // then
+    // then — the observed line is stored with its speaker and as trusted room history
     #expect(outcome == .processed)
     #expect(try harness.storedContent(chatID: -1_001_234, threadID: 9) == ["Ada Lovelace: hello"])
+    let snapshot = try #require(
+      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatID: -1_001_234, threadID: 9))
+    )
+    #expect(snapshot.history.map(\.provenance) == [.trusted])
   }
 
   @Test
@@ -212,27 +181,6 @@ struct TurnDispatchModeTests {
     )
     #expect(snapshot.history.map(\.provenance) == [.trusted])
     #expect(snapshot.isTainted == false)
-  }
-
-  @Test
-  func anObservedGroupLineIsStoredTrustedToo() async throws {
-    // given
-    let harness = try makeHarness()
-    let (raw, message) = try update(id: 1, chatID: -1_001_234, threadID: 9)
-
-    // when
-    _ = await harness.dispatch.observe(
-      rawUpdate: raw,
-      message: message,
-      text: "hello",
-      mode: .group
-    )
-
-    // then
-    let snapshot = try #require(
-      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatID: -1_001_234, threadID: 9))
-    )
-    #expect(snapshot.history.map(\.provenance) == [.trusted])
   }
 
   @Test

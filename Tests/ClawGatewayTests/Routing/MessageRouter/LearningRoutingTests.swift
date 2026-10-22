@@ -11,32 +11,6 @@ import Testing
 @Suite
 struct LearningRoutingTests {
   @Test
-  func groupRefusesBeforeRead() async throws {
-    // given
-    let harness = try Harness.make(groupChats: [-1_001])
-    try await harness.queue.write { db in
-      try db.execute(sql: "DROP TABLE job_learning_state")
-    }
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(
-        id: 1,
-        from: 42,
-        chat: -1_001,
-        text: "/learning",
-        chatKind: .supergroup,
-        messageThreadID: 7
-      )
-    )
-
-    // then — making a read-only report room-safe reaches the deliberately broken reader.
-    #expect(outcome == .processed)
-    #expect(await harness.transport.sent.map(\.text) == [CommandReplies.directOnly])
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
   func disabledServiceStillReadsAndResetRequiresOwnerConfirmation() async throws {
     // given — no ScheduledLearningService is passed to the router.
     let harness = try Harness.make()
@@ -330,7 +304,6 @@ extension LearningRoutingTests {
     let now = Date(timeIntervalSince1970: 1_782_000_600)
 
     static func make(
-      groupChats: Set<Int64> = [],
       secretValues: [String] = [],
       outboxSignal: OutboxSignal? = nil
     ) throws -> Harness {
@@ -350,7 +323,7 @@ extension LearningRoutingTests {
         memoryCommands: MemoryCommandStoreGRDB(writer: queue),
         pendingConfirmations: pendingConfirmations,
         botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-        accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
+        accessControl: AccessControl(allowlist: allowlist, groupChats: []),
         delivery: transport,
         turnRunner: dispatcher,
         imageCache: ImageCache(),

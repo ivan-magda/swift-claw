@@ -6,17 +6,6 @@ import Testing
 @Suite
 struct WorkspaceValuesTests {
   @Test
-  func workspaceFileRelativePathsMatchKnownFilenames() {
-    // given / when / then
-    #expect(WorkspaceFile.soul.relativePath == "SOUL.md")
-    #expect(WorkspaceFile.agents.relativePath == "AGENTS.md")
-    #expect(WorkspaceFile.tools.relativePath == "TOOLS.md")
-    #expect(WorkspaceFile.user.relativePath == "USER.md")
-    #expect(WorkspaceFile.memory.relativePath == "MEMORY.md")
-    #expect(WorkspaceFile.heartbeat.relativePath == "HEARTBEAT.md")
-  }
-
-  @Test
   func workspaceFileEnumeratesEveryFixedFileInOrder() {
     // given / when
     let paths = WorkspaceFile.allCases.map(\.relativePath)
@@ -40,17 +29,6 @@ struct WorkspaceValuesTests {
     #expect(WorkspaceFile.isPromptPrivileged(basename: "soul.md"))
   }
 
-  @Test
-  func missingLoadedFileIsEmptyZeroLengthWithMissingOutcome() {
-    // given / when
-    let missing = LoadedFile.missing
-
-    // then
-    #expect(missing.outcome == .missing)
-    #expect(missing.text.isEmpty)
-    #expect(missing.graphemeCount == 0)
-  }
-
   @Test(arguments: [
     ("memory/2026-10-08.md", true),
     ("reports/2026-10-08.md", false),
@@ -67,5 +45,4 @@ struct WorkspaceValuesTests {
       ) == expected
     )
   }
-
 }

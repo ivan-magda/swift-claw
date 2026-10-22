@@ -28,12 +28,11 @@ extension TrialAssignmentResolutionTests {
 
   @Test(arguments: LiveTrialStateDrift.allCases)
   func reconcileRejectsSameEpochLiveTrialStateDrift(_ drift: LiveTrialStateDrift) throws {
-    // given
-    let env = try trialEnvironment()
-    let sealed = try env.sealedTrialEvidence()
-    let identity = try #require(try env.learning.liveTrialIdentities().first)
+    // given — a trial with no consumed assignment, so no per-assignment recompute can throw
+    // first and the reconciliation's own current-state decode is the only guard.
+    let env = try BoundRunEnvironment.make()
+    let identity = try env.installTrial(jobID: env.jobID)
     try env.apply(drift)
-    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — omitting reconciliation's strict current-state decode accepts live drift.
     #expect {
@@ -44,7 +43,7 @@ extension TrialAssignmentResolutionTests {
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
+    #expect(try env.trialState(trialID: identity.trialID) == .open)
   }
 
   @Test

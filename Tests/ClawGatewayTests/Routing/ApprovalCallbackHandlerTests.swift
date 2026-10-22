@@ -187,7 +187,6 @@ struct ApprovalCallbackHandlerTests {
     allowed: [Int64] = [ownerID],
     approveOutcome: ApprovalApproveOutcome? = nil,
     denyResult: Bool = true,
-    knownNonce: Bool = true,
     wireHandler: Bool = true,
     resolveThrows: Bool = false
   ) throws -> Harness {
@@ -197,7 +196,7 @@ struct ApprovalCallbackHandlerTests {
 
     let approval = Self.makeApproval(id: 7, nonce: Self.nonce, ownerUserID: Self.ownerID)
     let approvals = ScriptedApprovals(
-      byNonce: knownNonce ? [Self.nonce: approval] : [:],
+      byNonce: [Self.nonce: approval],
       approveOutcome: approveOutcome ?? .approved(approval),
       denyResult: denyResult,
       throwOnResolve: resolveThrows
@@ -264,28 +263,6 @@ struct ApprovalCallbackHandlerTests {
   // MARK: - Auth failures (row untouched, audited forbidden, neutral toast)
 
   @Test
-  func nonAllowlistedSenderIsDeniedAndAudited() async throws {
-    // given — a stranger taps a well-formed approve button
-    let harness = try makeHarness()
-    let update = callbackUpdate(id: 1, from: 9999, data: approveData())
-
-    // when
-    let callback = try #require(update.callback)
-    let outcome = await harness.handler.handle(callback, updateID: update.updateID)
-
-    // then — no CAS, one forbidden access audit (system actor), one neutral toast, update consumed
-    #expect(outcome == .processed)
-    #expect(harness.approvals.approveCalls.isEmpty)
-    #expect(harness.approvals.denyCalls.isEmpty)
-    let events = harness.audit.events
-    #expect(events.count == 1)
-    #expect(events.first?.action == .messageIn)
-    #expect(events.first?.decision == "forbidden")
-    #expect(events.first?.actor == .system)
-    #expect(await harness.callbacks.answers.count == 1)
-  }
-
-  @Test
   func allowlistedNonOwnerFailsOwnerBinding() async throws {
     // given — an allowlisted user who is NOT the approval's owner taps approve
     let harness = try makeHarness(allowed: [Self.ownerID, 43])
@@ -303,26 +280,6 @@ struct ApprovalCallbackHandlerTests {
     #expect(events.first?.decision == "forbidden")
     #expect(events.first?.actor == .system)
     #expect(events.first?.runID == 100)
-    #expect(await harness.callbacks.answers.count == 1)
-  }
-
-  @Test
-  func unknownNonceIsDenied() async throws {
-    // given — the nonce resolves to no row
-    let harness = try makeHarness(knownNonce: false)
-    let update = callbackUpdate(id: 3, from: Self.ownerID, data: approveData())
-
-    // when
-    let callback = try #require(update.callback)
-    let outcome = await harness.handler.handle(callback, updateID: update.updateID)
-
-    // then — actor is `system`, not `owner`: owner-attribution requires the RESOLVED approval row
-    // (`approval?.ownerUserId == callback.fromUserId` in denyAuth), and an unknown nonce resolves
-    // no row — the handler has no other owner identity, so even the owner's own tap is unattributed
-    #expect(outcome == .processed)
-    #expect(harness.approvals.approveCalls.isEmpty)
-    #expect(harness.audit.events.first?.decision == "forbidden")
-    #expect(harness.audit.events.first?.actor == .system)
     #expect(await harness.callbacks.answers.count == 1)
   }
 

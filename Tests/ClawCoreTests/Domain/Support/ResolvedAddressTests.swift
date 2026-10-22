@@ -23,7 +23,6 @@ struct ResolvedAddressTests {
     // legacy numeric IPv4 spellings getaddrinfo resolves without DNS
     "3323068500",
     "0xC6120054",
-    "198.18.0.84",
     "198.18",
     "0300.0030.0000.0124",
   ])

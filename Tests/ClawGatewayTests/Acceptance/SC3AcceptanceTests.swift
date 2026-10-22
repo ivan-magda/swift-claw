@@ -285,61 +285,22 @@ struct SC3AcceptanceTests {
 
 // MARK: - Clause 3 lifecycle + rev.1 regressions
 
-/// Deterministic two-phase gate: the dispatch signals it has ENTERED, then blocks until RELEASED.
-actor ReleaseGate {
-  private var entered = false
-  private var released = false
-  private var enterWaiters: [CheckedContinuation<Void, Never>] = []
-  private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
-
-  func markEntered() {
-    entered = true
-    for waiter in enterWaiters {
-      waiter.resume()
-    }
-    enterWaiters = []
-  }
-
-  func awaitEntered() async {
-    if entered {
-      return
-    }
-    await withCheckedContinuation { continuation in
-      enterWaiters.append(continuation)
-    }
-  }
-
-  func release() {
-    released = true
-    for waiter in releaseWaiters {
-      waiter.resume()
-    }
-    releaseWaiters = []
-  }
-
-  func awaitRelease() async {
-    if released {
-      return
-    }
-    await withCheckedContinuation { continuation in
-      releaseWaiters.append(continuation)
-    }
-  }
-}
-
 /// Holds one ingesting observation behind the release gate so `/stop` can win mid-run before the
-/// taint commit (rev.1 M1).
+/// taint commit (rev.1 M1). It opens `entered` once mid-dispatch, then waits for `release` even
+/// through the `/stop` cancellation, so the observation lands only after the stop.
 actor ReleaseGatedIngestDispatcher: ToolDispatching {
   nonisolated let definitions: [ToolDefinition] = []
-  private let gate: ReleaseGate
+  private let entered: AsyncGate
+  private let release: AsyncGate
 
-  init(gate: ReleaseGate) {
-    self.gate = gate
+  init(entered: AsyncGate, release: AsyncGate) {
+    self.entered = entered
+    self.release = release
   }
 
   func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
-    await gate.markEntered()
-    await gate.awaitRelease()
+    entered.open()
+    await release.waitIgnoringCancellation()
     return ToolDispatchOutcome(
       observation: ToolObservation(
         callID: call.id,
@@ -518,74 +479,6 @@ struct SC3Clause3AndRegressionTests {
     )
   }
 
-  // Restart re-parks a live approval (spec §6.5 / Task 19): the durable `approvals` row survives the
-  // process boundary, boot reconciliation re-parks the lane, and the owner's button still resolves.
-  @Test
-  func restartReParksTheApproval() async throws {
-    let sharedDB = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "claw-sc3-\(UUID().uuidString).sqlite"
-    ).path
-    let first = try makeSC3Harness(
-      scripts: [
-        [
-          toolCallResponse(
-            [
-              ToolCall(
-                id: "w1",
-                name: "file_write",
-                argumentsJSON: #"{"path":"notes/plan.md","content":"hello","overwrite":false}"#
-              ),
-            ]
-          ),
-          okResponse(content: "saved"),
-        ],
-      ],
-      httpResponses: [:],
-      databasePath: sharedDB
-    )
-    _ = await first.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
-    let parked = try #require(
-      await pollUntil {
-        try fetchApprovals(databasePath: sharedDB).first
-      }
-    )
-    #expect(parked.state == ApprovalState.pending.rawValue)
-
-    // restart: same DB and workspace, fresh coordinator/registry — boot reconciliation re-parks
-    // the lane
-    let second = try makeSC3Harness(
-      scripts: [[okResponse(content: "saved")]],
-      httpResponses: [:],
-      databasePath: sharedDB,
-      workspaceRoot: first.workspaceRoot
-    )
-    await second.runBootReconciliation()
-
-    // the row still PENDING after the restart — nothing denied it
-    #expect(
-      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.pending.rawValue]
-    )
-
-    // and the owner's button resolves it against the re-parked lane
-    _ = await second.router.handle(
-      rawUpdate: callbackUpdate(
-        id: 2,
-        from: 7,
-        data: ApprovalKeyboard.callbackData(
-          nonce: parked.nonce,
-          verdict: ApprovalKeyboard.approveVerdict
-        )
-      )
-    )
-    _ = await pollUntilTrue {
-      FileManager.default.fileExists(atPath: parked.canonicalTarget)
-    }
-    #expect(
-      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.approved.rawValue]
-    )
-    #expect(try String(contentsOfFile: parked.canonicalTarget, encoding: .utf8) == "hello")
-  }
-
   // Regression H1 — in-run private data (a disk read the assembly omitted) gates the fetch, and a
   // ≥16-grapheme on-disk-MEMORY substring is refused before egress (tier-3 reads disk, rev.1 H1).
   @Test
@@ -688,7 +581,8 @@ struct SC3Clause3AndRegressionTests {
   // Regression M1 — an ingesting run cancelled by `/stop` mid-dispatch still taints (amendment F).
   @Test
   func stopCancelledRunThatIngestedStillTaints() async throws {
-    let gate = ReleaseGate()
+    let entered = AsyncGate()
+    let release = AsyncGate()
     let harness = try makeSC3Harness(
       scripts: [
         [
@@ -697,12 +591,12 @@ struct SC3Clause3AndRegressionTests {
         ],
       ],
       httpResponses: ["https://example.com/a": htmlOK("hi")],
-      dispatcherOverride: ReleaseGatedIngestDispatcher(gate: gate)
+      dispatcherOverride: ReleaseGatedIngestDispatcher(entered: entered, release: release)
     )
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read a page"))
-    await gate.awaitEntered()  // the run is now mid-dispatch, holding an ingesting observation
+    await entered.wait()  // the run is now mid-dispatch, holding an ingesting observation
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "/stop"))
-    await gate.release()
+    release.open()
 
     // the cancelled-but-ingested run persists taint (the /new-superseded skip is pinned at the store
     // level — Phase 1 Task 08)

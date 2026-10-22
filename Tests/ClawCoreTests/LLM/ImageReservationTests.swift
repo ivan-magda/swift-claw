@@ -10,26 +10,10 @@ struct ImageReservationTests {
   }
 
   @Test
-  func imagesAreReservedEvenOnTheTextOnlyPolicy() {
-    // given — a route with no replay state still sends images, so the reservation cannot live
-    // inside the replay-state branch
-    let messages = [
-      ChatMessage(
-        role: .user,
-        content: MessageContent(parts: [.image(photo(width: 1280, height: 960))])
-      ),
-    ]
-
-    // when
-    let reserved = LLMInputReservationPolicy.textOnly.additionalTokens(for: messages)
-
-    // then — ceil(1280/28) * ceil(960/28)
-    #expect(reserved == 1_610)
-  }
-
-  @Test
   func everyImageInTheRequestIsCountedIncludingReplayedOnes() {
-    // given — one image on the newest message and one carried in from history
+    // given — one image on the newest message and one carried in from history, on the text-only
+    // policy: a route with no replay state still sends images, so the reservation cannot live
+    // inside the replay-state branch
     let messages = [
       ChatMessage(
         role: .user,
@@ -47,15 +31,6 @@ struct ImageReservationTests {
 
     // then — 46*35 + 29*22
     #expect(reserved == 1_610 + 638)
-  }
-
-  @Test
-  func textOnlyRequestsReserveNothing() {
-    // given
-    let messages = [ChatMessage(role: .user, content: "hi")]
-
-    // when / then
-    #expect(LLMInputReservationPolicy.textOnly.additionalTokens(for: messages) == 0)
   }
 
   /// The route that actually carries replay state is the one shipped for ChatGPT, so the image

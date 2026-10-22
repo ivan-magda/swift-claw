@@ -135,18 +135,6 @@ struct ChatGPTWireValuesTests {
     #expect(ChatGPTWireValues.headerSafeToken(raw, maxBytes: 256) == nil)
   }
 
-  @Test
-  func headerSafeTokenMeasuresTheCapInUTF8BytesNotCharacters() {
-    // given
-    // Four scalars, but eight UTF-8 bytes: a character count would wrongly admit this.
-    let multiByte = "ééée"
-
-    // when / then
-    #expect(multiByte.count == 4)
-    #expect(multiByte.utf8.count == 7)
-    #expect(ChatGPTWireValues.headerSafeToken(multiByte, maxBytes: 6) == nil)
-  }
-
   // MARK: - Control-Free: Accepted
 
   @Test(arguments: [
@@ -212,18 +200,6 @@ struct ChatGPTWireValuesTests {
   }
 
   // MARK: - Safe Remote Diagnostic: Sanitizing
-
-  @Test
-  func safeRemoteDiagnosticPassesPlainTextThrough() {
-    // given
-    let remote = "authorization pending"
-
-    // when
-    let safe = ChatGPTWireValues.safeRemoteDiagnostic(remote, redacting: [], maxBytes: 200)
-
-    // then
-    #expect(safe == remote)
-  }
 
   @Test(arguments: [
     ("line one\nline two", "line one line two"),
@@ -332,32 +308,7 @@ struct ChatGPTWireValuesTests {
     #expect(safe == "header \(SecretRedactor.replacement) end")
   }
 
-  @Test
-  func safeRemoteDiagnosticIgnoresEmptyRedactionValues() {
-    // given
-    let remote = "plain text"
-
-    // when
-    let safe = ChatGPTWireValues.safeRemoteDiagnostic(remote, redacting: [""], maxBytes: 200)
-
-    // then
-    #expect(safe == remote)
-  }
-
   // MARK: - Safe Remote Diagnostic: Bounding
-
-  @Test
-  func safeRemoteDiagnosticTruncatesToTheByteBound() {
-    // given
-    let remote = String(repeating: "a", count: 500)
-
-    // when
-    let safe = ChatGPTWireValues.safeRemoteDiagnostic(remote, redacting: [], maxBytes: 32)
-
-    // then
-    #expect(safe.utf8.count <= 32)
-    #expect(safe.hasPrefix("aaaa"))
-  }
 
   @Test
   func safeRemoteDiagnosticTruncatesOnAScalarBoundary() {

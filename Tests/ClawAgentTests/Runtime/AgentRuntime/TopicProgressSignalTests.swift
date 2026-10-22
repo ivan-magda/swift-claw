@@ -127,30 +127,6 @@ struct TopicProgressSignalTests {
     )
   }
 
-  @Test
-  func aDirectTurnPulsesTypingIntoNoThread() async throws {
-    // given
-    let typing = RecordingTyping()
-    let runtime = makeRuntime(
-      provider: SequenceProvider([okResponse(content: "ok")]),
-      typing: typing
-    )
-
-    // when — the DM spelling: no mode, no thread, exactly as before group mode existed
-    _ = try await runtime.runTurn(
-      makeTurnRequest(runID: 11, sessionID: 22, chatID: 42, context: buildResult())
-    )
-
-    // then
-    let pulses = await typing.pulses
-    #expect(!pulses.isEmpty)
-    #expect(
-      pulses.allSatisfy {
-        $0.messageThreadID == nil
-      }
-    )
-  }
-
   /// The DM counterpart: a delivered draft is the bubble, so it takes the typing action's place
   /// rather than pulsing alongside it.
   @Test

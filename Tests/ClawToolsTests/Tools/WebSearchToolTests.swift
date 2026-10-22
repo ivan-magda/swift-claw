@@ -52,44 +52,16 @@ struct WebSearchToolTests {
     #expect(payload.ingestedUntrusted)
   }
 
-  @Test
-  func countClampsToOneThroughTenAndDefaultsToFive() async throws {
-    // given — recordedCount fires synchronously inside each awaited execute, so a lock-guarded
-    // box captures the counts in deterministic call order (no detached Tasks to race)
-    final class CountBox: @unchecked Sendable {
-      private let lock = NSLock()
-      private(set) var counts: [Int] = []
-
-      func record(_ value: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-        counts.append(value)
-      }
-    }
-    let box = CountBox()
-    let tool = WebSearchTool(
-      search: ScriptedSearch { value in
-        box.record(value)
-      }
-    )
-
-    // when
-    _ = await tool.execute(arguments: .object(["query": .string("q")]), canonicalTarget: nil)
-    _ = await tool.execute(
-      arguments: .object(["query": .string("q"), "count": .number(99)]),
-      canonicalTarget: nil
-    )
-    _ = await tool.execute(
-      arguments: .object(["query": .string("q"), "count": .number(0)]),
-      canonicalTarget: nil
-    )
-
-    // then
-    #expect(box.counts == [5, 10, 1])
-  }
-
-  @Test
-  func hugeCountClampsWithoutTrapping() async {
+  @Test(
+    arguments: [
+      (requested: nil, sent: 5),
+      (requested: 99, sent: 10),
+      (requested: 0, sent: 1),
+      // an out-of-range Double clamps to the max instead of trapping on Int(Double)
+      (requested: 1e300, sent: 10),
+    ] as [(requested: Double?, sent: Int)]
+  )
+  func countClampsToOneThroughTenAndDefaultsToFive(requested: Double?, sent: Int) async {
     // given — recordedCount fires synchronously inside the awaited execute, so a lock-guarded
     // box captures the count without racing (no detached Tasks)
     final class CountBox: @unchecked Sendable {
@@ -108,16 +80,17 @@ struct WebSearchToolTests {
         box.record(value)
       }
     )
+    var arguments: [String: JSONValue] = ["query": .string("q")]
+    if let requested {
+      arguments["count"] = .number(requested)
+    }
 
     // when
-    let payload = await tool.execute(
-      arguments: .object(["query": .string("q"), "count": .number(1e300)]),
-      canonicalTarget: nil
-    )
+    let payload = await tool.execute(arguments: .object(arguments), canonicalTarget: nil)
 
-    // then — the out-of-range Double clamps to the max instead of trapping on Int(Double)
+    // then
     #expect(payload.status == .ok)
-    #expect(box.counts == [10])
+    #expect(box.counts == [sent])
   }
 
   @Test

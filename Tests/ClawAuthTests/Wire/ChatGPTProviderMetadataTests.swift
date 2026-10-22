@@ -46,37 +46,6 @@ struct ChatGPTProviderMetadataTests {
     #expect(ChatGPTProviderMetadata.credentialFreshnessSkew == .seconds(120))
   }
 
-  @Test
-  func everyDeviceAuthURLIsBuiltOnThePinnedIssuer() {
-    // given
-    let issued = [
-      ChatGPTProviderMetadata.userCodeURL,
-      ChatGPTProviderMetadata.devicePollURL,
-      ChatGPTProviderMetadata.tokenURL,
-      ChatGPTProviderMetadata.verificationURL,
-      ChatGPTProviderMetadata.redirectURI,
-    ]
-
-    // when / then
-    for url in issued {
-      #expect(url.hasPrefix(ChatGPTProviderMetadata.issuer + "/"))
-    }
-  }
-
-  // MARK: - Reused Identity
-
-  @Test
-  func identityIsTheRegisteredRouteRatherThanASecondDeclaration() {
-    // given / when / then
-    #expect(ChatGPTProviderMetadata.providerID == .openAIChatGPT)
-    #expect(ChatGPTProviderMetadata.providerID == LLMProviderDescriptor.openAIChatGPT.providerID)
-    #expect(ChatGPTProviderMetadata.modelPrefix == "openai-chatgpt/")
-    #expect(
-      ChatGPTProviderMetadata.modelPrefix == LLMProviderDescriptor.openAIChatGPT.qualifiedPrefix
-    )
-    #expect(ChatGPTProviderMetadata.responsesURL == LLMProviderDescriptor.chatGPTResponsesEndpoint)
-  }
-
   // MARK: - Authorization: Bearer
 
   @Test
@@ -95,18 +64,6 @@ struct ChatGPTProviderMetadataTests {
     #expect(authorization.generation == LLMCredentialGeneration(value: 7))
   }
 
-  @Test
-  func authorizationRedactsTheAccessTokenItPutsOnTheWire() {
-    // given
-    let token = TokenBuilder.accessToken(accountID: nil)
-
-    // when
-    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
-
-    // then
-    #expect(authorization.redactionValues.contains(token))
-  }
-
   // MARK: - Authorization: Account Header
 
   @Test
@@ -123,24 +80,13 @@ struct ChatGPTProviderMetadataTests {
     #expect(authorization.redactionValues.contains(token))
   }
 
+  /// One row per outcome of the only branch composition owns: whether `extract` yields an account.
+  /// Which claims are unusable is `ChatGPTTokenMetadataTests`' contract, so it is not re-run here.
   @Test(arguments: [
     // No account claim at all.
     TokenBuilder.accessToken(accountID: nil),
-    // An empty account value.
-    TokenBuilder.accessToken(accountID: ""),
     // A value that would smuggle a second header past a naive builder.
     TokenBuilder.accessToken(accountID: #"acct\r\nX-Injected: yes"#),
-    // Whitespace and controls a header value must never carry.
-    TokenBuilder.accessToken(accountID: "acct with space"),
-    TokenBuilder.accessToken(accountID: #"acct\u0000nul"#),
-    TokenBuilder.accessToken(accountID: #"acct\u001b[31m"#),
-    // Non-ASCII bytes.
-    TokenBuilder.accessToken(accountID: "acct-é"),
-    // Over the 256-byte bar.
-    TokenBuilder.accessToken(accountID: String(repeating: "a", count: 257)),
-    // Not a JWT at all.
-    "not-a-jwt",
-    "",
   ])
   func authorizationOmitsTheAccountHeaderForAnUnusableClaim(token: String) {
     // given / when
@@ -149,21 +95,6 @@ struct ChatGPTProviderMetadataTests {
     // then
     #expect(authorization.headers["ChatGPT-Account-ID"] == nil)
     #expect(authorization.headers["Authorization"] == "Bearer \(token)")
-  }
-
-  @Test
-  func authorizationComposesFromAMalformedTokenRatherThanFailing() {
-    // given
-    // A token the parser cannot read is still handed to the server, which is the only party that
-    // can judge it. Composition must not treat an unreadable claim as a credential failure.
-    let token = "garbage.not-base64url.at-all"
-
-    // when
-    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
-
-    // then
-    #expect(authorization.headers["Authorization"] == "Bearer \(token)")
-    #expect(authorization.headers.count == 1)
   }
 
   // MARK: - Authorization: Header Surface

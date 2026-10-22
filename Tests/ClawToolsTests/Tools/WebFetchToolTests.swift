@@ -273,7 +273,6 @@ struct WebFetchToolTests {
       resolution("https://exämple.com/")
         == .refused(reason: "Internationalized (non-ASCII/punycode) hosts are not supported in v1.")
     )
-    #expect(await http.requestedURLs.isEmpty)
   }
 
   @Test

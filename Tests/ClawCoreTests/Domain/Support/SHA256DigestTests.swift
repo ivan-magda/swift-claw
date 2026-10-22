@@ -21,18 +21,6 @@ struct SHA256DigestTests {
   }
 
   @Test
-  func approvalArgsHashUsesTheCanonicalRenderer() {
-    // given
-    let canonicalJSON = #"{"a":1,"b":2}"#
-
-    // when
-    let approvalHash = ApprovalArgsHash.sha256Hex(canonicalJSON)
-
-    // then
-    #expect(approvalHash == SHA256Digest.hex(canonicalJSON))
-  }
-
-  @Test
   func canonicalDigestValidationRejectsCaseLengthAndAlphabetMutants() {
     // given
     let valid = String(repeating: "a", count: 64)

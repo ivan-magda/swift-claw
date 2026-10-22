@@ -86,13 +86,9 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   func dueJobs(now: Date) throws(StoreError) -> [ScheduledJob] {
     lock.lock()
     defer { lock.unlock() }
-    // Mirrors the store contract: status='ACTIVE' AND next_occurrence <= now.
-    return seededJobs.filter { job in
-      job.status == .active
-        && job.nextOccurrence.map { occurrence in
-          occurrence <= now
-        } == true
-    }
+    // Returns the seeded jobs as-is: the ACTIVE-and-due predicate is the real store's contract,
+    // owned by ClawData's `dueJobsReturnsOnlyActiveDueRowsInDueOrder`. Tests seed only due jobs.
+    return seededJobs
   }
 
   func claimAndFire(
@@ -209,8 +205,7 @@ struct SchedulerServiceTests {
   private func makeJob(
     id: Int64 = 7,
     recurrence: RecurrenceEnvelope?,
-    nextOccurrence: Date?,
-    status: ScheduledJobStatus = .active
+    nextOccurrence: Date?
   ) -> ScheduledJob {
     ScheduledJob(
       id: id,
@@ -221,7 +216,7 @@ struct SchedulerServiceTests {
       timezone: "Europe/Berlin",
       nextOccurrence: nextOccurrence,
       lastFiredAt: nil,
-      status: status,
+      status: .active,
       sessionID: nil,
       createdTs: anchor,
       updatedTs: anchor
@@ -356,27 +351,6 @@ struct SchedulerServiceTests {
       ]
     )
     #expect(await fixture.runner.calls.isEmpty)
-  }
-
-  @Test
-  func pausedJobsNeverFire() async throws {
-    // given — a PAUSED job whose occurrence is long past; the scan predicate excludes it
-    let due = anchor.addingTimeInterval(300)
-    let now = anchor.addingTimeInterval(600)
-    let job = makeJob(
-      recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: everyFiveMinutesRule()),
-      nextOccurrence: due,
-      status: .paused
-    )
-    let fixture = makeFixture(jobs: [job], now: now)
-
-    // when
-    await fixture.service.tick()
-
-    // then — the tick still records; nothing fires or skips
-    #expect(fixture.store.ticks == [now])
-    #expect(fixture.store.claims.isEmpty)
-    #expect(fixture.store.skips.isEmpty)
   }
 
   @Test

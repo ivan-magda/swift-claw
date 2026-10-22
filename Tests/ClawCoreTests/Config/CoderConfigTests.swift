@@ -76,22 +76,6 @@ struct CoderConfigTests {
     }
   }
 
-  @Test
-  func enabledUsesStrictBooleanParser() {
-    // given
-    let environment = [EnvKey.coderEnabled: "sometimes"]
-
-    // when
-    let load = {
-      try CoderConfig.load(environment: environment)
-    }
-
-    // then
-    #expect(throws: ConfigError.invalidBool(key: EnvKey.coderEnabled, value: "sometimes")) {
-      try load()
-    }
-  }
-
   @Test(arguments: [
     (EnvKey.coderExecutable, "codex --flag"),
     (EnvKey.coderExecutable, "bin/codex"),

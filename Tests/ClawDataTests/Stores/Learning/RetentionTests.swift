@@ -11,7 +11,7 @@ struct RetentionTests {
     // given
     let env = try BoundRunEnvironment.make()
     let source = try env.evaluatedEvidence(issueCode: "material.missed")
-    let feedback = try env.appendFeedback(
+    try env.appendFeedback(
       subjectKind: .run,
       subjectDigest: String(source.evidence.runID),
       signal: .resultCorrection,
@@ -25,7 +25,6 @@ struct RetentionTests {
     #expect(payloadSweep.deletedPayloads == 2)
     #expect(try env.learning.evidence(runID: source.evidence.runID)?.payload == nil)
     #expect(try env.learning.evaluation(runID: source.evidence.runID) != nil)
-    #expect(feedback.eventID > 0)
 
     // when
     let compactSweep = try env.learning.sweepRetention(now: env.now.addingTimeInterval(91 * 86_400))

@@ -109,7 +109,8 @@ struct ContainerBackendProbeTests {
     #expect(probe == .available(engineVersion: "1.0.0"))
   }
 
-  @Test(arguments: ["0.12.3", "1.0", "v1.0.0", "1.0.0-beta.1"])
+  // The floor is 1.0.0; "0.99.9" sits just below it, so lowering the floor fails this table.
+  @Test(arguments: ["0.12.3", "0.99.9", "1.0", "v1.0.0", "1.0.0-beta.1"])
   func versionAvailabilityFailsClosedForOldOrMalformedCLI(version: String) async throws {
     // given
     let fixture = try BackendFixture()

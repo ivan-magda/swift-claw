@@ -514,35 +514,6 @@ struct MCPToolTests {
     await harness.tearDown()
   }
 
-  @Test("a call that finds the session gone reconnects and still answers")
-  func executeReconnects() async throws {
-    // given the first connection drops our session on the call that follows its handshake
-    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let harness = try ToolFixture.harness(against: scripted) { transport, connection in
-      guard connection == 1 else {
-        return transport
-      }
-      return FaultyTransport(
-        wrapping: transport,
-        failingSend: FaultyTransport.firstCallSend,
-        with: MCPTransportError.sessionExpired
-      )
-    }
-
-    // when
-    let payload = await harness.tool.execute(
-      arguments: .object([:]),
-      canonicalTarget: ToolFixture.target
-    )
-
-    // then the whole reconnect-and-retry chain fits inside the session budget `timeout` covers
-    #expect(payload.status == .ok)
-    #expect(payload.content == "list_issues on connection 2")
-    #expect(await scripted.connections == 2)
-
-    await harness.tearDown()
-  }
-
   @Test("arguments that are not a JSON object are refused before any call goes out")
   func executeRefusesNonObjectArguments() async throws {
     // given

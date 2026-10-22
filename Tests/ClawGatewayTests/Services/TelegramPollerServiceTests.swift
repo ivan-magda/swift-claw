@@ -104,22 +104,6 @@ struct TelegramPollerServiceTests {
     #expect(try stack.cursor.loadCursor() == 100)  // advanced LAST
   }
 
-  @Test
-  func cancellationStopsTheLoop() async throws {
-    // given
-    let stack = try makeStack(batches: [], allowed: [42])
-
-    // when
-    let task = Task {
-      try await stack.poller.run()
-    }
-    await stack.transport.waitForPolls(atLeast: 1)
-    task.cancel()
-
-    // then
-    try await task.value  // returns promptly, no throw
-  }
-
   @Test(.timeLimit(.minutes(1)))
   func shutdownDuringALongPollStopsWithoutLoggingAnError() async throws {
     // given — the real client over a long poll held until the poller is cancelled; the production

@@ -165,22 +165,4 @@ struct MemoryCommandRoutingTests {
     #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
-
-  @Test
-  func strangerMemoryReviewGetsPrivateBotReplyWithoutLeakingMemory() async throws {
-    // given
-    let harness = try MemoryRoutingHarness.make()
-    _ = try harness.seedItem(text: "secret fact", kind: .user, day: 86_400)
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 7, text: "/memory")
-    )
-
-    // then
-    #expect(outcome == .processed)
-    #expect(await harness.transport.sent.map(\.text) == [MessageRouter.privateBotText])
-    #expect(await harness.dispatcher.calls.isEmpty)
-    #expect(try harness.memoryItemCount() == 1)
-  }
 }

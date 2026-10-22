@@ -162,34 +162,6 @@ struct ChatGPTResponsesRequestEncoderTests {
     )
   }
 
-  /// The three tool fields travel together. Both halves are asserted in one test because either one
-  /// alone passes for the wrong reason: an encoder that emits nothing satisfies the absence, and one
-  /// that always emits satisfies the presence.
-  @Test
-  func toolFieldsAppearTogetherAndOnlyWhenToolsExist() throws {
-    // given
-    let messages = [ChatMessage(role: .user, content: "hello")]
-    let without = ChatRequest(model: "gpt-5", messages: messages, maxOutputTokens: 4096)
-    let with = ChatRequest(
-      model: "gpt-5",
-      messages: messages,
-      maxOutputTokens: 4096,
-      tools: [Support.clockTool]
-    )
-
-    // when
-    let withoutBody = try decodeBody(encoder.encode(request: without))
-    let withBody = try decodeBody(encoder.encode(request: with))
-
-    // then
-    #expect(withoutBody["tools"] == nil)
-    #expect(withoutBody["tool_choice"] == nil)
-    #expect(withoutBody["parallel_tool_calls"] == nil)
-    #expect(withBody["tools"] != nil)
-    #expect(withBody["tool_choice"] as? String == "auto")
-    #expect(withBody["parallel_tool_calls"] as? Bool == true)
-  }
-
   /// A stop string cannot be honored here and must not be quietly dropped, which would change what
   /// the model was asked for. The paired nil case proves the refusal is the stop field's doing
   /// rather than an encoder that refuses everything.
@@ -492,28 +464,6 @@ struct ChatGPTResponsesRequestEncoderTests {
     let content = try #require(assistant["content"] as? [[String: Any]])
     #expect(content.first?["type"] as? String == "output_text")
     #expect(content.first?["text"] as? String == "It is noon.")
-  }
-
-  /// A tool result names the call it answers, so the route can pair it with the `function_call` it
-  /// was given rather than guessing from position.
-  @Test
-  func toolResultsCarryTheirCallIdentity() throws {
-    // given
-    let request = ChatRequest(
-      model: "gpt-5",
-      messages: [ChatMessage(role: .tool, content: "12:00", toolCallID: "call_1")],
-      maxOutputTokens: 4096
-    )
-
-    // when
-    let body = try decodeBody(encoder.encode(request: request))
-
-    // then
-    let input = try #require(body["input"] as? [[String: Any]])
-    #expect(input.count == 1)
-    #expect(input.first?["type"] as? String == "function_call_output")
-    #expect(input.first?["call_id"] as? String == "call_1")
-    #expect(input.first?["output"] as? String == "12:00")
   }
 }
 

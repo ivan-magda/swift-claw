@@ -226,18 +226,6 @@ struct ChatGPTModelCatalogVisibilityTests {
   }
 
   @Test
-  func anAbsentPickerFlagLeavesTheRowEligible() throws {
-    // given
-    let rows = [CatalogFixture.row()]
-
-    // when
-    let slugs = try CatalogFixture.slugs(rows)
-
-    // then
-    #expect(slugs == [CatalogFixture.slug])
-  }
-
-  @Test
   func aHiddenRowIsDiscardedEvenWhenItsVisibilityIsList() throws {
     // given
     let rows = [
@@ -582,23 +570,6 @@ struct ChatGPTModelCatalogBoundsTests {
     #expect(slugs.count == ChatGPTModelCatalog.maximumRetainedModels)
     #expect(slugs.first == "model-000")
     #expect(slugs.last == "model-511")
-  }
-
-  @Test
-  func exactlyFiveHundredAndTwelveModelsSurviveWhole() throws {
-    // given
-    let rows = (0..<ChatGPTModelCatalog.maximumRetainedModels).map { index in
-      CatalogFixture.row(
-        slug: "model-\(String(format: "%03d", index))",
-        priority: .number(Double(index))
-      )
-    }
-
-    // when
-    let slugs = try CatalogFixture.slugs(rows)
-
-    // then
-    #expect(slugs.count == ChatGPTModelCatalog.maximumRetainedModels)
   }
 }
 

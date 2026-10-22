@@ -92,10 +92,15 @@ struct SuspendLaneHoldTests {
     // when — a plain message arrives while the lane is HELD by the suspended turn
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "are you there?"))
 
-    // then — it must NOT have produced a reply yet (FIFO behind the held lane); the suspended run
-    // counts toward in-flight (Task 05 widened `runsHealth` to include AWAITING_APPROVAL).
-    await Task.yield()
-    #expect(try harness.stores.runs.runsHealth(now: Date()).inFlight >= 1)
+    // then — it persisted as its own run that queues FIFO behind the held lane: still PENDING, not
+    // run ahead of the parked turn
+    let states = try #require(
+      await pollUntil {
+        let observed = try runStates(databasePath: harness.databasePath)
+        return observed.count == 2 ? observed : nil
+      }
+    )
+    #expect(states == [RunState.awaitingApproval.rawValue, RunState.pending.rawValue])
 
     // when — release the lane; the queued plain message now runs to completion. The reply lands in
     // the durable OUTBOX — this harness wires no `OutboxDispatcher`, so nothing is sent over the

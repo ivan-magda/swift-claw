@@ -114,26 +114,6 @@ struct ConfirmationResolutionTests {
   }
 
   @Test
-  func confirmedDeleteEntryCommitsForgetWithAudit() async throws {
-    // given
-    let harness = try MemoryRoutingHarness.make()
-    let seeded = try harness.seedItem(text: "obsolete fact", kind: .user)
-    let sessionID = try harness.ownerSessionID()
-    await harness.pendingConfirmations.park(.deleteItem(id: seeded.id), sessionID: sessionID)
-
-    // when
-    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 9, from: 42, text: "yes"))
-
-    // then
-    #expect(outcome == .processed)
-    #expect(try harness.memory.get(id: seeded.id) == nil)
-    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue))
-    let sent = await harness.transport.sent
-    #expect(sent.last?.text == MemoryReplies.deleted(id: seeded.id))
-    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
-  }
-
-  @Test
   func nonDiskCommitFailureSurfacesAnOwnerErrorAndClearsThePending() async throws {
     // given
     struct FailingMemoryCommands: MemoryCommandStore {

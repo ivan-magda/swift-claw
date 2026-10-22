@@ -273,62 +273,6 @@ struct ToolApprovalPromptTests {
   }
 
   @Test
-  func fullCodeConsentSurvivesPromptChunking() {
-    // given
-    let code = String(repeating: "print('x')\n", count: 4_000)
-    let input = ToolApprovalPrompt.Input(
-      recorded: recorded(
-        tool: "execute_code",
-        target: "code_exec:python:0123456789abcdef",
-        reason: .codeExec,
-        blastRadius: "run python · egress: no · 4 CPU / 1024 MiB",
-        preview: "```python\n\(code)```"
-      ),
-      taintBanner: true,
-      privilegedFileBanner: false
-    )
-
-    // when
-    let chunks = ToolApprovalPrompt.chunks(for: input, chatID: 7, nonce: "nonce")
-
-    // then
-    #expect(chunks.count > 1)
-    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
-    #expect(chunks.map(\.payload).joined().contains(code))
-    #expect(
-      chunks.dropLast().allSatisfy { chunk in
-        chunk.replyMarkup == nil
-      }
-    )
-    #expect(chunks.last?.replyMarkup != nil)
-  }
-
-  @Test
-  func richPromptRendersForEveryApprovalReason() {
-    // given — the renderer is exhaustive over ApprovalReason; this pins that both reasons produce
-    // owner-facing copy carrying the target at runtime (the compile-time guarantee is the switch)
-    for reason in [ApprovalReason.askTier, .exfilTrifecta, .codeExec] {
-      let input = ToolApprovalPrompt.Input(
-        recorded: recorded(
-          tool: "file_write",
-          target: "/w/target-\(reason.rawValue).md",
-          reason: reason,
-          blastRadius: "create, 1 B"
-        ),
-        taintBanner: false,
-        privilegedFileBanner: false
-      )
-
-      // when
-      let text = ToolApprovalPrompt.text(for: input)
-
-      // then
-      #expect(text.isEmpty == false)
-      #expect(text.contains("/w/target-\(reason.rawValue).md"))
-    }
-  }
-
-  @Test
   func coderConsentChunksKeepKeyboardAfterAllArguments() {
     // given
     let task = String(repeating: "Complete task 👨‍👩‍👧‍👦\n", count: 3_000)

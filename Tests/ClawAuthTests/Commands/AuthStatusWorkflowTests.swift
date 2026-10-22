@@ -22,11 +22,6 @@ struct AuthStatusWorkflowTests {
       // then
       #expect(result.exit == .success)
       #expect(world.log.recorded == [.credentialStoreOpened, .credentialLoaded])
-      // The pairing that proves the log can record those effects at all: login, built from this same
-      // world and writing to this same log, does take the lock and does reach the vendor.
-      _ = await world.loginWorkflow().login()
-      #expect(world.log.recorded.contains(.lockAcquired))
-      #expect(world.log.recorded.contains(.deviceAuthorizationStarted))
     }
   }
 

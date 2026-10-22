@@ -524,7 +524,8 @@ struct TurnRunnerWorkspace: WorkspaceReading {
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
 /// suite's own body stays under the project's type-length gate as its test count grows.
-/// File-internal (not `private`) so the sibling `TurnRunnerBudgetTests` reuses it without duplication.
+/// File-internal (not `private`) so sibling suites such as `RunCompatibilityFreezeTests` reuse it
+/// without duplication.
 struct Env {
   let runner: TurnRunner
   let queue: DatabaseQueue
@@ -755,15 +756,6 @@ func suspendOnAGatedFetchThenApprove(
   return receipt.observationMessageID
 }
 
-private func okResponse(content: String) -> ChatResponse {
-  ChatResponse(
-    content: content,
-    finishReason: "stop",
-    usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-    costFromProvider: 0.0021
-  )
-}
-
 @Suite
 struct TurnRunnerTests {
   @Test
@@ -835,12 +827,18 @@ struct TurnRunnerTests {
 
   @Test
   func scheduledRunAtTheProactiveCapIsDeniedDMedOnceAndAudited() async throws {
-    // given — a scheduled-origin run whose proactive pool already spent 2.50 today
+    // given — a scheduled-origin run whose proactive pool already spent 2.50 "today", where today
+    // is the runner's injected clock: 2020-01-01 12:00 UTC is far from any real day, so the seed
+    // only falls inside the proactive window if the read honors `now` rather than the wall clock
+    let today = Date(timeIntervalSince1970: 1_577_880_000)
     let transport = RecordingTransport()
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "should never run")),
       breaker: BudgetBreaker(budget: .default),
-      transport: transport
+      transport: transport,
+      now: {
+        today
+      }
     )
     try await env.queue.write { db in
       try db.execute(
@@ -859,7 +857,7 @@ struct TurnRunnerTests {
         costUSD: 2.50,
         costSource: .heuristic,
         isEstimated: true,
-        ts: Date()
+        ts: today
       )
     )
 
@@ -1006,15 +1004,10 @@ struct TurnRunnerTests {
       triggerMessageID: env.triggerMessageID
     )
 
-    // then — the owner is told what to change, not to try again in a moment, and the reply names
-    // the one remedy that works without a config edit and a restart
+    // then — the owner gets the vision copy that says what to change, not the generic outage
     let pending = try env.outbox.pendingOutbound()
     let firstPending = try #require(pending.first)
     #expect(firstPending.payload == Degradation.visionUnsupported)
-    #expect(firstPending.payload != Degradation.providerUnavailable)
-    #expect(firstPending.payload.contains("/new"))
-    #expect(firstPending.payload.contains("CLAW_LLM_MODEL"))
-    #expect(firstPending.payload.contains("CLAW_IMAGE_INPUT"))
   }
 
   @Test

@@ -535,20 +535,13 @@ struct JournalCompositionFixture {
   func waitForPublishedNote(_ text: String) async -> Bool {
     let files = FileSystemJournalFiles(root: workspace.root)
     let day = JournalDay.containing(now, timeZone: builder.config.timezone)
-    return await withTestWatchdog(
-      onTimeout: {
-        Issue.record("The production journal worker did not publish its notified batch")
-      },
-      {
-        while !Task.isCancelled {
-          if files.load(day: day).text.contains(text) {
-            return true
-          }
-          await Task.yield()
-        }
-        return false
-      }
-    )
+    let published = await pollUntilTrue {
+      files.load(day: day).text.contains(text)
+    }
+    if published == false {
+      Issue.record("The production journal worker did not publish its notified batch")
+    }
+    return published
   }
 
   func response(_ content: String) -> ChatResponse {
@@ -618,7 +611,7 @@ struct JournalCompositionFixture {
         costResolver: CostResolver.configured(by: builder.config)
       ),
       approvalCallbacks: nil,
-      doctor: JournalCompositionDoctor(),
+      doctor: IdleCompositionDoctor(),
       learning: nil,
       presentations: nil,
       journal: graph
@@ -648,16 +641,6 @@ struct JournalCompositionFixture {
   func removeFiles() {
     backend.releaseAll()
     try? FileManager.default.removeItem(at: root)
-  }
-}
-
-private struct JournalCompositionDoctor: DoctorReporting {
-  func report() async -> DoctorReport {
-    DoctorReport()
-  }
-
-  func scanSkills() async -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
   }
 }
 

@@ -28,8 +28,11 @@ struct TopicDeliveryTests {
     return try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
   }
 
+  /// `allow_sending_without_reply` matters: without it a deleted target answers 400, which stalls
+  /// the row and every later one behind it on every drain — one removed message would wedge
+  /// delivery for every topic. The reply then degrades to a plain in-topic message.
   @Test
-  func plainSendCarriesTheTopicAndTheReplyTarget() async throws {
+  func plainSendCarriesTheTopicAndAReplyTargetThatMayBeGone() async throws {
     // given
     let executor = makeExecutor()
     let target = DeliveryTarget(chatID: -1_001, messageThreadID: 5, replyToMessageID: 88)
@@ -37,11 +40,12 @@ struct TopicDeliveryTests {
     // when
     _ = try await makeClient(executor).sendMessage(to: target, text: "answer", replyMarkup: nil)
 
-    // then
+    // then — the topic rides the request, and Telegram is told to send even without the target
     let json = try await body(executor)
     #expect(json["message_thread_id"] as? Int64 == 5)
     let replyParameters = try #require(json["reply_parameters"] as? [String: Any])
     #expect(replyParameters["message_id"] as? Int64 == 88)
+    #expect(replyParameters["allow_sending_without_reply"] as? Bool == true)
   }
 
   @Test
@@ -62,24 +66,6 @@ struct TopicDeliveryTests {
     #expect(json["message_thread_id"] as? Int64 == 5)
     let replyParameters = try #require(json["reply_parameters"] as? [String: Any])
     #expect(replyParameters["message_id"] as? Int64 == 88)
-  }
-
-  /// Without the flag a deleted target answers 400, which stalls the row and every later one
-  /// behind it on every drain — one removed message would wedge delivery for every topic.
-  @Test
-  func aReplyDegradesToAPlainInTopicMessageWhenItsTargetIsGone() async throws {
-    // given
-    let executor = makeExecutor()
-    let target = DeliveryTarget(chatID: -1_001, messageThreadID: 5, replyToMessageID: 88)
-
-    // when
-    _ = try await makeClient(executor).sendMessage(to: target, text: "answer", replyMarkup: nil)
-
-    // then — the topic still rides the request, and Telegram is told to send anyway
-    let json = try await body(executor)
-    let replyParameters = try #require(json["reply_parameters"] as? [String: Any])
-    #expect(replyParameters["allow_sending_without_reply"] as? Bool == true)
-    #expect(json["message_thread_id"] as? Int64 == 5)
   }
 
   @Test

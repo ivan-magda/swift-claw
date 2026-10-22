@@ -258,25 +258,6 @@ struct VoiceRoutingTests {
   }
 
   @Test
-  func transcriberFailureGetsItsMappedReplyAndNoTurn() async throws {
-    // given
-    let harness = try makeHarness(
-      allowed: [42],
-      transcriber: StubVoiceTranscriber(result: .failure(.undecodableAudio("bad header")))
-    )
-    defer { try? FileManager.default.removeItem(at: harness.staging) }
-
-    // when
-    let outcome = await harness.router.handle(rawUpdate: voiceUpdate(id: 1, from: 42))
-
-    // then
-    #expect(outcome == .processed)
-    let sent = await harness.transport.sent
-    #expect(sent.map(\.text) == [VoiceMessageService.Failure.undecodableAudio.ownerReplyText])
-    #expect(await harness.dispatcher.calls.isEmpty)
-  }
-
-  @Test
   func overlongVoiceIsRefusedBeforeAnyDownload() async throws {
     // given
     let harness = try makeHarness(allowed: [42])

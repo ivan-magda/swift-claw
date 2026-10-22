@@ -426,6 +426,10 @@ struct ApprovedResumeStoreTests {
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
     }
     #expect(memoryCount == 1)
+
+    // and the re-run neither refilled the observation nor audited the call a second time
+    #expect(try messageContent(env.queue, env.observationMessageID) == "Saved.")
+    #expect(try toolAuditRows(env).count == 1)
   }
 
   @Test

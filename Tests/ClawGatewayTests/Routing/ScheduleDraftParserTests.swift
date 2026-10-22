@@ -355,45 +355,25 @@ struct ScheduleDraftParserTests {
     }
   }
 
-  @Test
-  func authenticationFailureReturnsTheTypedResultWithoutDebiting() async throws {
-    // given — the credential is refused before any inference (a clean, not-started head)
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.authenticationRequired)
-    )
+  // Each row is a clean, not-started rejection with its own typed outcome: collapsing one into
+  // providerUnavailable, or dropping the bounded quota hint, loses the owner's actionable reply.
+  @Test(arguments: [
+    (ProviderError.authenticationRequired, ScheduleDraftParseResult.authenticationRequired),
+    (.accessDenied, .accessDenied),
+    (.quotaLimited(retryAfterSeconds: 15), .quotaLimited(retryAfterSeconds: 15)),
+  ])
+  func typedProviderRejectionReturnsItsResultWithoutDebiting(
+    error: ProviderError,
+    expected: ScheduleDraftParseResult
+  ) async throws {
+    // given
+    let fixture = try makeFixture(provider: SequenceProvider([], then: error))
 
     // when
     let result = await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
 
-    // then — the router gets the typed outcome, not a collapsed providerUnavailable, and no row
-    #expect(result == .authenticationRequired)
-    #expect(try usageRowCount(fixture) == 0)
-  }
-
-  @Test
-  func accessDenialReturnsTheTypedResultWithoutDebiting() async throws {
-    // given
-    let fixture = try makeFixture(provider: SequenceProvider([], then: ProviderError.accessDenied))
-
-    // when / then
-    #expect(
-      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID) == .accessDenied
-    )
-    #expect(try usageRowCount(fixture) == 0)
-  }
-
-  @Test
-  func quotaLimitReturnsTheRetryHintWithoutDebiting() async throws {
-    // given
-    let fixture = try makeFixture(
-      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 15))
-    )
-
-    // when / then — the bounded hint rides the typed outcome; nothing was generated, nothing debited
-    #expect(
-      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
-        == .quotaLimited(retryAfterSeconds: 15)
-    )
+    // then — the router gets the typed outcome, and nothing was generated, so nothing is debited
+    #expect(result == expected)
     #expect(try usageRowCount(fixture) == 0)
   }
 

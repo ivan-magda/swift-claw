@@ -46,33 +46,6 @@ struct AsyncHTTPExecutorGetTests {
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func disallowConfiguredClientSurfacesRedirectInsteadOfFollowing() async throws {
-    // given — the SSRF design turns on this: a redirect must not be followed for us, because only
-    // the tool's own gate may decide whether the next hop is a public address.
-    try await withScriptedServer(routes: [
-      "/hop": ScriptedResponse(
-        status: .movedPermanently,
-        headers: [("location", "http://127.0.0.1:1/private")],
-        body: ""
-      ),
-    ]) { server in
-      // when
-      let result = try await withNoRedirectExecutor { executor in
-        try await executor.get(
-          url: server.url("/hop"),
-          headers: [:],
-          timeoutSeconds: 5,
-          maxBodyBytes: 1024
-        )
-      }
-
-      // then — the redirect came back to us; nothing fetched the Location target
-      #expect(result.statusCode == 301)
-      #expect(result.header(for: "Location") == "http://127.0.0.1:1/private")
-    }
-  }
-
-  @Test(.timeLimit(.minutes(1)))
   func pageBeyondMaxBodyBytesFailsInsteadOfComingBackShort() async throws {
     // given
     try await withScriptedServer(routes: [
@@ -99,7 +72,9 @@ struct AsyncHTTPExecutorGetTests {
 
   @Test(.timeLimit(.minutes(1)))
   func redirectBodyBeyondTheCapIsTruncatedRatherThanFailed() async throws {
-    // given — a 3xx is a diagnostic, not a payload, so its cap truncates
+    // given — a 3xx is a diagnostic, not a payload, so its cap truncates. The SSRF design turns on
+    // the redirect coming back to us: only the tool's own gate may decide whether the next hop is a
+    // public address.
     try await withScriptedServer(routes: [
       "/hop": ScriptedResponse(
         status: .movedPermanently,
@@ -117,8 +92,9 @@ struct AsyncHTTPExecutorGetTests {
         )
       }
 
-      // then — the redirect still reaches the tool's own gate, bounded
+      // then — the redirect still reaches the tool's own gate, bounded; nothing fetched the target
       #expect(result.statusCode == 301)
+      #expect(result.header(for: "Location") == "http://127.0.0.1:1/private")
       #expect(result.body.count == 128)
     }
   }
