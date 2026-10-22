@@ -28,6 +28,7 @@ struct ServiceStartHintTests {
 
     // then
     #expect(macHint?.contains("launchctl bootstrap gui/501") == true)
+    #expect(macHint?.contains("kickstart") == false)
     #expect(linuxHint?.contains("systemctl --user enable --now swift-claw.service") == true)
   }
 
@@ -47,24 +48,6 @@ struct ServiceStartHintTests {
     // then
     #expect(hint?.contains("launchctl kickstart -k gui/501/com.ivanmagda.swift-claw") == true)
     #expect(hint?.contains("bootstrap") == false)
-  }
-
-  @Test
-  func unloadedLaunchAgentStillGetsTheBootstrapCommand() {
-    // given / when
-    let hint = ServiceStartHint.text(
-      readiness: .ready,
-      daemonRunning: false,
-      unitInstalled: true,
-      unitLoaded: false,
-      serviceManagerAvailable: true,
-      isLinux: false,
-      uid: 501
-    )
-
-    // then
-    #expect(hint?.contains("launchctl bootstrap gui/501") == true)
-    #expect(hint?.contains("kickstart") == false)
   }
 
   @Test

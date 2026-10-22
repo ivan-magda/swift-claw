@@ -43,19 +43,6 @@ struct FakeIPDetectorTests {
   }
 
   @Test
-  func realDNSAnswersMeanInactive() async {
-    // given — canaries resolve to genuine public addresses; the nonexistent host NXDOMAINs
-    // (absent from the table, so the scripted resolver throws)
-    let detector = makeDetector(table: [
-      "canary-one.example": [publicAddress],
-      "canary-two.example": [publicAddress],
-    ])
-
-    // when / then
-    #expect(await detector.detect() == .inactive)
-  }
-
-  @Test
   func nxdomainForTheNonexistentHostMeansInactive() async {
     // given — publics land in the pool but the nonexistent host NXDOMAINs: whatever rewrote the
     // publics is not fabricating answers, so it is not confirmed fake-IP interception

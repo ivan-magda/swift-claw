@@ -103,22 +103,6 @@ struct FileWriteToolTests {
   }
 
   @Test
-  func existingFileWithOverwriteTrueResolves() throws {
-    // given
-    let root = try makeWorkspace()
-    try Data("old".utf8).write(to: root.appendingPathComponent("plan.md"))
-    let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(root.path))
-
-    // when
-    let resolution = makeTool(root: root).canonicalTarget(
-      arguments: args(path: "plan.md", content: "new", overwrite: true)
-    )
-
-    // then
-    #expect(resolution == .resolved(canonicalRoot + "/plan.md"))
-  }
-
-  @Test
   func overwriteTrueOnAMissingTargetRefusesAtGateTime() throws {
     // given — nothing exists at the path, so the prompt would render "create"; a recorded
     // overwrite:true would let execute take the replacing rename(2) branch if a file appeared

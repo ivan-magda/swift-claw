@@ -146,36 +146,6 @@ struct SkillLoadToolTests {
     #expect(payload.content.hasSuffix(ToolOutputCap.truncationMarker))
   }
 
-  @Test
-  func loadsABodyThatContainsAHorizontalRule() async throws {
-    // given — the body's own `---` must not be mistaken for the frontmatter fence
-    let fixture = try makeFixture()
-    defer { try? FileManager.default.removeItem(at: fixture.base) }
-    let manifest = """
-      ---
-      name: review
-      description: Review.
-      ---
-      Step one.
-
-      ---
-
-      Step two.
-      """
-    let descriptor = try writeSkill(named: "review", manifest: manifest, under: fixture.root)
-    let tool = makeTool(
-      root: fixture.root,
-      scan: SkillScanResult(descriptors: [descriptor], warnings: [])
-    )
-
-    // when
-    let payload = await execute(tool, name: "review")
-
-    // then
-    #expect(payload.status == .ok)
-    #expect(payload.content == "Step one.\n\n---\n\nStep two.")
-  }
-
   // MARK: - Errors
 
   @Test

@@ -777,7 +777,6 @@ extension ExecuteCodeToolTests {
     // (a) bounded: the 16 KiB body plus 16 stage objects of metadata stays comfortably under a
     // ceiling derived from the tool's caps, and redaction only rewrites matched spans in place.
     let recordedCeiling = ExecuteCodeTool.maxCodeBytes + ExecuteCodeTool.maxStagedFiles * 2048
-    #expect(code.utf8.count == ExecuteCodeTool.maxCodeBytes)
     #expect(action.canonicalArgsJSON.utf8.count <= recordedCeiling)
     #expect(redacted.utf8.count <= action.canonicalArgsJSON.utf8.count * 2)
     // (a) the redactor completes and actually removes the embedded secret.

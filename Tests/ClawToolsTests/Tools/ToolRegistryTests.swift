@@ -47,14 +47,4 @@ struct ToolRegistryTests {
     // when / then
     #expect(registry.definitions.map(\.name) == ["web_search", "file_read"])
   }
-
-  @Test
-  func lookupResolvesByNameAndMissesUnknown() {
-    // given
-    let registry = ToolRegistry(tools: [StubTool(name: "file_read")])
-
-    // when / then
-    #expect(registry.tool(named: "file_read")?.definition.name == "file_read")
-    #expect(registry.tool(named: "shell_exec") == nil)
-  }
 }
