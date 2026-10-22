@@ -103,18 +103,19 @@ struct WorkspaceSkillsScannerTests {
     #expect(result.warnings.isEmpty)
   }
 
-  @Test
-  func manifestMissingDescriptionIsSkippedWithWarning() throws {
+  @Test(arguments: [
+    ("partial", "---\nname: partial\n---\nbody"),
+    ("nofence", "# Just a heading\n\nNo frontmatter here."),
+    // an unterminated flow sequence makes the YAML block unparseable
+    ("broken", "---\nname: [unterminated\ndescription: x\n---\nbody"),
+    // a description of nothing indexes as nothing, so it is an authoring fault
+    ("blank", "---\nname: blank\ndescription: \"   \"\n---\n"),
+  ])
+  func invalidManifestIsSkippedWithWarning(directory: String, manifest: String) throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
-    let manifest = """
-      ---
-      name: partial
-      ---
-      body
-      """
-    try writeSkill(named: "partial", manifest: manifest, under: root)
+    try writeSkill(named: directory, manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
     // when
@@ -122,47 +123,7 @@ struct WorkspaceSkillsScannerTests {
 
     // then
     #expect(result.descriptors.isEmpty)
-    #expect(result.warnings == [.invalidSkillManifest(skill: "partial")])
-  }
-
-  @Test
-  func manifestWithoutFrontmatterFenceIsSkippedWithWarning() throws {
-    // given
-    let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let manifest = "# Just a heading\n\nNo frontmatter here."
-    try writeSkill(named: "nofence", manifest: manifest, under: root)
-    let workspace = FileSystemWorkspace(root: root)
-
-    // when
-    let result = workspace.scanSkills()
-
-    // then
-    #expect(result.descriptors.isEmpty)
-    #expect(result.warnings == [.invalidSkillManifest(skill: "nofence")])
-  }
-
-  @Test
-  func malformedFrontmatterYamlIsSkippedWithWarning() throws {
-    // given - an unterminated flow sequence makes the YAML block unparseable.
-    let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let manifest = """
-      ---
-      name: [unterminated
-      description: x
-      ---
-      body
-      """
-    try writeSkill(named: "broken", manifest: manifest, under: root)
-    let workspace = FileSystemWorkspace(root: root)
-
-    // when
-    let result = workspace.scanSkills()
-
-    // then
-    #expect(result.descriptors.isEmpty)
-    #expect(result.warnings == [.invalidSkillManifest(skill: "broken")])
+    #expect(result.warnings == [.invalidSkillManifest(skill: directory)])
   }
 
   @Test
@@ -267,23 +228,6 @@ struct WorkspaceSkillsScannerTests {
     // then - one skill occupies exactly one line, so the drop marker's count stays true
     #expect(result.warnings.isEmpty)
     #expect(result.descriptors.first?.description == "First line. Second line.")
-  }
-
-  @Test
-  func whitespaceOnlyDescriptionIsSkippedWithWarning() throws {
-    // given
-    let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let manifest = "---\nname: blank\ndescription: \"   \"\n---\n"
-    try writeSkill(named: "blank", manifest: manifest, under: root)
-    let workspace = FileSystemWorkspace(root: root)
-
-    // when
-    let result = workspace.scanSkills()
-
-    // then - a description of nothing indexes as nothing, so it is an authoring fault
-    #expect(result.descriptors.isEmpty)
-    #expect(result.warnings == [.invalidSkillManifest(skill: "blank")])
   }
 
   @Test(arguments: [

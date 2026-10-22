@@ -306,29 +306,6 @@ struct AgentRuntimeTests {
     #expect(await provider.calls == 0)
   }
 
-  @Test("a terminal provider error degrades without any debit")
-  func terminalErrorDegradesWithoutDebit() async throws {
-    // given
-    let runtime = makeRuntime(provider: StubProvider(.fail(.terminal(status: 400, message: "bad"))))
-
-    // when
-    let outcome = try await runtime.runTurn(
-      makeTurnRequest(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        context: BuildResult(
-          messages: [ChatMessage(role: .user, content: "hi")],
-          ownerNotices: [],
-          hasPrivateDataAccess: false
-        )
-      )
-    )
-
-    // then
-    #expect(outcome.result == .degraded(.providerUnavailable, usage: nil))
-  }
-
   @Test("exhausted retries degrade and debit the estimate (F28)")
   func retryableErrorDegradesAndDebitsTheEstimate() async throws {
     // given — the provider surfaces a retryable error after burning its retry budget.
@@ -1012,78 +989,31 @@ struct AgentRuntimeFailureAccountingTests {
     #expect(row.completionTokens == RunBudget.default.maxOutputTokens)
   }
 
-  @Test("an authentication failure carries the auth kind through and writes no usage row")
-  func authenticationFailureCarriesTheAuthKindAndWritesNoRow() async throws {
+  @Test(
+    "a clean provider failure carries its own degradation kind and writes no usage row",
+    arguments: [
+      (ProviderError.authenticationRequired, DegradationKind.authenticationRequired),
+      (.accessDenied, .accessDenied),
+      // the bounded hint rides the kind so the gateway can name it
+      (.quotaLimited(retryAfterSeconds: 42), .quotaLimited(retryAfterSeconds: 42)),
+      (.invalidProviderState, .invalidProviderState),
+      // a cause whose payload is remote text stays the generic outage, never a typed kind
+      (.terminal(status: 400, message: "internal provider detail"), .providerUnavailable),
+    ]
+  )
+  func cleanFailureCarriesItsKindAndWritesNoRow(
+    cause: ProviderError,
+    expected: DegradationKind
+  ) async throws {
     // given
     let store = RecordingUsageStore()
 
     // when
-    let (kind, usage) = try await Self.runDegraded(.fail(.authenticationRequired), store: store)
+    let (kind, usage) = try await Self.runDegraded(.fail(cause), store: store)
 
-    // then — the runtime does NOT collapse it into the generic outage; nothing was generated
-    #expect(kind == .authenticationRequired)
-    #expect(usage == nil)
-    #expect(store.recorded.isEmpty)
-  }
-
-  @Test("an access denial carries its own kind and writes no usage row")
-  func accessDenialCarriesItsOwnKindAndWritesNoRow() async throws {
-    // given
-    let store = RecordingUsageStore()
-
-    // when
-    let (kind, usage) = try await Self.runDegraded(.fail(.accessDenied), store: store)
-
-    // then
-    #expect(kind == .accessDenied)
-    #expect(usage == nil)
-    #expect(store.recorded.isEmpty)
-  }
-
-  @Test("a quota throttle carries the provider's retry hint and writes no usage row")
-  func quotaThrottleCarriesTheRetryHintAndWritesNoRow() async throws {
-    // given
-    let store = RecordingUsageStore()
-
-    // when
-    let (kind, usage) = try await Self.runDegraded(
-      .fail(.quotaLimited(retryAfterSeconds: 42)),
-      store: store
-    )
-
-    // then — the bounded hint rides the kind so the gateway can name it
-    #expect(kind == .quotaLimited(retryAfterSeconds: 42))
-    #expect(usage == nil)
-    #expect(store.recorded.isEmpty)
-  }
-
-  @Test("rejected replay state carries the invalid-state kind and writes no usage row")
-  func rejectedReplayStateCarriesTheInvalidStateKind() async throws {
-    // given
-    let store = RecordingUsageStore()
-
-    // when
-    let (kind, usage) = try await Self.runDegraded(.fail(.invalidProviderState), store: store)
-
-    // then
-    #expect(kind == .invalidProviderState)
-    #expect(usage == nil)
-    #expect(store.recorded.isEmpty)
-  }
-
-  @Test("a message-carrying terminal reject stays the generic outage, never a typed kind")
-  func terminalRejectStaysTheGenericOutage() async throws {
-    // given — a cause whose payload is remote text; it must never reach a typed owner reply
-    let store = RecordingUsageStore()
-
-    // when
-    let (kind, usage) = try await Self.runDegraded(
-      .fail(.terminal(status: 400, message: "internal provider detail")),
-      store: store
-    )
-
-    // then — generic outage, no row (proven not-started), and no remote text carried on the kind
-    #expect(kind == .providerUnavailable)
+    // then — the runtime does not collapse a typed cause into the generic outage, and a proven
+    // not-started failure owes no row
+    #expect(kind == expected)
     #expect(usage == nil)
     #expect(store.recorded.isEmpty)
   }
