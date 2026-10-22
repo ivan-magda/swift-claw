@@ -1,5 +1,6 @@
 import ClawCore
 import ClawSubprocess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -224,9 +225,7 @@ struct ContainerBackendMaintenanceTests {
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" && !command.arguments.contains("--detach") {
         writeCidfile(from: command.arguments)
-        while !Task.isCancelled {
-          await Task.yield()
-        }
+        await suspendUntilCancelled()
         return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()
@@ -259,9 +258,7 @@ struct ContainerBackendMaintenanceTests {
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" && !command.arguments.contains("--detach") {
         writeCidfile(from: command.arguments)
-        while !Task.isCancelled {
-          await Task.yield()
-        }
+        await suspendUntilCancelled()
         return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()

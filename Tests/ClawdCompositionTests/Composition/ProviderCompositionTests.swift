@@ -4,7 +4,6 @@ import ClawLLM
 import ClawTelegram
 import ClawTestSupport
 import Foundation
-import Logging
 import Testing
 
 @testable import clawd
@@ -46,12 +45,6 @@ struct ProviderCompositionTests {
     return try AppConfig.load(environment: env)
   }
 
-  private var silentLogger: Logger {
-    Logger(label: "test") { _ in
-      SwiftLogNoOpLogHandler()
-    }
-  }
-
   private func composition(
     config: AppConfig,
     recorder: CloseRecorder,
@@ -67,7 +60,7 @@ struct ProviderCompositionTests {
       config: config,
       secrets: Secrets(telegramBotToken: "token", llmAPIKey: "sk-static", searchAPIKey: nil),
       stores: try EnvironmentLoader.openStores(config: config),
-      logger: silentLogger
+      logger: TestLog.silent
     )
     composition.makeClients = {
       instrumentedClients(recorder: recorder)

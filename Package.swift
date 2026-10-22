@@ -227,7 +227,10 @@ let package = Package(
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),
-    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore", "ClawSubprocess"]),
+    .testTarget(
+      name: "ClawExecTests",
+      dependencies: ["ClawExec", "ClawCore", "ClawSubprocess", "ClawTestSupport"]
+    ),
     .testTarget(name: "ClawSubprocessTests", dependencies: ["ClawSubprocess", "ClawTestSupport"]),
     .testTarget(
       name: "ClawCoderTests",
@@ -289,7 +292,6 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),
-        .product(name: "Logging", package: "swift-log"),
       ]
     ),
   ]

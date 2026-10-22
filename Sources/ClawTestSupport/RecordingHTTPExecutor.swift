@@ -46,7 +46,8 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
 ///
 /// Reach for it when a test is about *which* endpoint was asked and what came back, in any order —
 /// `ScriptedHTTPExecutor` is the other half of the split, an order-sensitive queue that also speaks
-/// `HTTPStreaming`.
+/// `HTTPStreaming`. With only a `cannedResult` it is also the plain stub for a client whose every
+/// call gets the same answer, and `requests` still records what that client sent.
 ///
 /// It honours the seam's contract rather than shortcutting it: the body policy must be `.buffered`,
 /// the handoff runs once before the scripted answer is produced, and a scripted body past the

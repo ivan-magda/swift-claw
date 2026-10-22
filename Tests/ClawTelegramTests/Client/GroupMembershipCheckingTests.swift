@@ -15,7 +15,7 @@ struct GroupMembershipCheckingTests {
   @Test
   func lookupPostsTheRequestedChatAndUser() async throws {
     // given
-    let http = ClawTestSupport.RecordingHTTPExecutor(
+    let http = RecordingHTTPExecutor(
       cannedResult: Self.response(Self.memberJSON(status: .member))
     )
     let checker: any GroupMembershipChecking = TelegramClient(token: "T", http: http)
@@ -130,7 +130,7 @@ private extension GroupMembershipCheckingTests {
   func makeClient(json: String) -> TelegramClient {
     TelegramClient(
       token: "T",
-      http: ClawTestSupport.RecordingHTTPExecutor(cannedResult: Self.response(json))
+      http: RecordingHTTPExecutor(cannedResult: Self.response(json))
     )
   }
 }

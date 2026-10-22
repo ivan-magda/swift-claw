@@ -1,5 +1,6 @@
 import ClawCore
 import ClawSubprocess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -47,11 +48,12 @@ struct ContainerBackendCleanupTests {
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let gate = AsyncGate()
+    defer { gate.open() }
     let admissions = ExecutionAdmissionRecorder()
     let runner = ScriptedCommandRunner { command, history in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
-        await gate.wait()
+        await gate.waitIgnoringCancellation()
         return commandResult(.timedOut)
       }
       if command.arguments.first == "list" {
@@ -73,7 +75,7 @@ struct ContainerBackendCleanupTests {
     await admissions.waitForCount(2)
 
     // when
-    await gate.open()
+    gate.open()
     let firstResult = await first.value
     let secondResult = await second.value
 

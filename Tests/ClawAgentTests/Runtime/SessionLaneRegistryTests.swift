@@ -440,9 +440,7 @@ struct SessionLaneRegistryTests {
     _ = await registry.enqueue(sessionID: 1, runID: 5) {
       running.open()
       // Return promptly once cancelled, mimicking a turn self-aborting its durable row.
-      while !Task.isCancelled {
-        await Task.yield()
-      }
+      await suspendUntilCancelled()
     }
     await running.wait()
 

@@ -1,42 +1,9 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
 @testable import ClawCore
 @testable import ClawTelegram
-
-struct MockHTTPExecutor: HTTPExecuting {
-  let result: HTTPResult
-
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    result
-  }
-}
-
-/// Local to this suite: it answers with one canned result and records the fields the Telegram wire
-/// tests assert over, which the shared `ClawTestSupport` double keys by URL rather than replaying.
-struct RecordingHTTPExecutor: HTTPExecuting {
-  struct Call: Sendable {
-    let url: String
-    let body: Data
-    let timeout: Duration
-  }
-
-  actor Recorder {
-    private(set) var calls: [Call] = []
-
-    func append(url: String, body: Data, timeout: Duration) {
-      calls.append(Call(url: url, body: body, timeout: timeout))
-    }
-  }
-
-  let recorder: Recorder
-  let result: HTTPResult
-
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    await recorder.append(url: request.url, body: request.body ?? Data(), timeout: request.timeout)
-    return result
-  }
-}
 
 /// Simulates a transport error whose description echoes the request URL (which carries the token).
 struct URLEchoingExecutor: HTTPExecuting {
@@ -56,8 +23,8 @@ struct URLEchoingExecutor: HTTPExecuting {
 private func client(status: Int, json: String) -> TelegramClient {
   TelegramClient(
     token: "T",
-    http: MockHTTPExecutor(
-      result: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))
+    http: RecordingHTTPExecutor(
+      cannedResult: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))
     ),
     baseURL: "https://example.test"
   )
@@ -197,10 +164,8 @@ struct TelegramClientTests {
   @Test
   func setMyCommandsPostsCorrectPayload() async throws {
     // given
-    let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
-      recorder: recorder,
-      result: HTTPResult(
+      cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
         body: Data(#"{"ok":true,"result":true}"#.utf8)
@@ -218,8 +183,9 @@ struct TelegramClientTests {
     )
 
     // then
-    let call = try #require(await recorder.calls.first)
-    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let call = try #require(await http.requests.first)
+    let bodyData = try #require(call.body)
+    let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
     let commands = try #require(body["commands"] as? [[String: Any]])
     #expect(call.url == "https://example.test/botT/setMyCommands")
     #expect(commands.count == 3)
@@ -232,10 +198,8 @@ struct TelegramClientTests {
   @Test(arguments: [DraftStopControl.unavailable, .dismissesDraft])
   func sendsRichMessageDraftWithDraftIDAndMarkdown(stopControl: DraftStopControl) async throws {
     // given
-    let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
-      recorder: recorder,
-      result: HTTPResult(
+      cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
         body: Data(#"{"ok":true,"result":true}"#.utf8)
@@ -253,8 +217,9 @@ struct TelegramClientTests {
 
     // then
     #expect(sent)
-    let call = try #require(await recorder.calls.first)
-    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let call = try #require(await http.requests.first)
+    let bodyData = try #require(call.body)
+    let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
     let richMessage = try #require(body["rich_message"] as? [String: Any])
     #expect(call.url == "https://example.test/botT/sendRichMessageDraft")
     #expect(call.timeout == .seconds(15))
@@ -272,10 +237,8 @@ struct TelegramClientTests {
     // given: an exfil-approval prompt embeds an attacker-chosen URL in outbound text; Telegram
     // must never auto-fetch it to build a preview (ARCHITECTURE.md §12), regardless of the owner's
     // eventual answer.
-    let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
-      recorder: recorder,
-      result: HTTPResult(
+      cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
         body: Data(#"{"ok":true,"result":{"message_id":7,"chat":{"id":42}}}"#.utf8)
@@ -288,8 +251,9 @@ struct TelegramClientTests {
 
     // then
     #expect(messageID == 7)
-    let call = try #require(await recorder.calls.first)
-    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let call = try #require(await http.requests.first)
+    let bodyData = try #require(call.body)
+    let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
     #expect(body["chat_id"] as? Int == 42)
     #expect(body["text"] as? String == "https://evil.example/exfil")
     let linkPreviewOptions = try #require(body["link_preview_options"] as? [String: Any])
@@ -300,35 +264,28 @@ struct TelegramClientTests {
   func getUpdatesSocketTimeoutIsLongPollTimeoutPlusTenSeconds() async throws {
     // given (§18-A3): the socket read timeout must outlive the long poll by exactly 10 s, so a
     // stalled poll is cut and re-issued instead of hanging the loop across a network gap
-    let recorder = RecordingHTTPExecutor.Recorder()
-    let telegram = TelegramClient(
-      token: "T",
-      http: RecordingHTTPExecutor(
-        recorder: recorder,
-        result: HTTPResult(
-          statusCode: 200,
-          headers: [:],
-          body: Data(#"{"ok":true,"result":[]}"#.utf8)
-        )
-      ),
-      baseURL: "https://example.test"
+    let http = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(#"{"ok":true,"result":[]}"#.utf8)
+      )
     )
+    let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
 
     // when
     _ = try await telegram.getUpdates(offset: nil, timeout: 30, allowedUpdates: ["message"])
 
     // then
-    let call = try #require(await recorder.calls.first)
+    let call = try #require(await http.requests.first)
     #expect(call.timeout == .seconds(40))
   }
 
   @Test
   func getUpdatesPutsNonNilOffsetOnTheWire() async throws {
     // given
-    let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
-      recorder: recorder,
-      result: HTTPResult(
+      cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
         body: Data(#"{"ok":true,"result":[]}"#.utf8)
@@ -340,8 +297,9 @@ struct TelegramClientTests {
     _ = try await telegram.getUpdates(offset: 500, timeout: 30, allowedUpdates: ["message"])
 
     // then — the concrete offset (and allowed_updates) ride in the POST body
-    let call = try #require(await recorder.calls.first)
-    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let call = try #require(await http.requests.first)
+    let bodyData = try #require(call.body)
+    let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
     #expect(call.url == "https://example.test/botT/getUpdates")
     #expect(body["offset"] as? Int == 500)
     #expect(body["timeout"] as? Int == 30)

@@ -26,7 +26,7 @@ struct MediaDownloadTests {
   func downloadsTheResolvedFilePathBounded() async throws {
     // given
     let audio = Data([0x4F, 0x67, 0x67, 0x53])  // "OggS"
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [
         Self.getFileURL: envelope(filePath: "voice/file_3.oga"),
         Self.downloadURL: HTTPResult(statusCode: 200, headers: [:], body: audio),
@@ -51,7 +51,7 @@ struct MediaDownloadTests {
   @Test
   func missingFilePathThrowsWithoutDownloading() async throws {
     // given — Telegram may return a File with no file_path yet
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [
         Self.getFileURL: envelope(filePath: nil),
       ]
@@ -72,7 +72,7 @@ struct MediaDownloadTests {
   @Test(arguments: ["/etc/passwd", "a/../../b", "x?y=1", "x#frag", "back\\slash"])
   func unsafeFilePathIsRefusedWithoutDownloading(path: String) async throws {
     // given — file_path is server-controlled; anything that could escape the URL prefix is refused
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [
         Self.getFileURL: envelope(filePath: path),
       ]
@@ -93,7 +93,7 @@ struct MediaDownloadTests {
   @Test
   func non200DownloadThrowsATypedError() async throws {
     // given
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [
         Self.getFileURL: envelope(filePath: "voice/file_3.oga"),
         Self.downloadURL: HTTPResult(statusCode: 404, headers: [:], body: Data()),
@@ -110,7 +110,7 @@ struct MediaDownloadTests {
   @Test
   func overCapBodyIsRefusedAsATypedFailureRatherThanTruncated() async throws {
     // given — a body one byte past the requested ceiling
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [
         Self.getFileURL: envelope(filePath: "voice/file_3.oga"),
         Self.downloadURL: HTTPResult(
@@ -138,7 +138,7 @@ struct MediaDownloadTests {
         "connection to \(url) failed"
       }
     }
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       responses: [Self.getFileURL: envelope(filePath: "voice/file_3.oga")],
       errors: [Self.downloadURL: URLEchoError(url: Self.downloadURL)]
     )

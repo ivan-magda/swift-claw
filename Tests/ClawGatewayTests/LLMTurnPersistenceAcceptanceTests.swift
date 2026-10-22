@@ -238,21 +238,6 @@ actor StopNewProvider: LLMProvider {
   }
 }
 
-actor Gate {
-  private var releaseContinuation: CheckedContinuation<Void, Never>?
-
-  func wait() async {
-    await withCheckedContinuation { continuation in
-      releaseContinuation = continuation
-    }
-  }
-
-  func release() {
-    releaseContinuation?.resume()
-    releaseContinuation = nil
-  }
-}
-
 // MARK: - Stack
 
 /// The full lane-dispatched wiring over one `DatabaseWriter`: `router.handle` persists and enqueues;
@@ -937,7 +922,8 @@ struct LLMTurnPersistenceAcceptanceTests {
       sessionKey: SessionKey.telegramDM(chatID: stack.chatID),
       now: Date()
     )
-    let gate = Gate()
+    let gate = AsyncGate()
+    defer { gate.open() }
     _ = await stack.lanes.enqueue(sessionID: sessionID, runID: -1) {
       await gate.wait()
     }
@@ -952,7 +938,7 @@ struct LLMTurnPersistenceAcceptanceTests {
     #expect(firstOutcome == .processed)
     #expect(secondOutcome == .processed)
     #expect(await stack.provider.requests.isEmpty)
-    await gate.release()
+    gate.open()
     await stack.provider.waitForRequestCount(1)
     #expect(await stack.provider.requests.count == 1)
     await stack.provider.releaseFirstCall()

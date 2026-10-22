@@ -5,7 +5,6 @@ import ClawMCP
 import ClawSecrets
 import ClawTestSupport
 import Foundation
-import Logging
 import ServiceLifecycleTestKit
 import Testing
 
@@ -129,9 +128,7 @@ struct MCPSessionLifecycleServiceTests {
         server: try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp"),
         token: nil,
         http: scripted,
-        logger: Logger(label: "test") { _ in
-          SwiftLogNoOpLogHandler()
-        }
+        logger: TestLog.silent
       )
     }
     for session in sessions {

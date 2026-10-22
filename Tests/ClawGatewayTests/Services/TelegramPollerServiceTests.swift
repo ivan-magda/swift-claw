@@ -10,32 +10,15 @@ import Testing
 
 @testable import ClawGateway
 
-private actor BlockingTurnRunner: TurnDispatching {
-  private(set) var callCount = 0
-  private var started: CheckedContinuation<Void, Never>?
-  private var release: CheckedContinuation<Void, Never>?
+/// Holds every turn it starts until the test opens `released`, so the poller's cursor advance is
+/// observable while the turn is still in flight.
+private struct BlockingTurnRunner: TurnDispatching {
+  let started = AsyncGate()
+  let released = AsyncGate()
 
   func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {
-    callCount += 1
-    started?.resume()
-    started = nil
-    await withCheckedContinuation { continuation in
-      release = continuation
-    }
-  }
-
-  func waitUntilStarted() async {
-    guard callCount == 0 else {
-      return
-    }
-    await withCheckedContinuation { continuation in
-      started = continuation
-    }
-  }
-
-  func finish() {
-    release?.resume()
-    release = nil
+    started.open()
+    await released.wait()
   }
 }
 
@@ -195,6 +178,7 @@ struct TelegramPollerServiceTests {
     try allowlist.seedAllowlist(userIDs: [42])
     let transport = RecordingTransport(batches: [[textUpdate(id: 100, from: 42, text: "hi")]])
     let runner = BlockingTurnRunner()
+    defer { runner.released.open() }
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: SessionMessageStoreGRDB(writer: queue),
@@ -229,12 +213,12 @@ struct TelegramPollerServiceTests {
     let task = Task {
       try await poller.run()
     }
-    await runner.waitUntilStarted()
+    await runner.started.wait()
     await transport.waitForPolls(atLeast: 2)
 
     // then
     #expect(try cursor.loadCursor() == 100)
-    await runner.finish()
+    runner.released.open()
     task.cancel()
     try await task.value
   }

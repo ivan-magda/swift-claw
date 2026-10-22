@@ -127,9 +127,7 @@ public struct RacedSuccessProvider: LLMProvider {
   }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
-    while !Task.isCancelled {
-      await Task.yield()
-    }
+    await suspendUntilCancelled()
     return response
   }
 }

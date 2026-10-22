@@ -5,7 +5,6 @@ import ClawMCP
 import ClawSecrets
 import ClawTestSupport
 import Foundation
-import Logging
 import Testing
 
 @testable import clawd
@@ -211,7 +210,7 @@ struct MCPProbeCommandTests {
       servers: [try server(named: "linear")],
       credentials: [:],
       http: remote,
-      logger: Self.silentLogger
+      logger: TestLog.silent
     )
 
     // then
@@ -239,7 +238,7 @@ struct MCPProbeCommandTests {
       servers: [filtered],
       credentials: [:],
       http: remote,
-      logger: Self.silentLogger
+      logger: TestLog.silent
     )
 
     // then — a probe answers about the daemon's catalog, not the server's brochure
@@ -253,7 +252,7 @@ struct MCPProbeCommandTests {
       servers: [try server(named: "linear")],
       credentials: [:],
       http: ScriptedHTTPExecutor([]),
-      logger: Self.silentLogger
+      logger: TestLog.silent
     )
 
     // when
@@ -276,7 +275,7 @@ struct MCPProbeCommandTests {
       servers: [try server(named: "linear")],
       credentials: ["linear": .token("linear-token")],
       http: remote,
-      logger: Self.silentLogger
+      logger: TestLog.silent
     )
 
     // then — every exchange authenticated with the bound token, and it appears in no row
@@ -295,10 +294,6 @@ private typealias RemoteTool = ScriptedMCPHTTPServer.RemoteTool
 // MARK: - MCP Probe Fixtures
 
 private extension MCPProbeCommandTests {
-  static let silentLogger = Logger(label: "test") { _ in
-    SwiftLogNoOpLogHandler()
-  }
-
   func server(named name: String, enabled: Bool = true) throws -> MCPServerConfig {
     try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp", enabled: enabled)
   }

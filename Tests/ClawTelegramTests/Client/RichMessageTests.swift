@@ -10,7 +10,7 @@ struct RichMessageTests {
   @Test
   func sendRichMessagePostsMarkdownInputRichMessage() async throws {
     // given — a transport whose executor records the request body and returns message_id 99
-    let executor = ClawTestSupport.RecordingHTTPExecutor(
+    let executor = RecordingHTTPExecutor(
       cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],

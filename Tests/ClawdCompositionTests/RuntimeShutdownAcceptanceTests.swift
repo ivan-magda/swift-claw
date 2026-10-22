@@ -9,7 +9,6 @@ import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import clawd
@@ -85,7 +84,7 @@ struct RuntimeShutdownAcceptanceTests {
       try await RunCommand.serveThenShutDown(
         composed: composed,
         redactionValues: [],
-        logger: Self.silent
+        logger: TestLog.silent
       )
     }
     await booted.wait()
@@ -223,7 +222,7 @@ struct RuntimeShutdownAcceptanceTests {
       try await RunCommand.serveThenShutDown(
         composed: composed,
         redactionValues: [],
-        logger: Self.silent
+        logger: TestLog.silent
       )
     }
     #expect(await bootEntered.waitUntilOpen())
@@ -284,7 +283,7 @@ struct RuntimeShutdownAcceptanceTests {
       try await RunCommand.serveThenShutDown(
         composed: composed,
         redactionValues: [],
-        logger: Self.silent,
+        logger: TestLog.silent,
         terminator: FatalProcessTerminator { value in
           code.set(value)
           throw FatalExitSentinel()
@@ -309,10 +308,6 @@ struct RuntimeShutdownAcceptanceTests {
   }
 
   // MARK: - Helpers
-
-  private static let silent = Logger(label: "test") { _ in
-    SwiftLogNoOpLogHandler()
-  }
 
   private static func makeComposed(
     lane: HeldLane,

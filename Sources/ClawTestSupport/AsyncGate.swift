@@ -95,6 +95,13 @@ public final class AsyncGate: Sendable {
   }
 }
 
+/// Suspends the calling task until it is cancelled, then returns. The stand-in for work that only
+/// ends when cancelled — a hung command, a provider the deadline beats — parked on a gate no one
+/// opens, so it holds no executor thread while it waits, unlike a `Task.yield()` spin.
+public func suspendUntilCancelled() async {
+  await AsyncGate().wait()
+}
+
 // MARK: - Waiter bookkeeping
 
 private extension AsyncGate {
