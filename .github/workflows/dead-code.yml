@@ -1,7 +1,7 @@
 name: Dead code
 
 # Unused declarations and imports need a full indexed build, too slow for every pull request.
-# This runs weekly, on demand, and on pull requests that change the analysis itself.
+# This runs weekly, on demand, and on pull requests that change the analysis or its toolchain.
 on:
   schedule:
     - cron: "41 3 * * 1"
@@ -9,8 +9,10 @@ on:
   pull_request:
     paths:
       - .claude/skills/removing-dead-code/scripts/**
+      - .github/actions/select-xcode/**
       - .github/workflows/dead-code.yml
       - .periphery.yml
+      - BuildTools/lint-versions.env
       - BuildTools/periphery-baseline.txt
       - scripts/check-periphery-baseline.py
 

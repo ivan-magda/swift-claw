@@ -9,7 +9,7 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 - Nonempty conditional/loop statements and closure bodies are multiline; inline `if` expressions
   remain allowed.
-- Nonempty `do` and `catch` bodies are multiline; review this manually.
+- Nonempty `do` and `catch` bodies are multiline.
 - Switch case bodies start on their own line, including single-statement bodies.
 - Nonempty type, extension, function, initializer, subscript, and computed-property bodies are
   multiline. Empty bodies may remain `{}`.
@@ -75,7 +75,9 @@ Keep nonempty closure bodies multiline:
 
 ```swift
 let predecessors = operations.values
-  .filter { $0.runID == runID }
+  .filter {
+    $0.runID == runID
+  }
   .map(\.task)
 ```
 
@@ -114,8 +116,8 @@ Use the compiler and formatter bundled with the pinned distribution:
 
 | Platform | Distribution | Compiler identity | Apple formatter report |
 | --- | --- | --- | --- |
-| macOS | Xcode **27.1**, build **27A9275** | Apple Swift **6.4**, `swiftlang-6.4.0.34.1 clang-2100.3.34.1` | `main` |
-| Linux | Official **Swift 6.4.0** release (`swift:6.4.0-noble`) | Swift **6.4**, `swift-6.4-RELEASE` | `main` |
+| macOS | Xcode at `CLAW_XCODE_VERSION`, build `CLAW_XCODE_BUILD_VERSION` | Apple Swift `.swift-version`, `CLAW_LINT_SWIFT_MACOS_BUILD` | `main` |
+| Linux | Official Swift release (`swift:<version>-noble`) | Swift `.swift-version`, `swift-<version>-RELEASE` | `main` |
 
 [`.swift-version`](../.swift-version) pins the Swift version; the remaining pins live in
 [`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env). Both package manifests require
@@ -134,12 +136,13 @@ scripts/check-toolchain.sh
 Adjust `DEVELOPER_DIR` if you installed Xcode elsewhere. The lint gate uses
 `xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux.
 
-Install SwiftLint **0.65.1** from its
-[official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
-when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.64.0** from
-the locked BuildTools dependency, so the first run needs network access. It checks prerequisites
-before changing source; you do not need a global `swiftformat` install. A whole-repository
-check also needs Python 3 for its dead-code stage; macOS includes it with the Xcode tools.
+Install SwiftLint at `CLAW_LINT_SWIFTLINT_VERSION` from its
+[official releases](https://github.com/realm/SwiftLint/releases). Homebrew is usable when
+`swiftlint version` matches that pin. The lint gate builds SwiftFormat at
+`CLAW_LINT_SWIFTFORMAT_VERSION` from the locked BuildTools dependency, so the first run needs
+network access. It checks prerequisites before changing source; you do not need a global
+`swiftformat` install. A whole-repository check also needs Python 3 for its dead-code stage;
+macOS includes it with the Xcode tools.
 
 On Linux, install the same SwiftLint release as CI:
 
@@ -221,8 +224,7 @@ The existing tools cover mechanical layout. The following details remain manual 
 
 - Import ordering, conditional-import grouping, and necessity of each import.
 - Blank lines between protocol requirements and short members.
-- Multiline closure bodies, wrapped closure signatures, and short calls containing multiline closures.
-- Multiline `do` and `catch` bodies, including single-statement bodies.
+- Wrapped closure signatures and short calls containing multiline closures.
 - Multiline nonempty type and extension bodies.
 - Vertical inheritance lists, unnecessary line breaks, and unusual continuation layouts.
 - Keep function signature tokens from `)` through `async`, `throws`, and `->` together.

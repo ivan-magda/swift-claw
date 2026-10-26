@@ -87,7 +87,9 @@ struct AgentRuntimeProgressTests {
     )
 
     // when
-    let turn = Task { try await runtime.runTurn(request) }
+    let turn = Task {
+      try await runtime.runTurn(request)
+    }
     #expect(await probes.ready())
     // Stream progress must arrive before stepping the paced sender.
     #expect(await answerPublished.waitUntilOpen())
@@ -128,7 +130,11 @@ struct AgentRuntimeProgressTests {
     #expect(recordedProviderCallIDs == ["call-1", "call-2"])
     #expect(await provider.requests.allSatisfy(\.progressExplanationsEnabled))
     #expect(await snapshots.latest.explanation == nil)
-    #expect(await drafts.markdowns.contains { $0.contains("final answer") })
+    #expect(
+      await drafts.markdowns.contains {
+        $0.contains("final answer")
+      }
+    )
   }
 
   @Test
@@ -156,7 +162,9 @@ struct AgentRuntimeProgressTests {
     }
     #expect(content == "hello")
     #expect(await drafts.calls == 1)
-    let close = Task { await registry.close(runID: scope.runID) }
+    let close = Task {
+      await registry.close(runID: scope.runID)
+    }
     #expect(await drafts.cancelled.waitUntilOpen())
     drafts.releaseCleanup.open()
     await close.value
