@@ -6,11 +6,11 @@ public struct FeedbackEvent: Sendable, Equatable {
   public let id: Int64
   public let runID: Int64?
   public let signal: OwnerSignal
+  public let actor: AuditActor
   public let payload: String?
   public let revision: FeedbackRevision
   public let supersedes: Int64?
   public let occurredAt: Date
-  public let actor: AuditActor
   public let transportUpdateID: Int64?
 
   public init(

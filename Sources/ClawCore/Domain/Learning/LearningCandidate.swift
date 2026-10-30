@@ -67,8 +67,8 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
   public let eventID: Int64
   public let digest: FeedbackEventDigest
   public let revision: FeedbackRevision
-  public let subjectKind: FeedbackSubjectKind
   public let subjectDigest: String
+  public let subjectKind: FeedbackSubjectKind
   public let signal: OwnerSignal
 
   public init(
