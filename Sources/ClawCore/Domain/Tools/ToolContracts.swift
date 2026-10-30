@@ -194,14 +194,6 @@ public struct ToolDefinition: Sendable, Equatable {
   public let name: String
   public let description: String
   public let parameters: JSONValue  // JSON-Schema object
-  /// Trust of the provider-facing name, description, and schema. External metadata reaches the
-  /// model before any tool result exists, so the runtime uses this provenance to arm taint before
-  /// the first provider call.
-  public let metadataProvenance: Provenance
-  /// The declared policy class the gate enforces. NOT advertised on the wire.
-  public let egressClass: ToolEgressClass
-  /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
-  public let riskLevel: RiskLevel
   /// The untrusted-fence label this tool's output renders under, defaulting to the tool's name.
   /// A tool declares another label only when trusted policy already licenses that label for
   /// exactly this content — the label is what the prompt's carve-outs are written against.
@@ -210,6 +202,14 @@ public struct ToolDefinition: Sendable, Equatable {
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
   public let invocationIdentity: String?
+  /// Trust of the provider-facing name, description, and schema. External metadata reaches the
+  /// model before any tool result exists, so the runtime uses this provenance to arm taint before
+  /// the first provider call.
+  public let metadataProvenance: Provenance
+  /// The declared policy class the gate enforces. NOT advertised on the wire.
+  public let egressClass: ToolEgressClass
+  /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
+  public let riskLevel: RiskLevel
   public let requiresInteractiveRequester: Bool
   public let requiresGroupApproval: Bool
 

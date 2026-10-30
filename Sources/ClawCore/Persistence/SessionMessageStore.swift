@@ -153,13 +153,13 @@ public struct ClaimResult: Sendable, Equatable {
 }
 
 public struct StoredMessage: Sendable, Equatable {
-  public let role: MessageRole
   public let content: String
-  public let provenance: Provenance
   public let toolCallsJSON: String?
   public let toolCallID: String?
   public let providerState: ProviderExchangeState?
   public let image: ImagePart?
+  public let role: MessageRole
+  public let provenance: Provenance
 
   public init(
     role: MessageRole,

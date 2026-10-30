@@ -58,11 +58,11 @@ public enum MemorySource: String, Sendable, Equatable {
 public struct MemoryItem: Sendable, Equatable, Identifiable {
   public let id: Int64
   public let text: String
+  public let sessionID: Int64?
   public let kind: MemoryKind
   public let sensitivity: Sensitivity
   public let importance: Importance
   public let source: MemorySource
-  public let sessionID: Int64?
   public let createdAt: Date
 
   public init(
