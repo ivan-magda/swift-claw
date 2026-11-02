@@ -1,4 +1,20 @@
 {
+  "abliteration/abliterated-model": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3
+  },
+  "abliteration/abliterated-model-large": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 5
+  },
+  "abliteration/abliterated-model-large-flash": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2
+  },
+  "abliteration/abliterated-model-large-v2": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 5
+  },
   "ai21.j2-mid-v1": {
     "inputUSDPerMTok": 12.5,
     "outputUSDPerMTok": 12.5
@@ -18,6 +34,66 @@
   "ai21.jamba-instruct-v1:0": {
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 0.7
+  },
+  "aiand/deepseek-ai/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.25
+  },
+  "aiand/deepseek-ai/deepseek-v4-pro": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2.5
+  },
+  "aiand/deepseek-ai/deepseek-v4.1-flash": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.6
+  },
+  "aiand/deepseek-ai/deepseek-v4.1-flash-1017": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.6
+  },
+  "aiand/google/gemma-4-31b-it": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.5
+  },
+  "aiand/meta/muse-spark-open": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
+  "aiand/moonshotai/kimi-k2.7-code": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.5
+  },
+  "aiand/moonshotai/kimi-k3": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 12.5
+  },
+  "aiand/motif-technologies/motif-3": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2
+  },
+  "aiand/openai/gpt-oss-120b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "aiand/qwen/qwen3.6-27b": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 3.2
+  },
+  "aiand/qwen/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 3
+  },
+  "aiand/zai-org/glm-5.2": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "aiand/zai-org/glm-5.3": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "aiand/zai-org/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.5
   },
   "aihubmix/agnes-2.5-flash": {
     "inputUSDPerMTok": 0.03,
@@ -683,6 +759,10 @@
     "inputUSDPerMTok": 2.4,
     "outputUSDPerMTok": 12
   },
+  "azure/apac/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 6
+  },
   "azure/chat-latest": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 30
@@ -894,6 +974,10 @@
   "azure/eu/gpt-6.1-sol": {
     "inputUSDPerMTok": 2.4,
     "outputUSDPerMTok": 12
+  },
+  "azure/eu/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 6
   },
   "azure/eu/o1": {
     "inputUSDPerMTok": 16.5,
@@ -1339,6 +1423,10 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "azure/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
   "azure/gpt-audio": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -1710,6 +1798,10 @@
   "azure/us/gpt-6.1-sol": {
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 11
+  },
+  "azure/us/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 5.5
   },
   "azure/us/gpt-chat-latest": {
     "inputUSDPerMTok": 5.5,
@@ -2151,6 +2243,10 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "azure_ai/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
   "azure_ai/gpt-chat-latest": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 30
@@ -2290,6 +2386,18 @@
   "baseten/MiniMaxAI/MiniMax-M2.5": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
+  },
+  "baseten/decision-models/baseten-elephant-9b-latest": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0
+  },
+  "baseten/decision-models/baseten-joey-2b-latest": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "baseten/decision-models/baseten-mammoth-27b-latest": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
   },
   "baseten/deepseek-ai/DeepSeek-V3-0324": {
     "inputUSDPerMTok": 0.77,
@@ -2439,6 +2547,14 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/ap-northeast-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock/ap-northeast-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
   "bedrock/ap-northeast-1/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.73,
     "outputUSDPerMTok": 3.03
@@ -2494,6 +2610,14 @@
   "bedrock/ap-southeast-2/minimax.minimax-m2.5": {
     "inputUSDPerMTok": 0.31,
     "outputUSDPerMTok": 1.24
+  },
+  "bedrock/ap-southeast-2/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.0412,
+    "outputUSDPerMTok": 0.0412
+  },
+  "bedrock/ap-southeast-2/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.103,
+    "outputUSDPerMTok": 0.309
   },
   "bedrock/ap-southeast-2/qwen.qwen3-next-80b-a3b": {
     "inputUSDPerMTok": 0.1545,
@@ -2674,6 +2798,14 @@
   "bedrock/eu-west-2/minimax.minimax-m2.5": {
     "inputUSDPerMTok": 0.47,
     "outputUSDPerMTok": 1.86
+  },
+  "bedrock/eu-west-2/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.06
+  },
+  "bedrock/eu-west-2/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.47
   },
   "bedrock/eu-west-2/nvidia.nemotron-super-3-120b": {
     "inputUSDPerMTok": 0.23,
@@ -3175,6 +3307,10 @@
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 11
   },
+  "bedrock_mantle/openai.gpt-6.1-terra": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 5.5
+  },
   "bedrock_mantle/openai.gpt-daybreak-blue-5.6-sol": {
     "inputUSDPerMTok": 4.4,
     "outputUSDPerMTok": 22
@@ -3306,6 +3442,18 @@
   "bespoke/nimble-latest": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
+  },
+  "bigmodel/glm-5.3": {
+    "inputUSDPerMTok": 1.142857,
+    "outputUSDPerMTok": 4
+  },
+  "bigmodel/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.114286,
+    "outputUSDPerMTok": 0.4
+  },
+  "bigmodel/glm-5.3-flashx": {
+    "inputUSDPerMTok": 0.285714,
+    "outputUSDPerMTok": 1
   },
   "c4ai-aya-expanse-32b": {
     "inputUSDPerMTok": 0.5,
@@ -3450,6 +3598,46 @@
   "claude-sonnet-5-5": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
+  },
+  "clf_ai_gateway/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.176,
+    "outputUSDPerMTok": 0.528
+  },
+  "clf_ai_gateway/deepseek-v4-pro": {
+    "inputUSDPerMTok": 0.528,
+    "outputUSDPerMTok": 1.584
+  },
+  "clf_ai_gateway/deepseek-v4.1-flash": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.48
+  },
+  "clf_ai_gateway/glm-4.7-flash": {
+    "inputUSDPerMTok": 0.024,
+    "outputUSDPerMTok": 0.16
+  },
+  "clf_ai_gateway/glm-5.2": {
+    "inputUSDPerMTok": 0.56,
+    "outputUSDPerMTok": 1.76
+  },
+  "clf_ai_gateway/glm-5.3": {
+    "inputUSDPerMTok": 0.56,
+    "outputUSDPerMTok": 1.76
+  },
+  "clf_ai_gateway/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.2
+  },
+  "clf_ai_gateway/kimi-k2.6": {
+    "inputUSDPerMTok": 0.38,
+    "outputUSDPerMTok": 1.6
+  },
+  "clf_ai_gateway/kimi-k2.7-code": {
+    "inputUSDPerMTok": 0.38,
+    "outputUSDPerMTok": 1.6
+  },
+  "clf_ai_gateway/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 1.28
   },
   "cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it": {
     "inputUSDPerMTok": 0.351,
@@ -3775,6 +3963,10 @@
     "inputUSDPerMTok": 0.95,
     "outputUSDPerMTok": 4
   },
+  "dashscope/qwen-audio-3.1-tts-flash": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 1.87
+  },
   "dashscope/qwen-coder": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.5
@@ -3868,24 +4060,28 @@
     "outputUSDPerMTok": 0
   },
   "databricks/databricks-claude-fable-5": {
-    "inputUSDPerMTok": 10.00006,
+    "inputUSDPerMTok": 9.99999,
     "outputUSDPerMTok": 50.00002
   },
   "databricks/databricks-claude-fable-5-1": {
-    "inputUSDPerMTok": 10.00006,
+    "inputUSDPerMTok": 9.99999,
     "outputUSDPerMTok": 50.00002
   },
   "databricks/databricks-claude-haiku-4-5": {
     "inputUSDPerMTok": 1.00002,
     "outputUSDPerMTok": 5.00003
   },
+  "databricks/databricks-claude-haiku-5-5": {
+    "inputUSDPerMTok": 0.10003,
+    "outputUSDPerMTok": 0.50001
+  },
   "databricks/databricks-claude-opus-4": {
     "inputUSDPerMTok": 15.00002,
-    "outputUSDPerMTok": 75.00003
+    "outputUSDPerMTok": 75.0001
   },
   "databricks/databricks-claude-opus-4-1": {
     "inputUSDPerMTok": 15.00002,
-    "outputUSDPerMTok": 75.00003
+    "outputUSDPerMTok": 75.0001
   },
   "databricks/databricks-claude-opus-4-5": {
     "inputUSDPerMTok": 5.00003,
@@ -3928,8 +4124,20 @@
     "outputUSDPerMTok": 15.00002
   },
   "databricks/databricks-claude-sonnet-5": {
-    "inputUSDPerMTok": 2.99999,
-    "outputUSDPerMTok": 15.00002
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 9.99999
+  },
+  "databricks/databricks-claude-sonnet-5-5": {
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 9.99999
+  },
+  "databricks/databricks-deepseek-v4-1-flash": {
+    "inputUSDPerMTok": 0.30002,
+    "outputUSDPerMTok": 1.20001
+  },
+  "databricks/databricks-deepseek-v4-1-flash-1017": {
+    "inputUSDPerMTok": 0.30002,
+    "outputUSDPerMTok": 1.20001
   },
   "databricks/databricks-deepseek-v4-flash-0731": {
     "inputUSDPerMTok": 0.14,
@@ -3943,11 +4151,23 @@
     "inputUSDPerMTok": 0.30002,
     "outputUSDPerMTok": 2.49998
   },
+  "databricks/databricks-gemini-2-5-flash-lite": {
+    "inputUSDPerMTok": 0.12502,
+    "outputUSDPerMTok": 0.50001
+  },
   "databricks/databricks-gemini-2-5-pro": {
     "inputUSDPerMTok": 1.24999,
     "outputUSDPerMTok": 9.99999
   },
+  "databricks/databricks-gemini-3-1-flash-image": {
+    "inputUSDPerMTok": 0.62503,
+    "outputUSDPerMTok": 3.74997
+  },
   "databricks/databricks-gemini-3-1-flash-lite": {
+    "inputUSDPerMTok": 0.31248,
+    "outputUSDPerMTok": 1.87502
+  },
+  "databricks/databricks-gemini-3-1-flash-lite-image": {
     "inputUSDPerMTok": 0.31248,
     "outputUSDPerMTok": 1.87502
   },
@@ -3964,8 +4184,16 @@
     "outputUSDPerMTok": 3.12501
   },
   "databricks/databricks-gemini-3-6-flash": {
-    "inputUSDPerMTok": 1.87502,
-    "outputUSDPerMTok": 9.37503
+    "inputUSDPerMTok": 0.74998,
+    "outputUSDPerMTok": 3.74997
+  },
+  "databricks/databricks-gemini-3-7-flash": {
+    "inputUSDPerMTok": 0.74998,
+    "outputUSDPerMTok": 3.74997
+  },
+  "databricks/databricks-gemini-3-8-flash": {
+    "inputUSDPerMTok": 0.74998,
+    "outputUSDPerMTok": 3.74997
   },
   "databricks/databricks-gemini-3-flash": {
     "inputUSDPerMTok": 0.62503,
@@ -3974,6 +4202,14 @@
   "databricks/databricks-gemini-3-pro": {
     "inputUSDPerMTok": 2.49998,
     "outputUSDPerMTok": 15.00002
+  },
+  "databricks/databricks-gemini-3-pro-image": {
+    "inputUSDPerMTok": 2.49998,
+    "outputUSDPerMTok": 15.00002
+  },
+  "databricks/databricks-gemini-4-argon": {
+    "inputUSDPerMTok": 2.49998,
+    "outputUSDPerMTok": 12.49997
   },
   "databricks/databricks-gemma-3-12b": {
     "inputUSDPerMTok": 0.15001,
@@ -4019,25 +4255,29 @@
     "inputUSDPerMTok": 0.19999,
     "outputUSDPerMTok": 1.24999
   },
+  "databricks/databricks-gpt-5-4-pro": {
+    "inputUSDPerMTok": 29.99997,
+    "outputUSDPerMTok": 180.0001
+  },
   "databricks/databricks-gpt-5-5": {
     "inputUSDPerMTok": 5.00003,
     "outputUSDPerMTok": 29.99997
   },
   "databricks/databricks-gpt-5-5-pro": {
     "inputUSDPerMTok": 29.99997,
-    "outputUSDPerMTok": 180.00003
+    "outputUSDPerMTok": 180.0001
   },
   "databricks/databricks-gpt-5-6-luna": {
-    "inputUSDPerMTok": 1.00002,
-    "outputUSDPerMTok": 5.99998
+    "inputUSDPerMTok": 0.19999,
+    "outputUSDPerMTok": 1.20001
   },
   "databricks/databricks-gpt-5-6-sol": {
     "inputUSDPerMTok": 4.00001,
     "outputUSDPerMTok": 19.99998
   },
   "databricks/databricks-gpt-5-6-terra": {
-    "inputUSDPerMTok": 2.49998,
-    "outputUSDPerMTok": 15.00002
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 12.00003
   },
   "databricks/databricks-gpt-5-mini": {
     "inputUSDPerMTok": 0.24997,
@@ -4046,6 +4286,30 @@
   "databricks/databricks-gpt-5-nano": {
     "inputUSDPerMTok": 0.04998,
     "outputUSDPerMTok": 0.39998
+  },
+  "databricks/databricks-gpt-6-1-sol": {
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 9.99999
+  },
+  "databricks/databricks-gpt-6-1-terra": {
+    "inputUSDPerMTok": 1.00002,
+    "outputUSDPerMTok": 5.00003
+  },
+  "databricks/databricks-gpt-6-astra": {
+    "inputUSDPerMTok": 9.99999,
+    "outputUSDPerMTok": 50.00002
+  },
+  "databricks/databricks-gpt-6-luna": {
+    "inputUSDPerMTok": 0.10003,
+    "outputUSDPerMTok": 0.50001
+  },
+  "databricks/databricks-gpt-6-sol": {
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 9.99999
+  },
+  "databricks/databricks-gpt-image-1-5": {
+    "inputUSDPerMTok": 5.00003,
+    "outputUSDPerMTok": 9.99999
   },
   "databricks/databricks-gpt-oss-120b": {
     "inputUSDPerMTok": 0.15001,
@@ -4059,6 +4323,10 @@
     "inputUSDPerMTok": 2.49998,
     "outputUSDPerMTok": 7.50001
   },
+  "databricks/databricks-grok-4-7": {
+    "inputUSDPerMTok": 2.49998,
+    "outputUSDPerMTok": 7.50001
+  },
   "databricks/databricks-gte-large-en": {
     "inputUSDPerMTok": 0.12999,
     "outputUSDPerMTok": 0
@@ -4066,6 +4334,10 @@
   "databricks/databricks-inkling": {
     "inputUSDPerMTok": 1.00002,
     "outputUSDPerMTok": 4.04999
+  },
+  "databricks/databricks-kimi-k2-7": {
+    "inputUSDPerMTok": 0.94997,
+    "outputUSDPerMTok": 4.00001
   },
   "databricks/databricks-kimi-k3": {
     "inputUSDPerMTok": 2.99999,
@@ -4084,7 +4356,7 @@
     "outputUSDPerMTok": 1.50003
   },
   "databricks/databricks-openjev-qwen35-4b": {
-    "inputUSDPerMTok": 0,
+    "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
   "databricks/databricks-qwen3-embedding-0-6b": {
@@ -4098,6 +4370,10 @@
   "databricks/databricks-qwen35-122b-a10b": {
     "inputUSDPerMTok": 0.22001,
     "outputUSDPerMTok": 2.20003
+  },
+  "databricks/databricks-typesafeai-jev-1-14-0": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
   },
   "davinci-002": {
     "inputUSDPerMTok": 2,
@@ -4902,6 +5178,14 @@
   "eu.mistral.pixtral-large-2502-v1:0": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
+  },
+  "eu_jev/eu-jeff-1.0.0": {
+    "inputUSDPerMTok": 0.0415,
+    "outputUSDPerMTok": 0
+  },
+  "eu_jev/eu-jeff-latest": {
+    "inputUSDPerMTok": 0.0415,
+    "outputUSDPerMTok": 0
   },
   "fal_ai/fal-ai/moondream3-preview/query": {
     "inputUSDPerMTok": 0.4,
@@ -6015,6 +6299,10 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
   },
+  "fireworks_ai/accounts/fireworks/models/rune": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
   "fireworks_ai/accounts/fireworks/models/snorkel-mistral-7b-pairrm-dpo": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
@@ -6051,6 +6339,10 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
   },
+  "fireworks_ai/accounts/fireworks/models/ultramarine-1-flash-us": {
+    "inputUSDPerMTok": 0.225,
+    "outputUSDPerMTok": 0.75
+  },
   "fireworks_ai/accounts/fireworks/models/yi-34b": {
     "inputUSDPerMTok": 0.9,
     "outputUSDPerMTok": 0.9
@@ -6074,6 +6366,14 @@
   "fireworks_ai/accounts/fireworks/models/zephyr-7b-beta": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
+  },
+  "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
+    "inputUSDPerMTok": 0.21,
+    "outputUSDPerMTok": 0.84
+  },
+  "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
+    "inputUSDPerMTok": 0.21,
+    "outputUSDPerMTok": 0.84
   },
   "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-us": {
     "inputUSDPerMTok": 0.45,
@@ -6099,6 +6399,10 @@
     "inputUSDPerMTok": 0.225,
     "outputUSDPerMTok": 0.75
   },
+  "fireworks_ai/accounts/fireworks/routers/glm-5p3-spot": {
+    "inputUSDPerMTok": 0.98,
+    "outputUSDPerMTok": 3.08
+  },
   "fireworks_ai/accounts/fireworks/routers/glm-5p3-us": {
     "inputUSDPerMTok": 2.1,
     "outputUSDPerMTok": 6.6
@@ -6115,6 +6419,10 @@
     "inputUSDPerMTok": 4.5,
     "outputUSDPerMTok": 22.5
   },
+  "fireworks_ai/accounts/fireworks/routers/kimi-k3-spot": {
+    "inputUSDPerMTok": 2.1,
+    "outputUSDPerMTok": 10.5
+  },
   "fireworks_ai/accounts/fireworks/routers/kimi-k3-us": {
     "inputUSDPerMTok": 4.5,
     "outputUSDPerMTok": 22.5
@@ -6122,6 +6430,10 @@
   "fireworks_ai/accounts/fireworks/routers/rune": {
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
+  },
+  "fireworks_ai/accounts/fireworks/routers/spot-deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.105,
+    "outputUSDPerMTok": 0.21
   },
   "fireworks_ai/deepseek-v4-flash": {
     "inputUSDPerMTok": 0.14,
@@ -6943,6 +7255,10 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "github_copilot/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
   "github_copilot/grok-4.5": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
@@ -7078,6 +7394,10 @@
   "global.openai.gpt-6.1-sol": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
+  },
+  "global.openai.gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
   },
   "global.xai.grok-4.6": {
     "inputUSDPerMTok": 2,
@@ -7511,9 +7831,17 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "gpt-6-astra-law": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
   "gpt-6-luna": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.5
+  },
+  "gpt-6-rosalind": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 75
   },
   "gpt-6-sol": {
     "inputUSDPerMTok": 2,
@@ -7522,6 +7850,10 @@
   "gpt-6.1-sol": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
+  },
+  "gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
   },
   "gpt-audio": {
     "inputUSDPerMTok": 2.5,
@@ -7670,6 +8002,22 @@
   "groq/qwen/qwen3.8-27b": {
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 4
+  },
+  "hostinger_router/claude-sonnet-5": {
+    "inputUSDPerMTok": 2.64,
+    "outputUSDPerMTok": 13.2
+  },
+  "hostinger_router/gpt-5.2": {
+    "inputUSDPerMTok": 2.1,
+    "outputUSDPerMTok": 16.8
+  },
+  "hostinger_router/text-embedding-3-large": {
+    "inputUSDPerMTok": 0.1716,
+    "outputUSDPerMTok": 0
+  },
+  "hostinger_router/text-embedding-3-small": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0
   },
   "hyperbolic/NousResearch/Hermes-3-Llama-3.1-70B": {
     "inputUSDPerMTok": 0.12,
@@ -7990,6 +8338,338 @@
   "kimi-k2-thinking-251104": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
+  },
+  "kyma/claude-fable-5": {
+    "inputUSDPerMTok": 13.5,
+    "outputUSDPerMTok": 67.5
+  },
+  "kyma/claude-fable-5.1": {
+    "inputUSDPerMTok": 13.5,
+    "outputUSDPerMTok": 67.5
+  },
+  "kyma/claude-haiku-4-5": {
+    "inputUSDPerMTok": 1.35,
+    "outputUSDPerMTok": 6.75
+  },
+  "kyma/claude-haiku-5.5": {
+    "inputUSDPerMTok": 0.135,
+    "outputUSDPerMTok": 0.675
+  },
+  "kyma/claude-opus-4-7": {
+    "inputUSDPerMTok": 6.75,
+    "outputUSDPerMTok": 33.75
+  },
+  "kyma/claude-opus-5": {
+    "inputUSDPerMTok": 6.75,
+    "outputUSDPerMTok": 33.75
+  },
+  "kyma/claude-opus-5.5": {
+    "inputUSDPerMTok": 5.4,
+    "outputUSDPerMTok": 27
+  },
+  "kyma/claude-sonnet-4-6": {
+    "inputUSDPerMTok": 4.05,
+    "outputUSDPerMTok": 20.25
+  },
+  "kyma/claude-sonnet-5": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 13.5
+  },
+  "kyma/claude-sonnet-5.5": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 13.5
+  },
+  "kyma/deepseek-r1": {
+    "inputUSDPerMTok": 0.7425,
+    "outputUSDPerMTok": 2.957
+  },
+  "kyma/deepseek-v3": {
+    "inputUSDPerMTok": 0.518,
+    "outputUSDPerMTok": 0.7571
+  },
+  "kyma/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.123,
+    "outputUSDPerMTok": 0.2458
+  },
+  "kyma/deepseek-v4-flash-vision-exp": {
+    "inputUSDPerMTok": 0.3892,
+    "outputUSDPerMTok": 1.168
+  },
+  "kyma/deepseek-v4.1-flash": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.81
+  },
+  "kyma/gemini-3-flash": {
+    "inputUSDPerMTok": 0.675,
+    "outputUSDPerMTok": 4.05
+  },
+  "kyma/gemini-3.1-pro": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 16.2
+  },
+  "kyma/gemini-3.5-flash": {
+    "inputUSDPerMTok": 2.025,
+    "outputUSDPerMTok": 12.15
+  },
+  "kyma/gemini-3.5-flash-lite": {
+    "inputUSDPerMTok": 0.405,
+    "outputUSDPerMTok": 3.375
+  },
+  "kyma/gemini-3.6-flash": {
+    "inputUSDPerMTok": 1.013,
+    "outputUSDPerMTok": 5.063
+  },
+  "kyma/gemini-3.7-flash": {
+    "inputUSDPerMTok": 2.026,
+    "outputUSDPerMTok": 10.126
+  },
+  "kyma/gemini-3.8-flash": {
+    "inputUSDPerMTok": 2.026,
+    "outputUSDPerMTok": 10.126
+  },
+  "kyma/gemini-4-argon": {
+    "inputUSDPerMTok": 5.4,
+    "outputUSDPerMTok": 27
+  },
+  "kyma/gemma-4-31b": {
+    "inputUSDPerMTok": 0.1642,
+    "outputUSDPerMTok": 0.4689
+  },
+  "kyma/glm-4.5-air": {
+    "inputUSDPerMTok": 0.1797,
+    "outputUSDPerMTok": 1.175
+  },
+  "kyma/glm-4.7-flash": {
+    "inputUSDPerMTok": 0.081,
+    "outputUSDPerMTok": 0.54
+  },
+  "kyma/glm-5.1": {
+    "inputUSDPerMTok": 1.89,
+    "outputUSDPerMTok": 5.94
+  },
+  "kyma/glm-5.2": {
+    "inputUSDPerMTok": 0.9029,
+    "outputUSDPerMTok": 3.083
+  },
+  "kyma/glm-5.3": {
+    "inputUSDPerMTok": 1.178,
+    "outputUSDPerMTok": 3.702
+  },
+  "kyma/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.172,
+    "outputUSDPerMTok": 0.5733
+  },
+  "kyma/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2944,
+    "outputUSDPerMTok": 1.767
+  },
+  "kyma/gpt-5.6-luna-pro": {
+    "inputUSDPerMTok": 0.2703,
+    "outputUSDPerMTok": 1.621
+  },
+  "kyma/gpt-5.6-sol": {
+    "inputUSDPerMTok": 5.4,
+    "outputUSDPerMTok": 27
+  },
+  "kyma/gpt-5.6-sol-pro": {
+    "inputUSDPerMTok": 5.4,
+    "outputUSDPerMTok": 27
+  },
+  "kyma/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 16.2
+  },
+  "kyma/gpt-5.6-terra-pro": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 16.2
+  },
+  "kyma/gpt-6-astra": {
+    "inputUSDPerMTok": 13.5,
+    "outputUSDPerMTok": 67.5
+  },
+  "kyma/gpt-6-luna": {
+    "inputUSDPerMTok": 0.1639,
+    "outputUSDPerMTok": 0.8195
+  },
+  "kyma/gpt-6.1-sol": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 13.5
+  },
+  "kyma/gpt-oss-120b": {
+    "inputUSDPerMTok": 0.0473,
+    "outputUSDPerMTok": 0.2303
+  },
+  "kyma/grok-4.20": {
+    "inputUSDPerMTok": 1.763,
+    "outputUSDPerMTok": 3.528
+  },
+  "kyma/grok-4.20-multi-agent": {
+    "inputUSDPerMTok": 1.767,
+    "outputUSDPerMTok": 3.534
+  },
+  "kyma/grok-4.3": {
+    "inputUSDPerMTok": 1.92,
+    "outputUSDPerMTok": 3.838
+  },
+  "kyma/grok-4.5": {
+    "inputUSDPerMTok": 2.73,
+    "outputUSDPerMTok": 8.189
+  },
+  "kyma/grok-4.6": {
+    "inputUSDPerMTok": 2.758,
+    "outputUSDPerMTok": 8.274
+  },
+  "kyma/grok-4.7": {
+    "inputUSDPerMTok": 2.16,
+    "outputUSDPerMTok": 6.48
+  },
+  "kyma/grok-build": {
+    "inputUSDPerMTok": 1.389,
+    "outputUSDPerMTok": 2.777
+  },
+  "kyma/hy3": {
+    "inputUSDPerMTok": 0.1594,
+    "outputUSDPerMTok": 0.6576
+  },
+  "kyma/hy4-preview": {
+    "inputUSDPerMTok": 1.1259,
+    "outputUSDPerMTok": 3.3764
+  },
+  "kyma/kimi-k2.6": {
+    "inputUSDPerMTok": 0.5909,
+    "outputUSDPerMTok": 2.758
+  },
+  "kyma/kimi-k2.7-code": {
+    "inputUSDPerMTok": 1.009,
+    "outputUSDPerMTok": 4.774
+  },
+  "kyma/kimi-k3": {
+    "inputUSDPerMTok": 3.052,
+    "outputUSDPerMTok": 15.258
+  },
+  "kyma/kimi-k3.1-pro": {
+    "inputUSDPerMTok": 2.7,
+    "outputUSDPerMTok": 13.5
+  },
+  "kyma/llama-3.3-70b": {
+    "inputUSDPerMTok": 0.135,
+    "outputUSDPerMTok": 0.432
+  },
+  "kyma/llama-4-maverick": {
+    "inputUSDPerMTok": 0.3344,
+    "outputUSDPerMTok": 1.337
+  },
+  "kyma/mimo-v2.5": {
+    "inputUSDPerMTok": 0.1859,
+    "outputUSDPerMTok": 0.3718
+  },
+  "kyma/mimo-v2.6-flash": {
+    "inputUSDPerMTok": 0.189,
+    "outputUSDPerMTok": 0.378
+  },
+  "kyma/mimo-v2.6-pro": {
+    "inputUSDPerMTok": 0.5805,
+    "outputUSDPerMTok": 1.1745
+  },
+  "kyma/minimax-m2.5": {
+    "inputUSDPerMTok": 0.4188,
+    "outputUSDPerMTok": 1.675
+  },
+  "kyma/minimax-m2.7": {
+    "inputUSDPerMTok": 0.405,
+    "outputUSDPerMTok": 1.62
+  },
+  "kyma/minimax-m3": {
+    "inputUSDPerMTok": 0.3956,
+    "outputUSDPerMTok": 1.582
+  },
+  "kyma/minimax-m3.1-flash": {
+    "inputUSDPerMTok": 0.2025,
+    "outputUSDPerMTok": 0.81
+  },
+  "kyma/muse-glimmer-30b": {
+    "inputUSDPerMTok": 0.4554,
+    "outputUSDPerMTok": 1.821
+  },
+  "kyma/muse-spark-1.1": {
+    "inputUSDPerMTok": 1.542,
+    "outputUSDPerMTok": 5.243
+  },
+  "kyma/muse-spark-1.2": {
+    "inputUSDPerMTok": 1.773,
+    "outputUSDPerMTok": 6.025
+  },
+  "kyma/muse-spark-1.3": {
+    "inputUSDPerMTok": 1.688,
+    "outputUSDPerMTok": 5.738
+  },
+  "kyma/muse-spark-open": {
+    "inputUSDPerMTok": 1.688,
+    "outputUSDPerMTok": 5.738
+  },
+  "kyma/muse-wonder": {
+    "inputUSDPerMTok": 5.4,
+    "outputUSDPerMTok": 27
+  },
+  "kyma/nemotron-3-ultra-550b": {
+    "inputUSDPerMTok": 0.675,
+    "outputUSDPerMTok": 3.375
+  },
+  "kyma/nemotron-3.5-super-vl": {
+    "inputUSDPerMTok": 0.081,
+    "outputUSDPerMTok": 0.4725
+  },
+  "kyma/qwen-3-32b": {
+    "inputUSDPerMTok": 0.108,
+    "outputUSDPerMTok": 0.378
+  },
+  "kyma/qwen-3-coder": {
+    "inputUSDPerMTok": 0.3546,
+    "outputUSDPerMTok": 1.612
+  },
+  "kyma/qwen-3.6-plus": {
+    "inputUSDPerMTok": 0.4388,
+    "outputUSDPerMTok": 2.633
+  },
+  "kyma/qwen-3.7-max": {
+    "inputUSDPerMTok": 2.071,
+    "outputUSDPerMTok": 6.207
+  },
+  "kyma/qwen-3.7-plus": {
+    "inputUSDPerMTok": 0.4325,
+    "outputUSDPerMTok": 1.731
+  },
+  "kyma/qwen-3.8-max": {
+    "inputUSDPerMTok": 2.228,
+    "outputUSDPerMTok": 6.684
+  },
+  "kyma/qwen3.7-flash": {
+    "inputUSDPerMTok": 0.0435,
+    "outputUSDPerMTok": 0.1886
+  },
+  "kyma/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.3826,
+    "outputUSDPerMTok": 2.732
+  },
+  "kyma/qwen3.8-flash": {
+    "inputUSDPerMTok": 0.2045,
+    "outputUSDPerMTok": 0.641
+  },
+  "kyma/sonar": {
+    "inputUSDPerMTok": 1.35,
+    "outputUSDPerMTok": 1.35
+  },
+  "kyma/sonar-pro": {
+    "inputUSDPerMTok": 4.05,
+    "outputUSDPerMTok": 20.25
+  },
+  "kyma/step-3.7-flash": {
+    "inputUSDPerMTok": 0.2229,
+    "outputUSDPerMTok": 1.282
+  },
+  "kyma/step-5-preview": {
+    "inputUSDPerMTok": 1.35,
+    "outputUSDPerMTok": 3.645
   },
   "lambda_ai/deepseek-llama3.3-70b": {
     "inputUSDPerMTok": 0.2,
@@ -8403,6 +9083,10 @@
     "inputUSDPerMTok": 0.25,
     "outputUSDPerMTok": 0.25
   },
+  "mistral/deepseek-v4-1-flash-1017": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
   "mistral/devstral-latest": {
     "inputUSDPerMTok": 0.4,
     "outputUSDPerMTok": 2
@@ -8492,12 +9176,12 @@
     "outputUSDPerMTok": 1.5
   },
   "mistral/mistral-large-4": {
-    "inputUSDPerMTok": 0.68,
-    "outputUSDPerMTok": 2.09
+    "inputUSDPerMTok": 1.36,
+    "outputUSDPerMTok": 4.18
   },
   "mistral/mistral-large-4-0": {
-    "inputUSDPerMTok": 0.68,
-    "outputUSDPerMTok": 2.09
+    "inputUSDPerMTok": 1.36,
+    "outputUSDPerMTok": 4.18
   },
   "mistral/mistral-large-latest": {
     "inputUSDPerMTok": 0.5,
@@ -8615,6 +9299,10 @@
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
   },
+  "moonshot/kimi-k3.1-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
   "moonshot/moonshot-v1-128k": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 5
@@ -8650,6 +9338,38 @@
   "moonshotai.kimi-k3": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
+  },
+  "morph/morph-dsv41flash": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.8
+  },
+  "morph/morph-dsv41flash-1017": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.8
+  },
+  "morph/morph-dsv41flash-abliterated": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "morph/morph-dsv4flash": {
+    "inputUSDPerMTok": 0.141953,
+    "outputUSDPerMTok": 0.399625
+  },
+  "morph/morph-glm53-744b": {
+    "inputUSDPerMTok": 1.19,
+    "outputUSDPerMTok": 6
+  },
+  "morph/morph-glm53flash": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.7
+  },
+  "morph/morph-kimik3": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 14
+  },
+  "morph/morph-kimik3-fast": {
+    "inputUSDPerMTok": 6,
+    "outputUSDPerMTok": 22.5
   },
   "morph/morph-v3-fast": {
     "inputUSDPerMTok": 0.8,
@@ -10163,6 +10883,18 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 3.2
   },
+  "openrouter/amazon/titan-embed-image-v1": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/amazon/titan-embed-text-v1": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/amazon/titan-embed-text-v2": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/anthracite-org/magnum-v4-72b": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 5
@@ -10287,9 +11019,9 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
-  "openrouter/arcee-ai/trinity-large-thinking": {
-    "inputUSDPerMTok": 0.25,
-    "outputUSDPerMTok": 0.8
+  "openrouter/assemblyai/assemblyai-tts-1": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 0
   },
   "openrouter/assemblyai/universal-3-5-pro": {
     "inputUSDPerMTok": 83.3333,
@@ -10311,12 +11043,16 @@
     "inputUSDPerMTok": 0.01,
     "outputUSDPerMTok": 0
   },
-  "openrouter/baseten/elephant-1:free": {
-    "inputUSDPerMTok": 0,
+  "openrouter/baseten/elephant-1": {
+    "inputUSDPerMTok": 0.035,
     "outputUSDPerMTok": 0
   },
-  "openrouter/baseten/mammoth-1:free": {
-    "inputUSDPerMTok": 0,
+  "openrouter/baseten/joey-1": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baseten/mammoth-1": {
+    "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0
   },
   "openrouter/black-forest-labs/flux-3-image": {
@@ -10428,11 +11164,11 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef": {
-    "inputUSDPerMTok": 0.042,
+    "inputUSDPerMTok": 0.24,
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef-flash": {
-    "inputUSDPerMTok": 0.019,
+    "inputUSDPerMTok": 0.038,
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef-omni": {
@@ -10512,8 +11248,8 @@
     "outputUSDPerMTok": 1
   },
   "openrouter/deepseek/deepseek-v3.2": {
-    "inputUSDPerMTok": 0.28,
-    "outputUSDPerMTok": 0.42
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 0.38
   },
   "openrouter/deepseek/deepseek-v3.2-exp": {
     "inputUSDPerMTok": 0.27,
@@ -10524,24 +11260,24 @@
     "outputUSDPerMTok": 0.182
   },
   "openrouter/deepseek/deepseek-v4-flash-0731": {
-    "inputUSDPerMTok": 0.44,
-    "outputUSDPerMTok": 1.32
+    "inputUSDPerMTok": 0.119,
+    "outputUSDPerMTok": 0.238
   },
   "openrouter/deepseek/deepseek-v4-flash-vision-exp": {
     "inputUSDPerMTok": 0.2156,
     "outputUSDPerMTok": 0.6468
   },
   "openrouter/deepseek/deepseek-v4-pro": {
-    "inputUSDPerMTok": 0.95526,
-    "outputUSDPerMTok": 1.91052
+    "inputUSDPerMTok": 1.6,
+    "outputUSDPerMTok": 3.2
   },
   "openrouter/deepseek/deepseek-v4-pro-0813": {
-    "inputUSDPerMTok": 1.32,
-    "outputUSDPerMTok": 3.96
+    "inputUSDPerMTok": 0.115,
+    "outputUSDPerMTok": 4
   },
   "openrouter/deepseek/deepseek-v4.1-flash": {
-    "inputUSDPerMTok": 0.02,
-    "outputUSDPerMTok": 1
+    "inputUSDPerMTok": 0.045,
+    "outputUSDPerMTok": 0.5
   },
   "openrouter/deepseek/deepseek-v4.1-flash-1017": {
     "inputUSDPerMTok": 0.3,
@@ -10808,20 +11544,20 @@
     "outputUSDPerMTok": 0.35
   },
   "openrouter/google/gemma-3-4b-it": {
-    "inputUSDPerMTok": 0.04,
-    "outputUSDPerMTok": 0.05
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
   },
   "openrouter/google/gemma-4-26b-a4b-it": {
-    "inputUSDPerMTok": 0.09,
-    "outputUSDPerMTok": 0.3
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.091
   },
   "openrouter/google/gemma-4-26b-a4b-it:free": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
   "openrouter/google/gemma-4-31b-it": {
-    "inputUSDPerMTok": 0.1,
-    "outputUSDPerMTok": 0.34
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.4
   },
   "openrouter/google/gemma-4-31b-it:free": {
     "inputUSDPerMTok": 0,
@@ -10871,13 +11607,13 @@
     "inputUSDPerMTok": 4,
     "outputUSDPerMTok": 0
   },
-  "openrouter/ibm-granite/granite-4.0-h-micro": {
-    "inputUSDPerMTok": 0.017,
-    "outputUSDPerMTok": 0.112
+  "openrouter/heygen/heygen-voice-1-turbo:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "openrouter/ibm-granite/granite-4.2-8b": {
     "inputUSDPerMTok": 0.06,
-    "outputUSDPerMTok": 0.25
+    "outputUSDPerMTok": 0.15
   },
   "openrouter/inception/mercury-2": {
     "inputUSDPerMTok": 0.25,
@@ -10893,10 +11629,6 @@
   },
   "openrouter/inception/mercury-decide": {
     "inputUSDPerMTok": 0.02,
-    "outputUSDPerMTok": 0
-  },
-  "openrouter/inception/mercury-decide:free": {
-    "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
   "openrouter/inclusionai/ling-3.0-flash": {
@@ -10971,6 +11703,10 @@
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
+  "openrouter/liquid/d1.1": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/liquid/lfm-2.5-2.6b": {
     "inputUSDPerMTok": 0.35,
     "outputUSDPerMTok": 0.5
@@ -11008,8 +11744,8 @@
     "outputUSDPerMTok": 0.201
   },
   "openrouter/meta-llama/llama-3.2-3b-instruct": {
-    "inputUSDPerMTok": 0.05,
-    "outputUSDPerMTok": 0.33
+    "inputUSDPerMTok": 0.0509,
+    "outputUSDPerMTok": 0.335
   },
   "openrouter/meta-llama/llama-3.3-70b-instruct": {
     "inputUSDPerMTok": 0.1,
@@ -11148,8 +11884,8 @@
     "outputUSDPerMTok": 1.2
   },
   "openrouter/minimax/minimax-m2.5": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.95
   },
   "openrouter/minimax/minimax-m2.7": {
     "inputUSDPerMTok": 0.3,
@@ -11175,10 +11911,6 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 0.9
   },
-  "openrouter/mistralai/codestral-2508:batch": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.45
-  },
   "openrouter/mistralai/codestral-embed-2505": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0
@@ -11199,10 +11931,6 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.15
   },
-  "openrouter/mistralai/ministral-8b-2512:batch": {
-    "inputUSDPerMTok": 0.075,
-    "outputUSDPerMTok": 0.075
-  },
   "openrouter/mistralai/mistral-embed-2312": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0
@@ -11219,13 +11947,9 @@
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 1.5
   },
-  "openrouter/mistralai/mistral-large-2512:batch": {
-    "inputUSDPerMTok": 0.25,
-    "outputUSDPerMTok": 0.75
-  },
   "openrouter/mistralai/mistral-large-4-0": {
-    "inputUSDPerMTok": 1.36,
-    "outputUSDPerMTok": 4.18
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.1
   },
   "openrouter/mistralai/mistral-medium-3": {
     "inputUSDPerMTok": 0.4,
@@ -11243,10 +11967,6 @@
     "inputUSDPerMTok": 0.4,
     "outputUSDPerMTok": 2
   },
-  "openrouter/mistralai/mistral-medium-3.1:batch": {
-    "inputUSDPerMTok": 0.2,
-    "outputUSDPerMTok": 1
-  },
   "openrouter/mistralai/mistral-nemo": {
     "inputUSDPerMTok": 0.029,
     "outputUSDPerMTok": 0.03
@@ -11262,10 +11982,6 @@
   "openrouter/mistralai/mistral-small-2603": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.6
-  },
-  "openrouter/mistralai/mistral-small-2603:batch": {
-    "inputUSDPerMTok": 0.075,
-    "outputUSDPerMTok": 0.3
   },
   "openrouter/mistralai/mistral-small-3.1-24b-instruct": {
     "inputUSDPerMTok": 0.351,
@@ -11340,12 +12056,12 @@
     "outputUSDPerMTok": 3.41
   },
   "openrouter/moonshotai/kimi-k2.7-code": {
-    "inputUSDPerMTok": 0.6712,
-    "outputUSDPerMTok": 3.35
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 3.5
   },
   "openrouter/moonshotai/kimi-k3": {
-    "inputUSDPerMTok": 0.18,
-    "outputUSDPerMTok": 20
+    "inputUSDPerMTok": 0.192,
+    "outputUSDPerMTok": 15
   },
   "openrouter/moonshotai/kimi-k3.1-pro": {
     "inputUSDPerMTok": 2,
@@ -11419,10 +12135,6 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 2.4
   },
-  "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
   "openrouter/nvidia/nemotron-3-ultra-550b-a55b": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 2.4
@@ -11471,6 +12183,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/nvidia/nemotron-3.5-transcribe": {
+    "inputUSDPerMTok": 33.3,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/nvidia/parakeet-tdt-0.6b-v3": {
     "inputUSDPerMTok": 25,
     "outputUSDPerMTok": 0
@@ -11486,10 +12202,6 @@
   "openrouter/openai/gpt-4": {
     "inputUSDPerMTok": 30,
     "outputUSDPerMTok": 60
-  },
-  "openrouter/openai/gpt-4-turbo": {
-    "inputUSDPerMTok": 10,
-    "outputUSDPerMTok": 30
   },
   "openrouter/openai/gpt-4-turbo:batch": {
     "inputUSDPerMTok": 5,
@@ -11815,6 +12527,22 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
+  "openrouter/openai/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6.1-terra-pro": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6.1-terra-pro:batch": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "openrouter/openai/gpt-6.1-terra:batch": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
   "openrouter/openai/gpt-audio": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -11848,16 +12576,16 @@
     "outputUSDPerMTok": 8
   },
   "openrouter/openai/gpt-oss-120b": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.6
+    "inputUSDPerMTok": 0.024,
+    "outputUSDPerMTok": 0.089
   },
   "openrouter/openai/gpt-oss-120b:batch": {
     "inputUSDPerMTok": 0.0296,
     "outputUSDPerMTok": 0.136
   },
   "openrouter/openai/gpt-oss-20b": {
-    "inputUSDPerMTok": 0.018,
-    "outputUSDPerMTok": 0.09
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.13
   },
   "openrouter/openai/gpt-oss-20b:batch": {
     "inputUSDPerMTok": 0.024,
@@ -11871,25 +12599,9 @@
     "inputUSDPerMTok": 75,
     "outputUSDPerMTok": 0
   },
-  "openrouter/openai/o1": {
-    "inputUSDPerMTok": 15,
-    "outputUSDPerMTok": 60
-  },
-  "openrouter/openai/o1-pro": {
-    "inputUSDPerMTok": 150,
-    "outputUSDPerMTok": 600
-  },
   "openrouter/openai/o3": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 8
-  },
-  "openrouter/openai/o3-mini": {
-    "inputUSDPerMTok": 1.1,
-    "outputUSDPerMTok": 4.4
-  },
-  "openrouter/openai/o3-mini-high": {
-    "inputUSDPerMTok": 1.1,
-    "outputUSDPerMTok": 4.4
   },
   "openrouter/openai/o3-mini:batch": {
     "inputUSDPerMTok": 0.55,
@@ -11902,14 +12614,6 @@
   "openrouter/openai/o3:batch": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 4
-  },
-  "openrouter/openai/o4-mini": {
-    "inputUSDPerMTok": 1.1,
-    "outputUSDPerMTok": 4.4
-  },
-  "openrouter/openai/o4-mini-high": {
-    "inputUSDPerMTok": 1.1,
-    "outputUSDPerMTok": 4.4
   },
   "openrouter/openai/o4-mini:batch": {
     "inputUSDPerMTok": 0.55,
@@ -11955,6 +12659,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/particle-ai/particle-1": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.5
+  },
   "openrouter/perceptron/perceptron-mk1": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 1.5
@@ -11999,25 +12707,13 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 8
   },
-  "openrouter/poolside/laguna-s-2.1": {
-    "inputUSDPerMTok": 0.09,
-    "outputUSDPerMTok": 0.18
-  },
-  "openrouter/poolside/laguna-s-2.1:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
-  "openrouter/poolside/laguna-xs-2.1": {
-    "inputUSDPerMTok": 0.06,
-    "outputUSDPerMTok": 0.12
-  },
-  "openrouter/poolside/laguna-xs-2.1:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
   "openrouter/prism-ml/ternary-bonsai-2-27b": {
     "inputUSDPerMTok": 0.075,
     "outputUSDPerMTok": 0.5
+  },
+  "openrouter/prism-ml/ternary-bonsai-2-9b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.13
   },
   "openrouter/qwen/qwen-2.5-72b-instruct": {
     "inputUSDPerMTok": 0.36,
@@ -12080,7 +12776,7 @@
     "outputUSDPerMTok": 0.5
   },
   "openrouter/qwen/qwen3-30b-a3b-instruct-2507": {
-    "inputUSDPerMTok": 0.09,
+    "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.3
   },
   "openrouter/qwen/qwen3-32b": {
@@ -12123,10 +12819,6 @@
     "inputUSDPerMTok": 0.09,
     "outputUSDPerMTok": 1.1
   },
-  "openrouter/qwen/qwen3-next-80b-a3b-thinking": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 1.2
-  },
   "openrouter/qwen/qwen3-reranker-8b": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -12152,8 +12844,8 @@
     "outputUSDPerMTok": 2.08
   },
   "openrouter/qwen/qwen3.5-27b": {
-    "inputUSDPerMTok": 0.27,
-    "outputUSDPerMTok": 2.16
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 2.6
   },
   "openrouter/qwen/qwen3.5-35b-a3b": {
     "inputUSDPerMTok": 0.14,
@@ -12180,12 +12872,12 @@
     "outputUSDPerMTok": 1.8
   },
   "openrouter/qwen/qwen3.6-27b": {
-    "inputUSDPerMTok": 0.32,
-    "outputUSDPerMTok": 3.2
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 2.7
   },
   "openrouter/qwen/qwen3.6-35b-a3b": {
     "inputUSDPerMTok": 0.1,
-    "outputUSDPerMTok": 0.95
+    "outputUSDPerMTok": 0.9
   },
   "openrouter/qwen/qwen3.6-flash": {
     "inputUSDPerMTok": 0.1875,
@@ -12216,8 +12908,8 @@
     "outputUSDPerMTok": 6
   },
   "openrouter/qwen/qwen3.8-27b": {
-    "inputUSDPerMTok": 0.2,
-    "outputUSDPerMTok": 2.5
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.875
   },
   "openrouter/qwen/qwen3.8-flash": {
     "inputUSDPerMTok": 0.15,
@@ -12423,6 +13115,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/sourceful/riverflow-v2.6-pro": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/stepfun/step-3.5-flash": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.3
@@ -12434,6 +13130,10 @@
   "openrouter/stepfun/step-5-preview": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 2.7
+  },
+  "openrouter/tbc/mischief-1": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "openrouter/tencent/hunyuan-a13b-instruct": {
     "inputUSDPerMTok": 0.14,
@@ -12538,10 +13238,6 @@
   "openrouter/upstage/solar-mini4": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.2
-  },
-  "openrouter/upstage/solar-pro-3": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.6
   },
   "openrouter/upstage/solar-pro4": {
     "inputUSDPerMTok": 0.15,
@@ -12648,12 +13344,12 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/xiaomi/mimo-v2.5": {
-    "inputUSDPerMTok": 0.119,
-    "outputUSDPerMTok": 0.238
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
   },
   "openrouter/xiaomi/mimo-v2.5-pro": {
-    "inputUSDPerMTok": 0.3045,
-    "outputUSDPerMTok": 0.609
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 1.8
   },
   "openrouter/xiaomi/mimo-v2.6-flash": {
     "inputUSDPerMTok": 0.14,
@@ -12684,16 +13380,16 @@
     "outputUSDPerMTok": 1.8
   },
   "openrouter/z-ai/glm-4.6": {
-    "inputUSDPerMTok": 0.55,
-    "outputUSDPerMTok": 2.2
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2
   },
   "openrouter/z-ai/glm-4.6v": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 0.9
   },
   "openrouter/z-ai/glm-4.7": {
-    "inputUSDPerMTok": 0.54,
-    "outputUSDPerMTok": 1.98
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.2
   },
   "openrouter/z-ai/glm-4.7-flash": {
     "inputUSDPerMTok": 0.0605,
@@ -12712,16 +13408,16 @@
     "outputUSDPerMTok": 4.4
   },
   "openrouter/z-ai/glm-5.2": {
-    "inputUSDPerMTok": 0.0341,
-    "outputUSDPerMTok": 7
+    "inputUSDPerMTok": 0.006,
+    "outputUSDPerMTok": 6.8
   },
   "openrouter/z-ai/glm-5.3": {
-    "inputUSDPerMTok": 0.0699,
-    "outputUSDPerMTok": 1.4
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 3.6
   },
   "openrouter/z-ai/glm-5.3-flash": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.5
+    "inputUSDPerMTok": 0.0285,
+    "outputUSDPerMTok": 0.0923
   },
   "openrouter/z-ai/glm-5.3-flash:batch": {
     "inputUSDPerMTok": 0.05,
@@ -12760,16 +13456,16 @@
     "outputUSDPerMTok": 10
   },
   "openrouter/~deepseek/deepseek-flash-latest": {
-    "inputUSDPerMTok": 0.02,
-    "outputUSDPerMTok": 1
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.5
   },
   "openrouter/~deepseek/deepseek-pro-latest": {
-    "inputUSDPerMTok": 0.2565,
+    "inputUSDPerMTok": 0.1035,
     "outputUSDPerMTok": 8
   },
   "openrouter/~deepseek/deepseek-v4-flash-latest": {
-    "inputUSDPerMTok": 0.0475,
-    "outputUSDPerMTok": 0.1568
+    "inputUSDPerMTok": 0.059,
+    "outputUSDPerMTok": 0.3
   },
   "openrouter/~google/gemini-flash-latest": {
     "inputUSDPerMTok": 0.75,
@@ -12779,9 +13475,17 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "openrouter/~liquid/d1-latest": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/~liquid/d1-ultra-latest": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/~moonshotai/kimi-latest": {
-    "inputUSDPerMTok": 0.171,
-    "outputUSDPerMTok": 9.75
+    "inputUSDPerMTok": 0.1495,
+    "outputUSDPerMTok": 7.15
   },
   "openrouter/~openai/gpt-astra-latest": {
     "inputUSDPerMTok": 10,
@@ -12800,8 +13504,8 @@
     "outputUSDPerMTok": 10
   },
   "openrouter/~openai/gpt-terra-latest": {
-    "inputUSDPerMTok": 2,
-    "outputUSDPerMTok": 12
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
   },
   "openrouter/~perplexity/pplx-decider-flash-latest": {
     "inputUSDPerMTok": 0.01,
@@ -12824,8 +13528,8 @@
     "outputUSDPerMTok": 6
   },
   "openrouter/~z-ai/glm-flash-latest": {
-    "inputUSDPerMTok": 0.0413,
-    "outputUSDPerMTok": 0.0758
+    "inputUSDPerMTok": 0.0285,
+    "outputUSDPerMTok": 0.0923
   },
   "openrouter/~z-ai/glm-latest": {
     "inputUSDPerMTok": 0.0699,
@@ -13539,6 +14243,26 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 2.4
   },
+  "refuseless/deepseek-v4.1-flash-abliterated": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.5
+  },
+  "refuseless/deepseek-v4.1-flash-fast": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.15
+  },
+  "refuseless/glm-5.3-abliterated": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 2
+  },
+  "refuseless/glm-5.3-flash-abliterated": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.5
+  },
+  "refuseless/minimax-m3.1-flash": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
   "replicate/anthropic/claude-3.5-haiku": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -13717,6 +14441,14 @@
   },
   "rerank-v4.0-pro": {
     "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "rerank-v5.0-fast": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "rerank-v5.0-pro": {
+    "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0
   },
   "sagemaker/meta-textgeneration-llama-2-13b": {
@@ -14010,6 +14742,110 @@
   "strands_decider/strands-decider-2B-hobson-v19": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
+  },
+  "streamlake/DeepSeek-V3": {
+    "inputUSDPerMTok": 0.286,
+    "outputUSDPerMTok": 1.143
+  },
+  "streamlake/DeepSeek-V4-Pro-0813": {
+    "inputUSDPerMTok": 1.32,
+    "outputUSDPerMTok": 3.96
+  },
+  "streamlake/GLM-5.3": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
+  },
+  "streamlake/GLM-5.3-Flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.5
+  },
+  "streamlake/Kimi-K2-Instruct-0905": {
+    "inputUSDPerMTok": 0.571,
+    "outputUSDPerMTok": 2.286
+  },
+  "streamlake/deepseek-r1": {
+    "inputUSDPerMTok": 0.571,
+    "outputUSDPerMTok": 2.286
+  },
+  "streamlake/deepseek-v3.1": {
+    "inputUSDPerMTok": 0.571,
+    "outputUSDPerMTok": 1.714
+  },
+  "streamlake/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
+  "streamlake/deepseek-v4-flash-0731": {
+    "inputUSDPerMTok": 0.44,
+    "outputUSDPerMTok": 1.32
+  },
+  "streamlake/deepseek-v4-pro": {
+    "inputUSDPerMTok": 1.74,
+    "outputUSDPerMTok": 3.48
+  },
+  "streamlake/deepseek-v4.1-flash-1017": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "streamlake/deepseek-v4.1-flash-260910": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "streamlake/glm-5": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3.2
+  },
+  "streamlake/glm-5.1": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
+  },
+  "streamlake/glm-5.2": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
+  },
+  "streamlake/kimi-k2.6": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
+  },
+  "streamlake/kimi-k2.7-code": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
+  },
+  "streamlake/mimo-v2.6-flash": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
+  "streamlake/mimo-v2.6-pro": {
+    "inputUSDPerMTok": 0.435,
+    "outputUSDPerMTok": 0.87
+  },
+  "streamlake/minimax-m2.5": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "streamlake/minimax-m3": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.4
+  },
+  "streamlake/qwen3.5-397b-a17b": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 3.6
+  },
+  "streamlake/qwen3.6-27b": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 3.6
+  },
+  "streamlake/qwen3.6-35b-a3b": {
+    "inputUSDPerMTok": 0.375,
+    "outputUSDPerMTok": 2.25
+  },
+  "streamlake/qwen3.8-2.4t-a95b": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "streamlake/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
   },
   "tencent/deepseek-v4-flash": {
     "inputUSDPerMTok": 0.14,
@@ -14822,6 +15658,10 @@
   "us.openai.gpt-6.1-sol": {
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 11
+  },
+  "us.openai.gpt-6.1-terra": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 5.5
   },
   "us.writer.palmyra-x4-v1:0": {
     "inputUSDPerMTok": 2.5,
@@ -16092,8 +16932,8 @@
     "outputUSDPerMTok": 0.2
   },
   "wandb/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.75
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
   },
   "wandb/openai/gpt-oss-120b": {
     "inputUSDPerMTok": 0.03,
@@ -16506,5 +17346,61 @@
   "zai/glm-5.3-flash": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.5
+  },
+  "zai/glm-5v-turbo": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 4
+  },
+  "zerogpu/LFM2.5-1.2B-Instruct": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0.05
+  },
+  "zerogpu/LFM2.5-1.2B-Thinking": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0.05
+  },
+  "zerogpu/deepseek-v4.1-flash": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "zerogpu/glm-5.3-flash": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.35
+  },
+  "zerogpu/gpt-4.1-mini": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 1.6
+  },
+  "zerogpu/gpt-5.4-nano": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.25
+  },
+  "zerogpu/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "zerogpu/gpt-6-luna": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "zerogpu/gpt-oss-120b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
+  "zerogpu/llama-3.1-8b-instruct-fast": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.28
+  },
+  "zerogpu/llama-3.2-3b-instruct-fast": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.3
+  },
+  "zerogpu/qwen3-30b-a3b-fp8": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.45
+  },
+  "zerogpu/qwen3.6-35b-a3b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.5
   }
 }
