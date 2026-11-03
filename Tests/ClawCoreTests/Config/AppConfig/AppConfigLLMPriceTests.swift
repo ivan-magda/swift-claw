@@ -90,6 +90,22 @@ struct AppConfigLLMPriceTests {
   }
 
   @Test
+  func onlyARouteThatCallsOpenRouterReadsItsCatalogPrice() throws {
+    // given — the primary calls another endpoint and the fallback calls OpenRouter
+    let env = meteredEnv([
+      EnvKey.llmBaseURL: "https://litellm.example/v1",
+      EnvKey.llmFallbackModel: "vendor/fallback-model",
+      EnvKey.llmFallbackBaseURL: "https://openrouter.ai/api/v1",
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — keyed by model reference, the key the cost resolver looks prices up by
+    #expect(config.llm.openRouterReferences == ["vendor/fallback-model"])
+  }
+
+  @Test
   func twoRoutesNamingOneModelMustAgreeOnItsPrice() {
     // given — the fallback names the primary's model at a different price
     let env = meteredEnv([

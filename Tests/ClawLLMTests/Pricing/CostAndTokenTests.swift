@@ -9,12 +9,14 @@ struct CostAndTokenTests {
 
   private func resolver(
     _ prices: [String: ModelPrice] = [:],
-    configured: [String: ModelPrice] = [:]
+    configured: [String: ModelPrice] = [:],
+    openRouterReferences: Set<String> = []
   ) -> CostResolver {
     CostResolver(
       priceTable: PriceTable(prices: prices),
       referenceUSDPerToken: Self.referenceUSDPerToken,
-      configuredPrices: configured
+      configuredPrices: configured,
+      openRouterReferences: openRouterReferences
     )
   }
 
@@ -39,6 +41,7 @@ struct CostAndTokenTests {
     let model: String
     let prices: [String: ModelPrice]
     var configured: [String: ModelPrice] = [:]
+    var openRouterReferences: Set<String> = []
     let usage: ChatUsage
     let expectedCostUSD: Double
     let tolerance: Double
@@ -49,6 +52,12 @@ struct CostAndTokenTests {
       name
     }
   }
+
+  /// One model priced both by another provider under its plain name and by OpenRouter's catalog.
+  private static let sameNamePrices = [
+    "deepseek/deepseek-chat": ModelPrice(inputUSDPerMTok: 0.3, outputUSDPerMTok: 0.4),
+    "openrouter/deepseek/deepseek-chat": ModelPrice(inputUSDPerMTok: 1, outputUSDPerMTok: 2),
+  ]
 
   static let resolveCases: [ResolveCase] = [
     ResolveCase(
@@ -81,6 +90,35 @@ struct CostAndTokenTests {
       expectedIsEstimated: false
     ),
     ResolveCase(
+      name: "an OpenRouter route reads OpenRouter's entry over a same-name entry",
+      model: "deepseek/deepseek-chat",
+      prices: sameNamePrices,
+      openRouterReferences: ["deepseek/deepseek-chat"],
+      usage: ChatUsage(
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+        totalTokens: 2_000_000
+      ),
+      expectedCostUSD: 3,
+      tolerance: 1e-9,
+      expectedSource: .priceFile,
+      expectedIsEstimated: false
+    ),
+    ResolveCase(
+      name: "another route reads the same-name entry over OpenRouter's",
+      model: "deepseek/deepseek-chat",
+      prices: sameNamePrices,
+      usage: ChatUsage(
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+        totalTokens: 2_000_000
+      ),
+      expectedCostUSD: 0.7,
+      tolerance: 1e-9,
+      expectedSource: .priceFile,
+      expectedIsEstimated: false
+    ),
+    ResolveCase(
       name: "heuristic — unknown model",
       model: "mystery-model",
       prices: [:],
@@ -105,7 +143,11 @@ struct CostAndTokenTests {
   @Test(arguments: resolveCases)
   func resolveWithNoProviderCost(_ testCase: ResolveCase) {
     // given
-    let resolver = resolver(testCase.prices, configured: testCase.configured)
+    let resolver = resolver(
+      testCase.prices,
+      configured: testCase.configured,
+      openRouterReferences: testCase.openRouterReferences
+    )
 
     // when
     let resolved = resolver.resolve(model: testCase.model, usage: testCase.usage, providerCost: nil)

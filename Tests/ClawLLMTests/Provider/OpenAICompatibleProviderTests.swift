@@ -182,19 +182,6 @@ struct OpenAICompatibleProviderTests {
     #expect(body["session_id"] == nil)
   }
 
-  @Test(arguments: [
-    ("https://openrouter.ai/api/v1", true),
-    ("https://OpenRouter.ai/api/v1", true),
-    ("https://api.openai.com/v1", false),
-    ("http://localhost:11434/v1", false),
-    ("", false),
-    ("not a url", false),
-  ])
-  func baseURLIsOpenRouterDetectsHost(baseURL: String, expected: Bool) {
-    // given / when / then — detection is an exact, case-insensitive host match
-    #expect(OpenAICompatibleProvider.baseURLIsOpenRouter(baseURL) == expected)
-  }
-
   @Test
   func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
     // given — Ollama-style: null content and no usage object

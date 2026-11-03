@@ -355,6 +355,22 @@ public struct LLMConfig: Sendable, Equatable {
 
     return prices
   }
+
+  /// The model references of routes that call OpenRouter, so `CostResolver` reads OpenRouter's
+  /// catalog price for them. A reference two routes share counts if either route is on OpenRouter.
+  public var openRouterReferences: Set<String> {
+    var references: Set<String> = []
+
+    if let fallbackRoute, fallbackRoute.descriptor.egress.isOpenRouter {
+      references.insert(fallbackRoute.configuredReference)
+    }
+
+    if route.descriptor.egress.isOpenRouter {
+      references.insert(route.configuredReference)
+    }
+
+    return references
+  }
 }
 
 // MARK: - Pricing
@@ -379,8 +395,16 @@ public struct PriceTable: Sendable, Equatable {
     self.prices = prices
   }
 
-  public func price(for model: String) -> ModelPrice? {
-    prices[model] ?? prices["openrouter/\(model)"]
+  /// The entry for `model`. A route on OpenRouter reads OpenRouter's entry first: a plain entry of
+  /// the same name, such as LiteLLM's `deepseek/deepseek-chat`, is another provider's price. Any
+  /// other route, a LiteLLM proxy included, reads the plain entry first.
+  public func price(for model: String, onOpenRouter: Bool = false) -> ModelPrice? {
+    let openRouterPrice = prices["openrouter/\(model)"]
+    if onOpenRouter, let openRouterPrice {
+      return openRouterPrice
+    }
+
+    return prices[model] ?? openRouterPrice
   }
 
   public static let empty = PriceTable(prices: [:])
@@ -500,15 +524,18 @@ public struct CostResolver: Sendable {
   public let priceTable: PriceTable
   public let referenceUSDPerToken: Double
   public let configuredPrices: [String: ModelPrice]
+  public let openRouterReferences: Set<String>
 
   public init(
     priceTable: PriceTable,
     referenceUSDPerToken: Double,
-    configuredPrices: [String: ModelPrice] = [:]
+    configuredPrices: [String: ModelPrice] = [:],
+    openRouterReferences: Set<String> = []
   ) {
     self.priceTable = priceTable
     self.referenceUSDPerToken = referenceUSDPerToken
     self.configuredPrices = configuredPrices
+    self.openRouterReferences = openRouterReferences
   }
 
   /// The price a metered call on `model` is charged at before any provider cost exists, or `nil`
@@ -518,7 +545,8 @@ public struct CostResolver: Sendable {
       return KnownPrice(price: price, source: .configuredPrice)
     }
 
-    if let price = priceTable.price(for: model) {
+    let onOpenRouter = openRouterReferences.contains(model)
+    if let price = priceTable.price(for: model, onOpenRouter: onOpenRouter) {
       return KnownPrice(price: price, source: .priceFile)
     }
 

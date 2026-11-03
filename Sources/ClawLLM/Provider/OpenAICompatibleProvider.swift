@@ -158,10 +158,6 @@ struct OpenAICompatibleProvider: LLMProvider {
     headRejection(status: result.statusCode, body: result.body, message: message)
   }
 
-  static func baseURLIsOpenRouter(_ baseURL: String) -> Bool {
-    URLComponents(string: baseURL)?.host?.lowercased() == "openrouter.ai"
-  }
-
   func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
     let wireMessages = request.messages.map { message -> WireMessage in
       let wireCalls = message.toolCalls.map { call in
@@ -198,7 +194,7 @@ struct OpenAICompatibleProvider: LLMProvider {
       )
     }
 
-    let sessionID = Self.baseURLIsOpenRouter(endpoint) ? request.sessionID : nil
+    let sessionID = LLMEgressIdentity.isOpenRouter(endpoint: endpoint) ? request.sessionID : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
