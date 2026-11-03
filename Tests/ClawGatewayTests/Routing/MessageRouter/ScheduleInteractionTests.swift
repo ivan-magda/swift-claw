@@ -3,7 +3,6 @@ import ClawCore
 import ClawData
 import ClawTestSupport
 import Foundation
-import GRDB
 import Testing
 
 @testable import ClawGateway
@@ -34,7 +33,6 @@ struct ScheduleInteractionTests {
 
     let jobs: ScheduledJobStoreGRDB
     let sessions: SessionMessageStoreGRDB
-    let queue: DatabaseQueue
   }
 
   private func makeHarness(
@@ -81,8 +79,7 @@ struct ScheduleInteractionTests {
       dispatcher: dispatcher,
       pending: pending,
       jobs: ScheduledJobStoreGRDB(writer: queue),
-      sessions: SessionMessageStoreGRDB(writer: queue),
-      queue: queue
+      sessions: SessionMessageStoreGRDB(writer: queue)
     )
   }
 

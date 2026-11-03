@@ -246,9 +246,7 @@ struct Stack {
   let transport: RecordingTransport
   let provider: RecordingProvider
   let signal: OutboxSignal
-  let writer: any DatabaseWriter
   let sessionMessages: SessionMessageStoreGRDB
-  let runs: RunStoreGRDB
   let usage: UsageStoreGRDB
   let outbox: OutboxStoreGRDB
   let cursor: UpdateCursorStoreGRDB
@@ -261,7 +259,6 @@ struct StopNewStack {
   let transport: RecordingTransport
   let provider: StopNewProvider
   let signal: OutboxSignal
-  let writer: any DatabaseWriter
   let outbox: OutboxStoreGRDB
   let chatID: Int64
 }
@@ -397,9 +394,7 @@ func makeStack(
     transport: transport,
     provider: provider,
     signal: signal,
-    writer: writer,
     sessionMessages: sessionMessages,
-    runs: runs,
     usage: usage,
     outbox: outbox,
     cursor: cursor,
@@ -585,7 +580,6 @@ func makeStopNewStack(writer: any DatabaseWriter, allow chatID: Int64 = 42) thro
     transport: transport,
     provider: provider,
     signal: signal,
-    writer: writer,
     outbox: outbox,
     chatID: chatID
   )

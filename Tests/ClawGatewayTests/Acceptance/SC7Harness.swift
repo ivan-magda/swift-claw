@@ -46,7 +46,6 @@ struct SC7Harness {
 
   let http: RecordingHTTPExecutor
   let provider: TurnScriptedProvider
-  let parser: FakeDraftParser
 
   let clock: ManualClock
 
@@ -54,7 +53,6 @@ struct SC7Harness {
   /// One reader over the SAME DB file the stores write, opened once: the acceptance probes poll
   /// these queries, and a pool opened per probe made the polling itself the harness hotspot.
   let readPool: DatabasePool
-  let workspaceRoot: URL
 
   /// Awaits lane-dispatched turns: polls the outbox until `count` payloads exist (bounded).
   func waitForOutbox(atLeast count: Int) async throws -> [String] {
@@ -327,10 +325,8 @@ func makeSC7Harness(
     stores: stores,
     http: http,
     provider: provider,
-    parser: parser,
     clock: clock,
     databasePath: resolvedDatabasePath,
-    readPool: try ClawDatabase.makePool(path: resolvedDatabasePath),
-    workspaceRoot: workspaceRoot
+    readPool: try ClawDatabase.makePool(path: resolvedDatabasePath)
   )
 }

@@ -212,7 +212,6 @@ struct OutboxDispatcherTests {
     let writer: any DatabaseWriter
     let outbox: OutboxStoreGRDB
     let firstChatID: Int64
-    let secondChatID: Int64
   }
 
   private func makeTwoChatFixture(
@@ -238,8 +237,7 @@ struct OutboxDispatcherTests {
     return TwoChatFixture(
       writer: seeded.writer,
       outbox: seeded.outbox,
-      firstChatID: firstChatID,
-      secondChatID: secondChatID
+      firstChatID: firstChatID
     )
   }
 

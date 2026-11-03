@@ -14,7 +14,6 @@ struct TurnDispatchModeTests {
   private struct Harness {
     let dispatch: TurnDispatch
     let sessionMessages: SessionMessageStoreGRDB
-    let runner: FakeTurnRunner
 
     func storedContent(chatID: Int64, threadID: Int64) throws -> [String] {
       try storedContent(sessionKey: SessionKey.telegramTopic(chatID: chatID, threadID: threadID))
@@ -58,7 +57,7 @@ struct TurnDispatchModeTests {
       journalCapture: nil
     )
 
-    return Harness(dispatch: dispatch, sessionMessages: sessionMessages, runner: runner)
+    return Harness(dispatch: dispatch, sessionMessages: sessionMessages)
   }
 
   private func update(

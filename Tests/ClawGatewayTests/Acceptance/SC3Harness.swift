@@ -33,7 +33,6 @@ func resolvedAddress(_ literal: String) -> ResolvedAddress {
 struct SC3Harness {
   let router: MessageRouter
   let coordinator: ApprovalCoordinator
-  let registry: PendingConfirmationRegistry
   let transport: RecordingTransport
   let outboxSignal: OutboxSignal
 
@@ -476,7 +475,6 @@ func makeSC3Harness(
   return SC3Harness(
     router: router,
     coordinator: coordinator,
-    registry: registry,
     transport: transport,
     outboxSignal: outboxSignal,
     stores: stores,

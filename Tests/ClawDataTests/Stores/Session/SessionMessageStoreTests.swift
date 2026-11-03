@@ -500,18 +500,18 @@ extension SessionMessageStoreTests {
     let queue: DatabaseQueue
     let store: SessionMessageStoreGRDB
     let sessionID: Int64
-    let triggerMessageID: Int64
   }
 
   private func stateFixture() throws -> StateFixture {
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let claim = try store.claimAndPersistInbound(inbound(updateID: 1, text: "summarise it"))
+    let sessionID = try #require(claim.sessionID)
+    _ = try #require(claim.messageID)
     return StateFixture(
       queue: queue,
       store: store,
-      sessionID: try #require(claim.sessionID),
-      triggerMessageID: try #require(claim.messageID)
+      sessionID: sessionID
     )
   }
 
