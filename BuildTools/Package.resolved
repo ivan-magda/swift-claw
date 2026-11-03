@@ -1,5 +1,5 @@
 {
-  "originHash" : "62010c5fc82430c275eae68871b50b2c26c89beea6ca9e26b05bcfb8884bcccd",
+  "originHash" : "69b9539cf7f02bd14b95ad5547e01915572e7cf2718f02789a10f9871d1679f8",
   "pins" : [
     {
       "identity" : "aexml",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ivan-magda/swift-dead-code.git",
       "state" : {
-        "revision" : "d2d253f868c83de6f24b44c1fc32af5e348b9f63",
-        "version" : "0.1.2"
+        "revision" : "7e088e2ec6a6b6b6022f208f04d8daf7d3a39a77",
+        "version" : "0.1.3"
       }
     },
     {
