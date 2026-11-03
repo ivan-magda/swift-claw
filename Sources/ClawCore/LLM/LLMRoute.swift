@@ -110,6 +110,25 @@ extension LLMProviderDescriptor {
   }
 }
 
+// MARK: - OpenRouter
+
+extension LLMEgressIdentity {
+  /// Whether `endpoint` is OpenRouter's API: an exact, case-insensitive host match.
+  public static func isOpenRouter(endpoint: String) -> Bool {
+    URLComponents(string: endpoint)?.host?.lowercased() == "openrouter.ai"
+  }
+
+  /// Whether calls on this egress go to OpenRouter. A managed endpoint never does.
+  public var isOpenRouter: Bool {
+    switch self {
+    case .configuredEndpoint(let endpoint):
+      Self.isOpenRouter(endpoint: endpoint)
+    case .managed:
+      false
+    }
+  }
+}
+
 // MARK: - Registered descriptors
 
 extension LLMProviderDescriptor {

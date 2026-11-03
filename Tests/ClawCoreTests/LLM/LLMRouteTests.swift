@@ -314,4 +314,17 @@ struct LLMRouteTests {
     }
     #expect(probe.accessCount == 1)
   }
+
+  @Test(arguments: [
+    ("https://openrouter.ai/api/v1", true),
+    ("https://OpenRouter.ai/api/v1", true),
+    ("https://api.openai.com/v1", false),
+    ("http://localhost:11434/v1", false),
+    ("", false),
+    ("not a url", false),
+  ])
+  func openRouterDetectionMatchesTheHost(endpoint: String, expected: Bool) {
+    // given / when / then — detection is an exact, case-insensitive host match
+    #expect(LLMEgressIdentity.isOpenRouter(endpoint: endpoint) == expected)
+  }
 }
