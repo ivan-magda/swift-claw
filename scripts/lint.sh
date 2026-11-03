@@ -38,15 +38,14 @@ if [[ "$mode" == stdin && $# -ne 1 ]]; then
   fail '--format-stdin requires exactly one repository Swift file path'
 fi
 
-# Check every prerequisite before applying corrections or building SwiftFormat.
+# Check every prerequisite before applying corrections or building the pinned tools.
 for executable in swift swiftlint git; do
   command -v "$executable" >/dev/null 2>&1 || fail "$executable not found; see docs/LOCAL_DEV.md"
 done
-# A whole-repository check also runs scripts/check-dead-code.py.
+# A whole-repository check also builds and runs the pinned swift-dead-code gate.
 dead_code_check=0
 if [[ "$mode" == check && $# -eq 0 ]]; then
   dead_code_check=1
-  command -v python3 >/dev/null 2>&1 || fail 'python3 not found; see docs/LOCAL_DEV.md'
 fi
 scripts/check-toolchain.sh
 case "$(uname -s)" in
@@ -97,6 +96,17 @@ formatter_directory=$(swift build --package-path BuildTools -c release --show-bi
 formatter="$formatter_directory/swiftformat"
 [[ "$("$formatter" --version)" == "$CLAW_LINT_SWIFTFORMAT_VERSION" ]] ||
   fail "SwiftFormat $CLAW_LINT_SWIFTFORMAT_VERSION required"
+
+if [[ "$dead_code_check" -eq 1 ]]; then
+  build_dead_code() {
+    swift build --package-path BuildTools -c release --product swift-dead-code 2>&1 | cat
+  }
+  stage 'Prepare pinned swift-dead-code' build_dead_code
+  dead_code="$formatter_directory/swift-dead-code"
+  [[ -x "$dead_code" ]] || fail 'swift-dead-code build did not produce an executable'
+  [[ "$("$dead_code" --version)" == "$CLAW_SWIFT_DEAD_CODE_VERSION" ]] ||
+    fail "swift-dead-code $CLAW_SWIFT_DEAD_CODE_VERSION required"
+fi
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/swift-claw-lint.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
@@ -164,7 +174,7 @@ lint_arguments=(lint --quiet)
 result=0
 stage 'SwiftLint correctness and idiom' swiftlint "${lint_arguments[@]}" "${files[@]}" || result=1
 if [[ "$dead_code_check" -eq 1 ]]; then
-  stage 'Dead-code references' python3 -I scripts/check-dead-code.py || result=1
+  stage 'Dead-code references' "$dead_code" check || result=1
 fi
 if [[ "$mode" == check && "$changed" -gt 0 ]]; then
   result=1

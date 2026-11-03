@@ -139,10 +139,13 @@ Adjust `DEVELOPER_DIR` if you installed Xcode elsewhere. The lint gate uses
 Install SwiftLint at `CLAW_LINT_SWIFTLINT_VERSION` from its
 [official releases](https://github.com/realm/SwiftLint/releases). Homebrew is usable when
 `swiftlint version` matches that pin. The lint gate builds SwiftFormat at
-`CLAW_LINT_SWIFTFORMAT_VERSION` from the locked BuildTools dependency, so the first run needs
-network access. It checks prerequisites before changing source; you do not need a global
-`swiftformat` install. A whole-repository check also needs Python 3 for its dead-code stage;
-macOS includes it with the Xcode tools.
+`CLAW_LINT_SWIFTFORMAT_VERSION` from the locked BuildTools dependency. A whole-repository check
+also builds `swift-dead-code` at `CLAW_SWIFT_DEAD_CODE_VERSION` through
+[`BuildTools/Package.swift`](../BuildTools/Package.swift), then runs `swift-dead-code check`.
+The first run needs network access. The gate checks prerequisites before changing source;
+you do not need a global install of either tool. [`.deadcode.yml`](../.deadcode.yml) holds the
+dead-code allowlist and analysis settings; see [LOCAL_DEV.md](LOCAL_DEV.md#weekly-dead-code-analysis)
+for manual tool setup and indexed analysis.
 
 On Linux, install the same SwiftLint release as CI:
 
@@ -212,11 +215,6 @@ run `scripts/lint.sh --fix <saved-file>` after saving and reload the file. Avoid
 formatter-on-save integrations: invoking Apple swift-format alone can undo the final Google
 layout. Xcode users can run the saved-file command from a terminal or external-tool integration;
 `.editorconfig` by itself does not install an Xcode formatter.
-
-Python scripts follow `.ruff.toml`, as
-[architecture §19.2](ARCHITECTURE.md#192-source-formatting-and-lint) describes. An editor's ruff
-integration applies it; from a terminal, run `ruff format` and then `ruff check` on the changed
-scripts, using the ruff version in `BuildTools/lint-versions.env`.
 
 ## Review the seven sections
 

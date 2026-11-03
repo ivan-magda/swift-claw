@@ -8,7 +8,7 @@ These files are separate from the running daemon's workspace and user memory.
 | When | Read |
 | --- | --- |
 | Communication, Git, reviews, documentation, or delegated work | [Collaboration](collaboration.md) |
-| Investigations, tests, performance, or verification claims | [Verification](verification.md) |
+| Investigations, tests, dead-code validation, performance, or verification claims | [Verification](verification.md) |
 | Speech, extracted packages, sandbox history, or Telegram streaming | [Technical history](technical-history.md) |
 | Auditing the October 2026 migration from Claude memory | [Migration record](migration.md) |
 

@@ -54,10 +54,12 @@ describes per-file checks, editor-buffer formatting, and the seven-section revie
 The script reports the active stage and elapsed time; the first BuildTools build needs dependency
 access. CI calls the same script and configuration. Fix before pushing.
 
-Without file arguments, the check also runs `scripts/check-dead-code.py`. It reports target
+Without file arguments, the check builds the pinned `swift-dead-code` tool through
+`BuildTools/Package.swift` and runs `swift-dead-code check`. It reports target
 dependencies that nothing imports and tracked files that nothing mentions; stage a new file to
-include it. Delete the finding, or keep it with a reason in `BuildTools/dead-code-allowlist.txt`;
-stale entries fail too. `--report` lists every finding, allowlisted ones included.
+include it. Delete the finding, or keep it with a reason in [`.deadcode.yml`](../.deadcode.yml);
+stale entries fail too. After the [manual setup](#weekly-dead-code-analysis), run
+`swift-dead-code check --report` to list every finding, allowlisted ones included.
 
 SwiftLint rejects source lines over 100 characters,
 including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
@@ -76,11 +78,8 @@ test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
   shellcheck -s sh install.sh deploy/run-clawd.sh &&
   shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
-    scripts/update-prices.sh scripts/test-update-prices.sh scripts/test-periphery-baseline.sh \
-    scripts/cloud-warm-build.sh \
-    .claude/skills/removing-dead-code/scripts/periphery_scan.sh
+    scripts/update-prices.sh scripts/test-update-prices.sh scripts/cloud-warm-build.sh
 bash scripts/test-update-prices.sh
-bash scripts/test-periphery-baseline.sh
 ```
 
 The price-refresh checks use local fixtures for both LiteLLM and the OpenRouter Models API;
@@ -94,22 +93,41 @@ a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
 
 The [dead-code workflow](../.github/workflows/dead-code.yml) finds unused declarations and
 imports with an indexed build, so it runs weekly, on demand, and only on pull requests that change
-the analysis or its pinned toolchain. To reproduce it on macOS, install Periphery at the version in
-`BuildTools/lint-versions.env`, from Homebrew until it disables the formula on 2027-08-12 or from
-the release the workflow downloads. Then run from the repository root:
+the analysis or its pinned toolchain. Each job builds `swift-dead-code` through
+[`BuildTools/Package.swift`](../BuildTools/Package.swift) at `CLAW_SWIFT_DEAD_CODE_VERSION` in
+`BuildTools/lint-versions.env`. The lint gate builds it for whole-repository checks too; no global
+install is needed. For manual commands, build it and add the binary directory to your current
+shell's `PATH` from the repository root:
 
 ```bash
-S=.claude/skills/removing-dead-code/scripts
-bash $S/periphery_scan.sh .build/dead-code/scan          # 5-10 minutes
-python3 -I scripts/check-periphery-baseline.py \
-  .build/dead-code/scan/all.json .build/dead-code/scan/prod.json
-python3 -I $S/prune_imports.py --work .build/dead-code/prune --all --modules deps  # one build per trial
+swift build --package-path BuildTools -c release --product swift-dead-code
+export PATH="$(swift build --package-path BuildTools -c release --show-bin-path):$PATH"
 ```
 
-Both checks fail only on product code. The Periphery check lists findings in test code, and
+To reproduce the workflow on macOS, install Periphery at the version in
+`BuildTools/lint-versions.env` from the release the workflow downloads. `.deadcode.yml` holds the
+allowlist, Periphery version and baseline path, identifies `ClawTestSupport` as test support,
+and names the architecture and testing contracts for triage. Run the analysis commands one at a
+time, reusing their scratch directories for incremental builds. Keep the source copy outside
+build directories such as `.build`, which Periphery excludes from its index. Also keep it
+outside macOS temporary directories, where `/tmp` versus `/private/tmp` aliases can prevent
+dependency exclusions from matching. Use a cache directory outside both:
+
+```bash
+dead_code_work="$HOME/Library/Caches/swift-claw-dead-code"
+swift-dead-code scan --output "$dead_code_work/scan"
+swift-dead-code baseline "$dead_code_work/scan/all.json" "$dead_code_work/scan/prod.json"
+swift-dead-code prune-imports --work "$dead_code_work/prune" --all --modules deps --strict
+```
+
+`scan` and `prune-imports` build in copies of the project and take a machine-wide lock. The scan
+writes `report.md`, `all.json` and `prod.json`; the pruner writes `prune.patch`. The baseline and
+strict import checks fail only on product code. The baseline check lists findings in test code, and
 `--include-tests` makes the pruner check test code too. For a new Periphery finding, delete the
-code. Record a test seam, a documented contract or deliberate backlog by rerunning the baseline
-check with `--write`; that also drops entries whose code is gone. When the import job fails,
+code. Record a test seam, a documented contract or deliberate backlog by rerunning
+`swift-dead-code baseline` with `--write`; that also drops entries whose code is gone. Keep these
+findings in `BuildTools/periphery-baseline.txt`; product code carries no `periphery:ignore`
+comments. When the import job fails,
 apply `prune.patch` from its `imports` artifact with `git apply`. The
 [dead-code skill](../.claude/skills/removing-dead-code/SKILL.md) covers triage and complete
 cleanups.

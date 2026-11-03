@@ -1,6 +1,60 @@
 {
-  "originHash" : "03ed7156ab78d7973f7381b9d2b36a00b885708bb74b23ccd75153880377f228",
+  "originHash" : "62010c5fc82430c275eae68871b50b2c26c89beea6ca9e26b05bcfb8884bcccd",
   "pins" : [
+    {
+      "identity" : "aexml",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tadija/AEXML.git",
+      "state" : {
+        "revision" : "dd9206de0717d658daec6a064992894fdab8ae17",
+        "version" : "4.7.3"
+      }
+    },
+    {
+      "identity" : "pathkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kylef/PathKit.git",
+      "state" : {
+        "revision" : "3bfd2737b700b9a36565a8c94f4ad2b050a5e574",
+        "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "spectre",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kylef/Spectre.git",
+      "state" : {
+        "revision" : "26cc5e9ae0947092c7139ef7ba612e34646086c7",
+        "version" : "0.10.1"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
+      }
+    },
+    {
+      "identity" : "swift-dead-code",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ivan-magda/swift-dead-code.git",
+      "state" : {
+        "revision" : "d2d253f868c83de6f24b44c1fc32af5e348b9f63",
+        "version" : "0.1.2"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf",
+        "version" : "604.0.0"
+      }
+    },
     {
       "identity" : "swiftformat",
       "kind" : "remoteSourceControl",
@@ -8,6 +62,33 @@
       "state" : {
         "revision" : "ce60affbe4143ad93ed16b8018117ed4f1db8ce3",
         "version" : "0.64.0"
+      }
+    },
+    {
+      "identity" : "xcode-project-format",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/xcode-project-format.git",
+      "state" : {
+        "revision" : "c132630aabf40f6d6c3f7bb004595d2e5a28ea42",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "xcodeproj",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tuist/XcodeProj.git",
+      "state" : {
+        "revision" : "b505c06bb190b9306b29d5d96e3284e139af3cc8",
+        "version" : "9.17.6"
+      }
+    },
+    {
+      "identity" : "yams",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jpsim/Yams.git",
+      "state" : {
+        "revision" : "a27b21e0c81c5bf42049b897a62aaf387e80f279",
+        "version" : "6.2.2"
       }
     }
   ],
