@@ -5,6 +5,6 @@ let package = Package(
   name: "BuildTools",
   dependencies: [
     .package(url: "https://github.com/nicklockwood/SwiftFormat.git", exact: "0.64.0"),
-    .package(url: "https://github.com/ivan-magda/swift-dead-code.git", exact: "0.1.2"),
+    .package(url: "https://github.com/ivan-magda/swift-dead-code.git", exact: "0.1.3"),
   ]
 )
