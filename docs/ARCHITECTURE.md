@@ -2312,34 +2312,35 @@ formatter invocations are not a substitute for this gate. Local, CI, per-file, a
 formatting share this pipeline and validate prerequisites before source mutation.
 
 A whole-repository check (`scripts/lint.sh` without file arguments) also runs
-`scripts/check-dead-code.py`. It needs Python 3 and evaluates only the manifest, never building
-the package. It fails on a `Package.swift` target dependency that no Swift file in the target
+`swift-dead-code check`. The lint gate builds the tool through `BuildTools/Package.swift` at
+`CLAW_SWIFT_DEAD_CODE_VERSION` from `BuildTools/lint-versions.env`; no global install is needed.
+The check evaluates the manifest without building the product package. It fails on a
+`Package.swift` target dependency that no Swift file in the target
 imports, counting untracked Swift files because SwiftPM compiles them. It also fails on a tracked
 non-Swift file whose name or stem no other tracked file mentions.
-`BuildTools/dead-code-allowlist.txt` keeps intentional findings, each with a reason; a duplicate
-entry, or one that no longer matches a finding, also fails. Unused declarations and imports need
-an indexed build and stay outside this gate.
+The allowlist in [`.deadcode.yml`](../.deadcode.yml) records intentional findings, each with a
+reason; a duplicate entry, or one that no longer matches a finding, also fails. Its
+`check.not_references` excludes dated research from both findings and reference evidence.
+Unused declarations and imports need an indexed build and stay outside this gate.
 
 The [dead-code workflow](../.github/workflows/dead-code.yml) covers them on macOS weekly, on
-demand, and on pull requests that change the analysis or its pinned toolchain. Its Periphery job
-installs the archived MIT release at the version and checksum in `BuildTools/lint-versions.env`,
-builds an index store, and scans with tests and again without tests and `ClawTestSupport`,
-applying `.periphery.yml`.
+demand, and on pull requests that change the analysis or its pinned toolchain. Each job builds
+the pinned `swift-dead-code` tool. The Periphery job installs the archived MIT release at the
+version and checksum in `BuildTools/lint-versions.env`, then runs `swift-dead-code scan` to build
+an index store and scan with and without test code. `.deadcode.yml` identifies `ClawTestSupport`
+as test support, names the contract documents for triage, and sets the Periphery version and
+baseline path. The tool retains Codable, Equatable and Hashable properties by default.
 Product code comes first: neither job fails on test code, meaning the test targets and
 `ClawTestSupport`. The Periphery job lists test-code findings and fails on a product finding
 whose USR `BuildTools/periphery-baseline.txt` does not list;
-`scripts/check-periphery-baseline.py` compares the scans with that backlog and regenerates it.
+`swift-dead-code baseline` compares the scans with that backlog, and `--write` regenerates it.
 The baseline holds intentional test seams and documented contracts as well as backlog, so
-product code carries no Periphery comments. The import job runs the dead-code skill's `prune_imports.py --all --modules deps`
-on product code and fails on any import of a package dependency, `Testing` or `Synchronization`
+product code carries no `periphery:ignore` comments. The import job runs
+`swift-dead-code prune-imports --all --modules deps --strict` on product code and fails on any
+import of a package dependency, `Testing` or `Synchronization`
 that the compiler proves removable; `--include-tests` extends a run to test code. A macOS build
-does not compile `#if os(Linux)` branches, so neither job checks Linux-only code.
-
-Python scripts, in `scripts/` and in the agent skills, follow PEP 8 and PEP 257 as configured in
-`.ruff.toml`: the ruff formatter's 88-column layout, plus lint rules for naming, imports,
-docstrings, type annotations and likely bugs. They run on Python 3.9, which macOS ships with the
-Xcode tools. The lint gate does not run ruff; a changed script must pass `ruff format --check`
-and `ruff check` at the pinned version before review.
+does not compile `#if os(Linux)` branches, so neither job checks Linux-only code. Run heavy
+analysis builds one at a time; `scan` and `prune-imports` also take a machine-wide lock.
 
 `.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
 tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
@@ -2348,7 +2349,7 @@ select the pinned Xcode and run that check through the `.github/actions/select-x
 referenced with GitHub's `$/` self-repository syntax. The lint gate uses
 `xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux; their `main`
 labels are not version pins. It checks SwiftLint and the locked BuildTools SwiftFormat executable
-against the shared pins. Actionlint, zizmor, ShellCheck and ruff use the same pins file.
+against the shared pins. Actionlint, zizmor and ShellCheck use the same pins file.
 CI validates the canonical lint pipeline on Linux; [CODE_STYLE.md](CODE_STYLE.md#setup)
 documents installation.
 

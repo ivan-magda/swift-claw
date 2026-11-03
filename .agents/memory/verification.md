@@ -15,6 +15,16 @@ These notes retain investigation lessons from earlier sessions, reviewed on 2026
 - A single successful timing-sensitive run does not establish a safe timeout or remove a race.
 - Name what was not tested. Reading code, a skipped acceptance test, and a timed-out process
   are not evidence that the corresponding gate passed.
+- Maintainer feedback on 2026-11-03: when replacing a build-tool commit pin with a release tag
+  that has identical code and transitive dependencies, reuse the completed application tests
+  and analysis runs. Verify dependency resolution, the executable version and changed lint
+  wiring; do not repeat the full suite merely because the pin is written in a Swift manifest.
+- For dead-code tool migrations, compare finding identities and locations with a known scan,
+  not just exit status. During the 2026-11-03 migration to swift-dead-code 0.1.2, an unsuitable
+  output directory produced a successful but empty scan. The verified location reproduced all
+  43 findings with tests and 88 without. Follow the output-directory constraints in
+  [LOCAL_DEV.md](../../docs/LOCAL_DEV.md#weekly-dead-code-analysis) and investigate an empty
+  report before regenerating a baseline from it.
 - For optional composition dependencies, exercise the top-level builder before claiming deployment
   wiring coverage. In the 2026-10-08 daily-journal review, removing root worker forwarding compiled
   because of a nil default; a direct runtime-bundle fixture missed it. The actual-builder ordering

@@ -1,0 +1,25 @@
+# Dead-code analysis settings: scripts/lint.sh runs `swift-dead-code check`, and
+# .github/workflows/dead-code.yml runs scan, baseline and prune-imports weekly.
+test_support: [ClawTestSupport]
+
+check:
+  # Dated research is evidence, not a user of anything, and is never itself checked.
+  not_references: [docs/research/]
+
+allowlist:
+  - file: docs/assets/branding/BRAND-ASSETS.md
+    reason: index of the brand files in its own directory
+  - file: docs/assets/demo/card-approve-deny.png
+    reason: approval demo still; may be linked from outside the repository
+  - file: docs/assets/demo/card-privileged.png
+    reason: approval demo still; may be linked from outside the repository
+  - file: docs/audits/duplication-audit-2026-07-13.md
+    reason: point-in-time audit report, kept as a record
+
+periphery:
+  # Keep in step with CLAW_PERIPHERY_VERSION in BuildTools/lint-versions.env.
+  version: 3.8.0
+  baseline: BuildTools/periphery-baseline.txt
+
+docs:
+  contracts: [docs/ARCHITECTURE.md, docs/TESTING.md]

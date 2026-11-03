@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - .claude/skills/removing-dead-code/scripts/**
+      - .deadcode.yml
       - .github/actions/select-xcode/**
       - .github/workflows/dead-code.yml
-      - .periphery.yml
+      - BuildTools/Package.swift
+      - BuildTools/Package.resolved
       - BuildTools/lint-versions.env
       - BuildTools/periphery-baseline.txt
-      - scripts/check-periphery-baseline.py
 
 permissions:
   contents: read
@@ -41,6 +41,12 @@ jobs:
       - name: Select and verify pinned Xcode toolchain
         uses: $/.github/actions/select-xcode
 
+      - name: Build pinned swift-dead-code
+        run: |
+          swift build --package-path BuildTools -c release --product swift-dead-code
+          bin_path="$(swift build --package-path BuildTools -c release --show-bin-path)"
+          printf '%s\n' "$bin_path" >> "$GITHUB_PATH"
+
       - name: Install pinned Periphery
         run: |
           source BuildTools/lint-versions.env
@@ -54,14 +60,15 @@ jobs:
           unzip -q "$archive" -d "$RUNNER_TEMP/periphery"
           printf '%s\n' "$RUNNER_TEMP/periphery" >> "$GITHUB_PATH"
 
+      # Keep indexed copies outside the checkout's excluded build directories.
       - name: Scan with and without tests
-        run: bash .claude/skills/removing-dead-code/scripts/periphery_scan.sh "$RUNNER_TEMP/scan"
+        run: swift-dead-code scan --output "$RUNNER_TEMP/scan"
 
       - name: Fail on findings missing from the baseline
         run: |
           scan="$RUNNER_TEMP/scan"
           status=0
-          python3 -I scripts/check-periphery-baseline.py "$scan/all.json" "$scan/prod.json" \
+          swift-dead-code baseline "$scan/all.json" "$scan/prod.json" \
             > "$scan/baseline.txt" 2>&1 || status=$?
           cat "$scan/baseline.txt"
           {
@@ -98,24 +105,28 @@ jobs:
       - name: Select and verify pinned Xcode toolchain
         uses: $/.github/actions/select-xcode
 
+      - name: Build pinned swift-dead-code
+        run: |
+          swift build --package-path BuildTools -c release --product swift-dead-code
+          bin_path="$(swift build --package-path BuildTools -c release --show-bin-path)"
+          printf '%s\n' "$bin_path" >> "$GITHUB_PATH"
+
       # Periphery never reports imports of package dependencies, Testing or Synchronization.
       # Product code comes first, so test code is left to an explicit --include-tests run.
       - name: Try removing every package-dependency import from product code
         run: |
           work="$RUNNER_TEMP/prune"
           mkdir -p "$work"
-          python3 -I .claude/skills/removing-dead-code/scripts/prune_imports.py \
-            --work "$work" --all --modules deps | tee "$work/result.txt"
+          status=0
+          swift-dead-code prune-imports --work "$work" --all --modules deps --strict \
+            2>&1 | tee "$work/result.txt" || status=$?
           {
             echo '### Removable package-dependency imports in product code'
             echo '```'
             cat "$work/result.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [[ -s "$work/prune.patch" ]]; then
-            echo "::error::Remove these imports: apply prune.patch from the imports artifact."
-            exit 1
-          fi
+          exit "$status"
 
       - name: Upload the patch and build logs
         if: ${{ !cancelled() }}
