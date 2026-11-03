@@ -12,8 +12,6 @@ import Testing
 struct OutboxFallbackTests {
   private struct Fixture {
     let outbox: OutboxStoreGRDB
-    let runID: Int64
-    let chatID: Int64
   }
 
   /// Commits a completed turn with one PENDING `"**hi**"` reply.
@@ -26,7 +24,7 @@ struct OutboxFallbackTests {
         OutboxChunk(stepIndex: 0, chatID: seeded.chatID, payload: "**hi**", payloadHash: "hash"),
       ]
     )
-    return Fixture(outbox: seeded.outbox, runID: seeded.runID, chatID: seeded.chatID)
+    return Fixture(outbox: seeded.outbox)
   }
 
   private func makeDispatcher(

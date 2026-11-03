@@ -144,7 +144,6 @@ struct ApprovalCallbackHandlerTests {
     let audit: RecordingAuditLog
     let callbacks: RecordingCallbacks
     let coordinator: ApprovalCoordinator
-    let approval: Approval
   }
 
   private static let ownerID: Int64 = 42
@@ -254,8 +253,7 @@ struct ApprovalCallbackHandlerTests {
       approvals: approvals,
       audit: audit,
       callbacks: callbacks,
-      coordinator: coordinator,
-      approval: approval
+      coordinator: coordinator
     )
   }
 

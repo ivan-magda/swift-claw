@@ -27,7 +27,6 @@ struct EvaluationRunEnvironment {
   let authorizing: RecordingLearningStore
   let runner: LearningOperationRunner
   let jobID: Int64
-  let sessionID: Int64
   let runID: Int64
   let now: Date
 
@@ -150,7 +149,6 @@ struct EvaluationRunEnvironment {
         logger: logger
       ),
       jobID: job.id,
-      sessionID: fired.sessionID,
       runID: fired.runID,
       now: now
     )

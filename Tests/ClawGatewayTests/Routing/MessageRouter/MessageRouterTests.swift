@@ -40,9 +40,7 @@ struct MessageRouterTests {
   }
 
   private struct SeededRun {
-    let sessionID: Int64
     let runID: Int64
-    let messageID: Int64
   }
 
   private func makeHarness(
@@ -929,11 +927,10 @@ struct MessageRouterTests {
         ts: Date(timeIntervalSince1970: Double(updateID))
       )
     )
-    return SeededRun(
-      sessionID: try #require(claim.sessionID),
-      runID: try #require(claim.runID),
-      messageID: try #require(claim.triggerMessageID)
-    )
+    _ = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
+    _ = try #require(claim.triggerMessageID)
+    return SeededRun(runID: runID)
   }
 
   private func runStates(_ queue: DatabaseQueue) throws -> [Int64: String] {

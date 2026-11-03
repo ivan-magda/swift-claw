@@ -5,11 +5,9 @@ import Testing
 
 // MARK: - Doubles
 
-/// A stand-in client the factory builds by role, so a test reads which role each slot received and
-/// drives close order without a real socket.
+/// A stand-in client the factory builds by role, so a test reads which role each slot received.
 private struct RecordingClient: Sendable {
   let role: RuntimeHTTPClientRole
-  let close: @Sendable () async -> Void
 }
 
 @Suite
@@ -22,7 +20,7 @@ struct RuntimeHTTPClientsTests {
     // when
     let clients = RuntimeHTTPClients { role in
       creationOrder.append(role)
-      return RecordingClient(role: role) {}
+      return RecordingClient(role: role)
     }
 
     // then — Telegram, then LLM, then tool, each in its own slot

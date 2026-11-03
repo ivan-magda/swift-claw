@@ -362,8 +362,6 @@ func seedRun(
 struct HealthyRunsFixture {
   let runs: RunStoreGRDB
   let outbox: OutboxStoreGRDB
-  let doneRunID: Int64
-  let deliveredRunID: Int64
 }
 
 func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
@@ -449,9 +447,7 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
 
   return HealthyRunsFixture(
     runs: runs,
-    outbox: outbox,
-    doneRunID: doneRunID,
-    deliveredRunID: deliveredRunID
+    outbox: outbox
   )
 }
 
