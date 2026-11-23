@@ -499,6 +499,10 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
   "anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -518,6 +522,10 @@
   "anthropic.claude-mythos-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "anthropic.claude-mythos-preview": {
     "inputUSDPerMTok": 27.5,
@@ -763,6 +771,14 @@
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 6
   },
+  "azure/apac/gpt-6.2-astra": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
+  },
+  "azure/apac/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2.4,
+    "outputUSDPerMTok": 12
+  },
   "azure/chat-latest": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 30
@@ -970,6 +986,14 @@
   "azure/eu/gpt-6.1-terra": {
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 6
+  },
+  "azure/eu/gpt-6.2-astra": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
+  },
+  "azure/eu/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2.4,
+    "outputUSDPerMTok": 12
   },
   "azure/eu/o1": {
     "inputUSDPerMTok": 16.5,
@@ -1383,6 +1407,14 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
+  "azure/gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "azure/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
   "azure/gpt-audio": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -1539,11 +1571,55 @@
     "inputUSDPerMTok": 0.11,
     "outputUSDPerMTok": 0
   },
+  "azure/us-gov/gpt-4-turbo": {
+    "inputUSDPerMTok": 12.5,
+    "outputUSDPerMTok": 37.5
+  },
+  "azure/us-gov/gpt-4.1": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 11
+  },
+  "azure/us-gov/gpt-4.1-mini": {
+    "inputUSDPerMTok": 0.55,
+    "outputUSDPerMTok": 2.2
+  },
+  "azure/us-gov/gpt-4o": {
+    "inputUSDPerMTok": 3.438,
+    "outputUSDPerMTok": 13.75
+  },
+  "azure/us-gov/gpt-4o-2024-05-13": {
+    "inputUSDPerMTok": 6.25,
+    "outputUSDPerMTok": 18.75
+  },
+  "azure/us-gov/gpt-4o-2024-11-20": {
+    "inputUSDPerMTok": 3.438,
+    "outputUSDPerMTok": 13.75
+  },
+  "azure/us-gov/gpt-4o-mini": {
+    "inputUSDPerMTok": 0.207,
+    "outputUSDPerMTok": 0.825
+  },
   "azure/us-gov/gpt-5.1": {
     "inputUSDPerMTok": 1.71875,
     "outputUSDPerMTok": 13.75
   },
+  "azure/us-gov/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.275,
+    "outputUSDPerMTok": 1.65
+  },
+  "azure/us-gov/gpt-5.6-sol": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "azure/us-gov/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 16.5
+  },
   "azure/us-gov/o3-mini": {
+    "inputUSDPerMTok": 1.513,
+    "outputUSDPerMTok": 6.05
+  },
+  "azure/us-gov/o3-mini-2025-01-31": {
     "inputUSDPerMTok": 1.513,
     "outputUSDPerMTok": 6.05
   },
@@ -1553,6 +1629,10 @@
   },
   "azure/us-gov/text-embedding-3-small": {
     "inputUSDPerMTok": 0.025,
+    "outputUSDPerMTok": 0
+  },
+  "azure/us-gov/text-embedding-ada-002": {
+    "inputUSDPerMTok": 0.125,
     "outputUSDPerMTok": 0
   },
   "azure/us/codex-mini": {
@@ -1763,6 +1843,14 @@
     "inputUSDPerMTok": 1.1,
     "outputUSDPerMTok": 5.5
   },
+  "azure/us/gpt-6.2-astra": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
+  },
+  "azure/us/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
+  },
   "azure/us/gpt-chat-latest": {
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 33
@@ -1963,6 +2051,10 @@
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
+  "azure_ai/Microsoft-Decision-1.1": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
   "azure_ai/Phi-4": {
     "inputUSDPerMTok": 0.125,
     "outputUSDPerMTok": 0.5
@@ -1991,6 +2083,14 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "azure_ai/claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "azure_ai/claude-fable-5-2-fast": {
+    "inputUSDPerMTok": 16,
+    "outputUSDPerMTok": 80
+  },
   "azure_ai/claude-haiku-4-5": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -2002,6 +2102,14 @@
   "azure_ai/claude-mythos-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "azure_ai/claude-mythos-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "azure_ai/claude-mythos-5-2-fast": {
+    "inputUSDPerMTok": 16,
+    "outputUSDPerMTok": 80
   },
   "azure_ai/claude-opus-4-5": {
     "inputUSDPerMTok": 5,
@@ -2103,6 +2211,10 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
   },
+  "azure_ai/deepseek-v4.1-flash-1017": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
   "azure_ai/embed-v-4-0": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0
@@ -2150,6 +2262,30 @@
   "azure_ai/gpt-5.5-2026-04-24": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 30
+  },
+  "azure_ai/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "azure_ai/gpt-5.6-luna-2026-07-09": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "azure_ai/gpt-5.6-sol": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "azure_ai/gpt-5.6-sol-2026-07-09": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "azure_ai/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "azure_ai/gpt-5.6-terra-2026-07-09": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
   },
   "azure_ai/gpt-6-astra": {
     "inputUSDPerMTok": 10,
@@ -2251,6 +2387,10 @@
     "inputUSDPerMTok": 0.95,
     "outputUSDPerMTok": 4
   },
+  "azure_ai/kimi-k3.1-pro": {
+    "inputUSDPerMTok": 2.3,
+    "outputUSDPerMTok": 11.5
+  },
   "azure_ai/ministral-3b": {
     "inputUSDPerMTok": 0.04,
     "outputUSDPerMTok": 0.04
@@ -2258,6 +2398,10 @@
   "azure_ai/mistral-large-3": {
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 1.5
+  },
+  "azure_ai/mistral-large-4-latest": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.1
   },
   "azure_ai/mistral-large-latest": {
     "inputUSDPerMTok": 2,
@@ -2295,7 +2439,15 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
   },
+  "baseten/decision-models/baseten-bison-latest": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "baseten/decision-models/baseten-elephant-9b-latest": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0
+  },
+  "baseten/decision-models/baseten-groundhog-latest": {
     "inputUSDPerMTok": 0.035,
     "outputUSDPerMTok": 0
   },
@@ -2435,6 +2587,34 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.5
   },
+  "bedrock/ap-east-2/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 3.01
+  },
+  "bedrock/ap-northeast-1/amazon.nova-2-5-sonic": {
+    "inputUSDPerMTok": 0.396,
+    "outputUSDPerMTok": 3.311
+  },
+  "bedrock/ap-northeast-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.396,
+    "outputUSDPerMTok": 3.311
+  },
+  "bedrock/ap-northeast-1/amazon.nova-2-sonic-v1:0": {
+    "inputUSDPerMTok": 0.396,
+    "outputUSDPerMTok": 3.311
+  },
+  "bedrock/ap-northeast-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock/ap-northeast-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0.168
+  },
+  "bedrock/ap-northeast-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.96,
+    "outputUSDPerMTok": 3.84
+  },
   "bedrock/ap-northeast-1/anthropic.claude-instant-v1": {
     "inputUSDPerMTok": 2.23,
     "outputUSDPerMTok": 7.55
@@ -2447,9 +2627,41 @@
     "inputUSDPerMTok": 8,
     "outputUSDPerMTok": 24
   },
+  "bedrock/ap-northeast-1/apac.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock/ap-northeast-1/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.96,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/ap-northeast-1/deepseek.v3-v1:0": {
+    "inputUSDPerMTok": 0.701666,
+    "outputUSDPerMTok": 2.032411
+  },
   "bedrock/ap-northeast-1/deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
     "outputUSDPerMTok": 2.22
+  },
+  "bedrock/ap-northeast-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 3.01
+  },
+  "bedrock/ap-northeast-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/ap-northeast-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.28,
+    "outputUSDPerMTok": 0.46
+  },
+  "bedrock/ap-northeast-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
+  },
+  "bedrock/ap-northeast-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.45
   },
   "bedrock/ap-northeast-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
@@ -2459,6 +2671,30 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/ap-northeast-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/ap-northeast-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock/ap-northeast-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/ap-northeast-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock/ap-northeast-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock/ap-northeast-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
   "bedrock/ap-northeast-1/mistral.voxtral-mini-3b-2507": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.05
@@ -2466,6 +2702,10 @@
   "bedrock/ap-northeast-1/mistral.voxtral-small-24b-2507": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0.36
+  },
+  "bedrock/ap-northeast-1/moonshot.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.73,
+    "outputUSDPerMTok": 3.03
   },
   "bedrock/ap-northeast-1/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.73,
@@ -2475,6 +2715,50 @@
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 3.6
   },
+  "bedrock/ap-northeast-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/ap-northeast-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.29
+  },
+  "bedrock/ap-northeast-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock/ap-northeast-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/ap-northeast-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/ap-northeast-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock/ap-northeast-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/ap-northeast-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/ap-northeast-1/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 1.06
+  },
+  "bedrock/ap-northeast-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/ap-northeast-1/qwen.qwen3-coder-480b-a35b-v1:0": {
+    "inputUSDPerMTok": 0.54,
+    "outputUSDPerMTok": 2.18
+  },
   "bedrock/ap-northeast-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
@@ -2483,9 +2767,93 @@
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 1.45
   },
+  "bedrock/ap-northeast-1/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 3.22
+  },
+  "bedrock/ap-northeast-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/ap-northeast-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/ap-northeast-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/ap-northeast-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/ap-northeast-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.071,
+    "outputUSDPerMTok": 0.284
+  },
+  "bedrock/ap-northeast-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.041,
+    "outputUSDPerMTok": 0.164
+  },
+  "bedrock/ap-northeast-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 3.8
+  },
+  "bedrock/ap-northeast-2/apac.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.071,
+    "outputUSDPerMTok": 0.284
+  },
+  "bedrock/ap-northeast-2/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 3.8
+  },
+  "bedrock/ap-northeast-2/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 2.96
+  },
+  "bedrock/ap-south-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.071,
+    "outputUSDPerMTok": 0.284
+  },
+  "bedrock/ap-south-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.041,
+    "outputUSDPerMTok": 0.164
+  },
+  "bedrock/ap-south-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.94,
+    "outputUSDPerMTok": 3.76
+  },
+  "bedrock/ap-south-1/apac.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.071,
+    "outputUSDPerMTok": 0.284
+  },
+  "bedrock/ap-south-1/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.94,
+    "outputUSDPerMTok": 3.76
+  },
+  "bedrock/ap-south-1/deepseek.v3-v1:0": {
+    "inputUSDPerMTok": 0.682424,
+    "outputUSDPerMTok": 1.976678
+  },
   "bedrock/ap-south-1/deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
     "outputUSDPerMTok": 2.22
+  },
+  "bedrock/ap-south-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 2.95
+  },
+  "bedrock/ap-south-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock/ap-south-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock/ap-south-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
   },
   "bedrock/ap-south-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 3.18,
@@ -2495,6 +2863,10 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 0.72
   },
+  "bedrock/ap-south-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
+  },
   "bedrock/ap-south-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
@@ -2502,6 +2874,54 @@
   "bedrock/ap-south-1/minimax.minimax-m2.5": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
+  },
+  "bedrock/ap-south-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/ap-south-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock/ap-south-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/ap-south-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock/ap-south-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock/ap-south-1/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/ap-south-1/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 4.8,
+    "outputUSDPerMTok": 14.4
+  },
+  "bedrock/ap-south-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock/ap-south-1/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.54,
+    "outputUSDPerMTok": 0.84
+  },
+  "bedrock/ap-south-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock/ap-south-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/ap-south-1/moonshot.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.71,
+    "outputUSDPerMTok": 2.94
   },
   "bedrock/ap-south-1/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.71,
@@ -2511,6 +2931,50 @@
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 3.6
   },
+  "bedrock/ap-south-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock/ap-south-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock/ap-south-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock/ap-south-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/ap-south-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock/ap-south-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/ap-south-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock/ap-south-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/ap-south-1/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 1.04
+  },
+  "bedrock/ap-south-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock/ap-south-1/qwen.qwen3-coder-480b-a35b-v1:0": {
+    "inputUSDPerMTok": 0.53,
+    "outputUSDPerMTok": 2.12
+  },
   "bedrock/ap-south-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
@@ -2519,9 +2983,93 @@
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 1.41
   },
+  "bedrock/ap-south-1/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.13
+  },
+  "bedrock/ap-south-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/ap-south-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/ap-south-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/ap-south-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/ap-southeast-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.081,
+    "outputUSDPerMTok": 0.324
+  },
+  "bedrock/ap-southeast-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.047,
+    "outputUSDPerMTok": 0.188
+  },
+  "bedrock/ap-southeast-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.08,
+    "outputUSDPerMTok": 4.32
+  },
+  "bedrock/ap-southeast-1/apac.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.081,
+    "outputUSDPerMTok": 0.324
+  },
+  "bedrock/ap-southeast-1/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.08,
+    "outputUSDPerMTok": 4.32
+  },
+  "bedrock/ap-southeast-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.41,
+    "outputUSDPerMTok": 3.39
+  },
+  "bedrock/ap-southeast-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.063,
+    "outputUSDPerMTok": 0.252
+  },
+  "bedrock/ap-southeast-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.037,
+    "outputUSDPerMTok": 0.148
+  },
+  "bedrock/ap-southeast-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.84,
+    "outputUSDPerMTok": 3.36
+  },
+  "bedrock/ap-southeast-2/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 1.91
+  },
+  "bedrock/ap-southeast-2/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 2.63
+  },
+  "bedrock/ap-southeast-2/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 1.24
+  },
   "bedrock/ap-southeast-2/minimax.minimax-m2.5": {
     "inputUSDPerMTok": 0.31,
     "outputUSDPerMTok": 1.24
+  },
+  "bedrock/ap-southeast-2/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.41,
+    "outputUSDPerMTok": 2.06
+  },
+  "bedrock/ap-southeast-2/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.26
+  },
+  "bedrock/ap-southeast-2/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 5.2,
+    "outputUSDPerMTok": 15.6
+  },
+  "bedrock/ap-southeast-2/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 0.91
   },
   "bedrock/ap-southeast-2/mistral.voxtral-mini-3b-2507": {
     "inputUSDPerMTok": 0.0412,
@@ -2531,13 +3079,49 @@
     "inputUSDPerMTok": 0.103,
     "outputUSDPerMTok": 0.309
   },
+  "bedrock/ap-southeast-2/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.09
+  },
+  "bedrock/ap-southeast-2/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.67
+  },
+  "bedrock/ap-southeast-2/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.52,
+    "outputUSDPerMTok": 1.24
+  },
   "bedrock/ap-southeast-2/qwen.qwen3-next-80b-a3b": {
     "inputUSDPerMTok": 0.1545,
     "outputUSDPerMTok": 1.236
   },
+  "bedrock/ap-southeast-2/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock/ap-southeast-2/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 2.27
+  },
+  "bedrock/ap-southeast-2/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.41
+  },
+  "bedrock/ap-southeast-2/zai.glm-5": {
+    "inputUSDPerMTok": 1.03,
+    "outputUSDPerMTok": 3.3
+  },
+  "bedrock/ap-southeast-3/deepseek.v3-v1:0": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.74
+  },
   "bedrock/ap-southeast-3/deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
     "outputUSDPerMTok": 2.22
+  },
+  "bedrock/ap-southeast-3/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 2.64
   },
   "bedrock/ap-southeast-3/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
@@ -2547,13 +3131,105 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/ap-southeast-3/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
   "bedrock/ap-southeast-3/moonshotai.kimi-k2.5": {
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 3.6
   },
+  "bedrock/ap-southeast-3/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/ap-southeast-3/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock/ap-southeast-3/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock/ap-southeast-3/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.91
+  },
+  "bedrock/ap-southeast-3/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock/ap-southeast-3/qwen.qwen3-coder-480b-a35b-v1:0": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.87
+  },
   "bedrock/ap-southeast-3/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
+  },
+  "bedrock/ap-southeast-3/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/ap-southeast-3/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/ap-southeast-3/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/ap-southeast-3/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/ap-southeast-4/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.065,
+    "outputUSDPerMTok": 0.26
+  },
+  "bedrock/ap-southeast-4/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.87,
+    "outputUSDPerMTok": 3.48
+  },
+  "bedrock/ap-southeast-4/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.87,
+    "outputUSDPerMTok": 3.48
+  },
+  "bedrock/ap-southeast-4/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.71
+  },
+  "bedrock/ap-southeast-5/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock/ap-southeast-5/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.41,
+    "outputUSDPerMTok": 3.39
+  },
+  "bedrock/ap-southeast-6/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 2.63
+  },
+  "bedrock/ap-southeast-7/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock/ap-southeast-7/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.41,
+    "outputUSDPerMTok": 3.39
+  },
+  "bedrock/ca-central-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.352,
+    "outputUSDPerMTok": 2.97
+  },
+  "bedrock/ca-central-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.064,
+    "outputUSDPerMTok": 0.256
+  },
+  "bedrock/ca-central-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.32,
+    "outputUSDPerMTok": 2.67
   },
   "bedrock/ca-central-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 3.05,
@@ -2563,6 +3239,26 @@
     "inputUSDPerMTok": 0.35,
     "outputUSDPerMTok": 0.69
   },
+  "bedrock/ca-central-1/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.17,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/ca-central-1/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 4.6,
+    "outputUSDPerMTok": 13.8
+  },
+  "bedrock/ca-central-1/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.52,
+    "outputUSDPerMTok": 0.81
+  },
+  "bedrock/ca-west-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.374,
+    "outputUSDPerMTok": 3.091
+  },
+  "bedrock/ca-west-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.34,
+    "outputUSDPerMTok": 2.81
+  },
   "bedrock/claude_platform/claude-fable-5": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
@@ -2570,6 +3266,10 @@
   "bedrock/claude_platform/claude-fable-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "bedrock/claude_platform/claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "bedrock/claude_platform/claude-haiku-4-5": {
     "inputUSDPerMTok": 1,
@@ -2619,6 +3319,22 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "bedrock/eu-central-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.429,
+    "outputUSDPerMTok": 3.597
+  },
+  "bedrock/eu-central-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.078,
+    "outputUSDPerMTok": 0.312
+  },
+  "bedrock/eu-central-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.046,
+    "outputUSDPerMTok": 0.184
+  },
+  "bedrock/eu-central-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.05,
+    "outputUSDPerMTok": 4.2
+  },
   "bedrock/eu-central-1/anthropic.claude-instant-v1": {
     "inputUSDPerMTok": 2.48,
     "outputUSDPerMTok": 8.38
@@ -2631,6 +3347,22 @@
     "inputUSDPerMTok": 8,
     "outputUSDPerMTok": 24
   },
+  "bedrock/eu-central-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock/eu-central-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.39,
+    "outputUSDPerMTok": 3.27
+  },
+  "bedrock/eu-central-1/meta.llama3-2-1b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.13,
+    "outputUSDPerMTok": 0.13
+  },
+  "bedrock/eu-central-1/meta.llama3-2-3b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.19,
+    "outputUSDPerMTok": 0.19
+  },
   "bedrock/eu-central-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
@@ -2639,13 +3371,101 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/eu-central-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/eu-central-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock/eu-central-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/eu-central-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock/eu-central-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.4
+  },
+  "bedrock/eu-central-1/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1.16
+  },
+  "bedrock/eu-central-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
   "bedrock/eu-central-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/eu-central-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/eu-central-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/eu-central-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/eu-central-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/eu-north-1/amazon.nova-2-5-sonic": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 2.992
+  },
+  "bedrock/eu-north-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 2.992
+  },
+  "bedrock/eu-north-1/amazon.nova-2-sonic-v1:0": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 2.992
+  },
+  "bedrock/eu-north-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.065,
+    "outputUSDPerMTok": 0.26
+  },
+  "bedrock/eu-north-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.038,
+    "outputUSDPerMTok": 0.152
+  },
+  "bedrock/eu-north-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.87,
+    "outputUSDPerMTok": 3.48
+  },
   "bedrock/eu-north-1/deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
     "outputUSDPerMTok": 2.22
+  },
+  "bedrock/eu-north-1/eu.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 2.992
+  },
+  "bedrock/eu-north-1/eu.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.065,
+    "outputUSDPerMTok": 0.26
+  },
+  "bedrock/eu-north-1/eu.amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.038,
+    "outputUSDPerMTok": 0.152
+  },
+  "bedrock/eu-north-1/eu.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.87,
+    "outputUSDPerMTok": 3.48
+  },
+  "bedrock/eu-north-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.72
   },
   "bedrock/eu-north-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
@@ -2655,9 +3475,93 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/eu-north-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
   "bedrock/eu-north-1/moonshotai.kimi-k2.5": {
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 3.6
+  },
+  "bedrock/eu-north-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/eu-north-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock/eu-north-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/eu-north-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/eu-north-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/eu-north-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/eu-south-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.528,
+    "outputUSDPerMTok": 4.411
+  },
+  "bedrock/eu-south-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.096,
+    "outputUSDPerMTok": 0.384
+  },
+  "bedrock/eu-south-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.056,
+    "outputUSDPerMTok": 0.224
+  },
+  "bedrock/eu-south-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.28,
+    "outputUSDPerMTok": 5.21
+  },
+  "bedrock/eu-south-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock/eu-south-1/eu.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.528,
+    "outputUSDPerMTok": 4.411
+  },
+  "bedrock/eu-south-1/eu.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.096,
+    "outputUSDPerMTok": 0.384
+  },
+  "bedrock/eu-south-1/eu.amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.056,
+    "outputUSDPerMTok": 0.224
+  },
+  "bedrock/eu-south-1/eu.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.28,
+    "outputUSDPerMTok": 5.21
+  },
+  "bedrock/eu-south-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.481,
+    "outputUSDPerMTok": 4.1
+  },
+  "bedrock/eu-south-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock/eu-south-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock/eu-south-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
+  },
+  "bedrock/eu-south-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
   },
   "bedrock/eu-south-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
@@ -2667,9 +3571,205 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/eu-south-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/eu-south-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock/eu-south-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/eu-south-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock/eu-south-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock/eu-south-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock/eu-south-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/eu-south-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock/eu-south-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock/eu-south-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock/eu-south-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock/eu-south-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/eu-south-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock/eu-south-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.4
+  },
+  "bedrock/eu-south-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock/eu-south-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/eu-south-1/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1.16
+  },
+  "bedrock/eu-south-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
   "bedrock/eu-south-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
+  },
+  "bedrock/eu-south-1/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.12
+  },
+  "bedrock/eu-south-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/eu-south-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/eu-south-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/eu-south-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/eu-south-2/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 3.205
+  },
+  "bedrock/eu-south-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.066,
+    "outputUSDPerMTok": 0.264
+  },
+  "bedrock/eu-south-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.039,
+    "outputUSDPerMTok": 0.156
+  },
+  "bedrock/eu-south-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.88,
+    "outputUSDPerMTok": 3.52
+  },
+  "bedrock/eu-south-2/eu.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.363,
+    "outputUSDPerMTok": 3.205
+  },
+  "bedrock/eu-south-2/eu.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.066,
+    "outputUSDPerMTok": 0.264
+  },
+  "bedrock/eu-south-2/eu.amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.039,
+    "outputUSDPerMTok": 0.156
+  },
+  "bedrock/eu-south-2/eu.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.88,
+    "outputUSDPerMTok": 3.52
+  },
+  "bedrock/eu-south-2/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.75
+  },
+  "bedrock/eu-west-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.374,
+    "outputUSDPerMTok": 3.157
+  },
+  "bedrock/eu-west-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.069,
+    "outputUSDPerMTok": 0.276
+  },
+  "bedrock/eu-west-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.16
+  },
+  "bedrock/eu-west-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.92,
+    "outputUSDPerMTok": 3.68
+  },
+  "bedrock/eu-west-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock/eu-west-1/eu.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.374,
+    "outputUSDPerMTok": 3.157
+  },
+  "bedrock/eu-west-1/eu.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.069,
+    "outputUSDPerMTok": 0.276
+  },
+  "bedrock/eu-west-1/eu.amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.16
+  },
+  "bedrock/eu-west-1/eu.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.92,
+    "outputUSDPerMTok": 3.68
+  },
+  "bedrock/eu-west-1/eu.meta.llama3-2-1b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.11
+  },
+  "bedrock/eu-west-1/eu.meta.llama3-2-3b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.17,
+    "outputUSDPerMTok": 0.17
+  },
+  "bedrock/eu-west-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.34,
+    "outputUSDPerMTok": 2.87
+  },
+  "bedrock/eu-west-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock/eu-west-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock/eu-west-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
+  },
+  "bedrock/eu-west-1/meta.llama3-2-1b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.11
+  },
+  "bedrock/eu-west-1/meta.llama3-2-3b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.17,
+    "outputUSDPerMTok": 0.17
   },
   "bedrock/eu-west-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 2.86,
@@ -2679,6 +3779,10 @@
     "inputUSDPerMTok": 0.32,
     "outputUSDPerMTok": 0.65
   },
+  "bedrock/eu-west-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
+  },
   "bedrock/eu-west-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
@@ -2686,6 +3790,86 @@
   "bedrock/eu-west-1/minimax.minimax-m2.5": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
+  },
+  "bedrock/eu-west-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/eu-west-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock/eu-west-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/eu-west-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock/eu-west-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock/eu-west-1/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.22
+  },
+  "bedrock/eu-west-1/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 4.3,
+    "outputUSDPerMTok": 13
+  },
+  "bedrock/eu-west-1/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.49,
+    "outputUSDPerMTok": 0.76
+  },
+  "bedrock/eu-west-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock/eu-west-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/eu-west-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock/eu-west-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock/eu-west-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock/eu-west-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock/eu-west-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/eu-west-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock/eu-west-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/eu-west-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock/eu-west-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/eu-west-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
   },
   "bedrock/eu-west-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
@@ -2695,6 +3879,62 @@
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 1.41
   },
+  "bedrock/eu-west-1/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.12
+  },
+  "bedrock/eu-west-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/eu-west-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/eu-west-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/eu-west-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/eu-west-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.084,
+    "outputUSDPerMTok": 0.336
+  },
+  "bedrock/eu-west-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.049,
+    "outputUSDPerMTok": 0.196
+  },
+  "bedrock/eu-west-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.13,
+    "outputUSDPerMTok": 4.52
+  },
+  "bedrock/eu-west-2/deepseek.v3-v1:0": {
+    "inputUSDPerMTok": 0.899985,
+    "outputUSDPerMTok": 2.606853
+  },
+  "bedrock/eu-west-2/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.961,
+    "outputUSDPerMTok": 2.8675
+  },
+  "bedrock/eu-west-2/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.42,
+    "outputUSDPerMTok": 3.52
+  },
+  "bedrock/eu-west-2/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock/eu-west-2/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 0.59
+  },
+  "bedrock/eu-west-2/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.12
+  },
   "bedrock/eu-west-2/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 3.45,
     "outputUSDPerMTok": 4.55
@@ -2702,6 +3942,10 @@
   "bedrock/eu-west-2/meta.llama3-8b-instruct-v1:0": {
     "inputUSDPerMTok": 0.39,
     "outputUSDPerMTok": 0.78
+  },
+  "bedrock/eu-west-2/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.86
   },
   "bedrock/eu-west-2/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.47,
@@ -2711,6 +3955,38 @@
     "inputUSDPerMTok": 0.47,
     "outputUSDPerMTok": 1.86
   },
+  "bedrock/eu-west-2/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.1
+  },
+  "bedrock/eu-west-2/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.78,
+    "outputUSDPerMTok": 2.33
+  },
+  "bedrock/eu-west-2/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock/eu-west-2/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.16
+  },
+  "bedrock/eu-west-2/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock/eu-west-2/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.26
+  },
+  "bedrock/eu-west-2/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 5.2,
+    "outputUSDPerMTok": 15.6
+  },
+  "bedrock/eu-west-2/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 0.91
+  },
   "bedrock/eu-west-2/mistral.voxtral-mini-3b-2507": {
     "inputUSDPerMTok": 0.06,
     "outputUSDPerMTok": 0.06
@@ -2719,9 +3995,53 @@
     "inputUSDPerMTok": 0.16,
     "outputUSDPerMTok": 0.47
   },
+  "bedrock/eu-west-2/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.93,
+    "outputUSDPerMTok": 4.65
+  },
+  "bedrock/eu-west-2/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock/eu-west-2/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.37
+  },
+  "bedrock/eu-west-2/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.36
+  },
   "bedrock/eu-west-2/nvidia.nemotron-super-3-120b": {
     "inputUSDPerMTok": 0.23,
     "outputUSDPerMTok": 1.01
+  },
+  "bedrock/eu-west-2/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock/eu-west-2/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.47
+  },
+  "bedrock/eu-west-2/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock/eu-west-2/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock/eu-west-2/qwen.qwen3-235b-a22b-2507-v1:0": {
+    "inputUSDPerMTok": 0.34,
+    "outputUSDPerMTok": 1.37
+  },
+  "bedrock/eu-west-2/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock/eu-west-2/qwen.qwen3-coder-480b-a35b-v1:0": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.79
   },
   "bedrock/eu-west-2/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.78,
@@ -2730,6 +4050,74 @@
   "bedrock/eu-west-2/qwen.qwen3-next-80b-a3b": {
     "inputUSDPerMTok": 0.23,
     "outputUSDPerMTok": 1.86
+  },
+  "bedrock/eu-west-2/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.82,
+    "outputUSDPerMTok": 4.12
+  },
+  "bedrock/eu-west-2/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock/eu-west-2/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.93,
+    "outputUSDPerMTok": 3.41
+  },
+  "bedrock/eu-west-2/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock/eu-west-2/zai.glm-5": {
+    "inputUSDPerMTok": 1.55,
+    "outputUSDPerMTok": 4.96
+  },
+  "bedrock/eu-west-3/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.484,
+    "outputUSDPerMTok": 4.059
+  },
+  "bedrock/eu-west-3/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.088,
+    "outputUSDPerMTok": 0.352
+  },
+  "bedrock/eu-west-3/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.052,
+    "outputUSDPerMTok": 0.208
+  },
+  "bedrock/eu-west-3/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.18,
+    "outputUSDPerMTok": 4.72
+  },
+  "bedrock/eu-west-3/eu.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.484,
+    "outputUSDPerMTok": 4.059
+  },
+  "bedrock/eu-west-3/eu.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.088,
+    "outputUSDPerMTok": 0.352
+  },
+  "bedrock/eu-west-3/eu.amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.052,
+    "outputUSDPerMTok": 0.208
+  },
+  "bedrock/eu-west-3/eu.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.18,
+    "outputUSDPerMTok": 4.72
+  },
+  "bedrock/eu-west-3/eu.meta.llama3-2-3b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
+  },
+  "bedrock/eu-west-3/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.44,
+    "outputUSDPerMTok": 3.69
+  },
+  "bedrock/eu-west-3/meta.llama3-2-1b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.13,
+    "outputUSDPerMTok": 0.13
+  },
+  "bedrock/eu-west-3/meta.llama3-2-3b-instruct-v1:0": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
   },
   "bedrock/eu-west-3/mistral.mistral-7b-instruct-v0:2": {
     "inputUSDPerMTok": 0.2,
@@ -2743,9 +4131,81 @@
     "inputUSDPerMTok": 0.59,
     "outputUSDPerMTok": 0.91
   },
+  "bedrock/il-central-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "bedrock/il-central-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.044,
+    "outputUSDPerMTok": 0.176
+  },
+  "bedrock/il-central-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "bedrock/il-central-1/apac.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "bedrock/il-central-1/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4
+  },
+  "bedrock/il-central-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.38,
+    "outputUSDPerMTok": 3.13
+  },
   "bedrock/invoke/anthropic.claude-3-5-sonnet-20240620-v1:0": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "bedrock/mantle/anthropic.claude-fable-5": {
+    "inputUSDPerMTok": 11,
+    "outputUSDPerMTok": 55
+  },
+  "bedrock/mantle/anthropic.claude-haiku-4-5": {
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 5.5
+  },
+  "bedrock/mantle/anthropic.claude-mythos-5": {
+    "inputUSDPerMTok": 11,
+    "outputUSDPerMTok": 55
+  },
+  "bedrock/mantle/anthropic.claude-opus-4-7": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "bedrock/mantle/anthropic.claude-opus-4-8": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "bedrock/mantle/anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "bedrock/mantle/anthropic.claude-opus-5-5": {
+    "inputUSDPerMTok": 4.4,
+    "outputUSDPerMTok": 22
+  },
+  "bedrock/mantle/anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
+  },
+  "bedrock/me-central-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/me-central-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.14
+  },
+  "bedrock/me-central-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
+  },
+  "bedrock/me-central-1/apac.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
   },
   "bedrock/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.6,
@@ -2759,6 +4219,18 @@
     "inputUSDPerMTok": 0.74,
     "outputUSDPerMTok": 2.22
   },
+  "bedrock/sa-east-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock/sa-east-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.28,
+    "outputUSDPerMTok": 0.46
+  },
+  "bedrock/sa-east-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
+  },
   "bedrock/sa-east-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 4.45,
     "outputUSDPerMTok": 5.88
@@ -2766,6 +4238,10 @@
   "bedrock/sa-east-1/meta.llama3-8b-instruct-v1:0": {
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 1.01
+  },
+  "bedrock/sa-east-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.45
   },
   "bedrock/sa-east-1/minimax.minimax-m2.1": {
     "inputUSDPerMTok": 0.36,
@@ -2775,6 +4251,54 @@
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 1.44
   },
+  "bedrock/sa-east-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock/sa-east-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock/sa-east-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/sa-east-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock/sa-east-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock/sa-east-1/mistral.mistral-7b-instruct-v0:2": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock/sa-east-1/mistral.mistral-large-2402-v1:0": {
+    "inputUSDPerMTok": 6.7,
+    "outputUSDPerMTok": 20.2
+  },
+  "bedrock/sa-east-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock/sa-east-1/mistral.mixtral-8x7b-instruct-v0:1": {
+    "inputUSDPerMTok": 0.76,
+    "outputUSDPerMTok": 1.18
+  },
+  "bedrock/sa-east-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock/sa-east-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock/sa-east-1/moonshot.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.73,
+    "outputUSDPerMTok": 3.03
+  },
   "bedrock/sa-east-1/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.73,
     "outputUSDPerMTok": 3.03
@@ -2783,6 +4307,42 @@
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 3.6
   },
+  "bedrock/sa-east-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/sa-east-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.29
+  },
+  "bedrock/sa-east-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock/sa-east-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock/sa-east-1/openai.gpt-oss-120b-1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/sa-east-1/openai.gpt-oss-20b-1:0": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock/sa-east-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock/sa-east-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/sa-east-1/qwen.qwen3-32b-v1:0": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
   "bedrock/sa-east-1/qwen.qwen3-coder-next": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 1.44
@@ -2790,6 +4350,42 @@
   "bedrock/sa-east-1/qwen.qwen3-next-80b-a3b": {
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 1.45
+  },
+  "bedrock/sa-east-1/qwen.qwen3-vl-235b-a22b": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 3.22
+  },
+  "bedrock/sa-east-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock/sa-east-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock/sa-east-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock/sa-east-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock/us-east-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.75
+  },
+  "bedrock/us-east-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/us-east-1/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.14
+  },
+  "bedrock/us-east-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
   },
   "bedrock/us-east-1/anthropic.claude-instant-v1": {
     "inputUSDPerMTok": 0.8,
@@ -2849,6 +4445,22 @@
   },
   "bedrock/us-east-1/zai.glm-5": {
     "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3.2
+  },
+  "bedrock/us-east-2/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.75
+  },
+  "bedrock/us-east-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/us-east-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.14
+  },
+  "bedrock/us-east-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 3.2
   },
   "bedrock/us-east-2/deepseek.v3.2": {
@@ -2915,6 +4527,10 @@
     "inputUSDPerMTok": 12,
     "outputUSDPerMTok": 60
   },
+  "bedrock/us-gov-east-1/anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
+  },
   "bedrock/us-gov-east-1/anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 6
@@ -2922,6 +4538,10 @@
   "bedrock/us-gov-east-1/anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0.6
+  },
+  "bedrock/us-gov-east-1/anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
   },
   "bedrock/us-gov-east-1/anthropic.claude-opus-4-8": {
     "inputUSDPerMTok": 6,
@@ -2946,10 +4566,6 @@
   "bedrock/us-gov-east-1/anthropic.claude-sonnet-5-5": {
     "inputUSDPerMTok": 2.4,
     "outputUSDPerMTok": 12
-  },
-  "bedrock/us-gov-east-1/claude-sonnet-4-5-20250929-v1:0": {
-    "inputUSDPerMTok": 3.6,
-    "outputUSDPerMTok": 18
   },
   "bedrock/us-gov-east-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 2.65,
@@ -3039,6 +4655,10 @@
     "inputUSDPerMTok": 12,
     "outputUSDPerMTok": 60
   },
+  "bedrock/us-gov-west-1/anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
+  },
   "bedrock/us-gov-west-1/anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 6
@@ -3046,6 +4666,10 @@
   "bedrock/us-gov-west-1/anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0.6
+  },
+  "bedrock/us-gov-west-1/anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
   },
   "bedrock/us-gov-west-1/anthropic.claude-opus-4-8": {
     "inputUSDPerMTok": 6,
@@ -3070,10 +4694,6 @@
   "bedrock/us-gov-west-1/anthropic.claude-sonnet-5-5": {
     "inputUSDPerMTok": 2.4,
     "outputUSDPerMTok": 12
-  },
-  "bedrock/us-gov-west-1/claude-sonnet-4-5-20250929-v1:0": {
-    "inputUSDPerMTok": 3.6,
-    "outputUSDPerMTok": 18
   },
   "bedrock/us-gov-west-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 2.65,
@@ -3111,6 +4731,22 @@
     "inputUSDPerMTok": 0.084,
     "outputUSDPerMTok": 0.36
   },
+  "bedrock/us-west-1/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.429,
+    "outputUSDPerMTok": 3.351
+  },
+  "bedrock/us-west-1/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.077,
+    "outputUSDPerMTok": 0.308
+  },
+  "bedrock/us-west-1/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.03,
+    "outputUSDPerMTok": 4.12
+  },
+  "bedrock/us-west-1/global.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.39,
+    "outputUSDPerMTok": 3.21
+  },
   "bedrock/us-west-1/meta.llama3-70b-instruct-v1:0": {
     "inputUSDPerMTok": 2.65,
     "outputUSDPerMTok": 3.5
@@ -3118,6 +4754,42 @@
   "bedrock/us-west-1/meta.llama3-8b-instruct-v1:0": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 0.6
+  },
+  "bedrock/us-west-1/us.amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.429,
+    "outputUSDPerMTok": 3.351
+  },
+  "bedrock/us-west-1/us.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.077,
+    "outputUSDPerMTok": 0.308
+  },
+  "bedrock/us-west-1/us.amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 1.03,
+    "outputUSDPerMTok": 4.12
+  },
+  "bedrock/us-west-2/amazon.nova-2-5-sonic": {
+    "inputUSDPerMTok": 0.319,
+    "outputUSDPerMTok": 2.651
+  },
+  "bedrock/us-west-2/amazon.nova-2-lite-v1:0": {
+    "inputUSDPerMTok": 0.33,
+    "outputUSDPerMTok": 2.75
+  },
+  "bedrock/us-west-2/amazon.nova-2-sonic-v1:0": {
+    "inputUSDPerMTok": 0.319,
+    "outputUSDPerMTok": 2.651
+  },
+  "bedrock/us-west-2/amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock/us-west-2/amazon.nova-micro-v1:0": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.14
+  },
+  "bedrock/us-west-2/amazon.nova-pro-v1:0": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
   },
   "bedrock/us-west-2/anthropic.claude-instant-v1": {
     "inputUSDPerMTok": 0.8,
@@ -3175,25 +4847,1273 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 4
   },
+  "bedrock_mantle/anthropic.claude-fable-5": {
+    "inputUSDPerMTok": 11,
+    "outputUSDPerMTok": 55
+  },
   "bedrock_mantle/anthropic.claude-haiku-4-5": {
-    "inputUSDPerMTok": 1,
-    "outputUSDPerMTok": 5
+    "inputUSDPerMTok": 1.1,
+    "outputUSDPerMTok": 5.5
   },
   "bedrock_mantle/anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.11,
     "outputUSDPerMTok": 0.55
   },
+  "bedrock_mantle/anthropic.claude-mythos-5": {
+    "inputUSDPerMTok": 11,
+    "outputUSDPerMTok": 55
+  },
+  "bedrock_mantle/anthropic.claude-opus-4-7": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "bedrock_mantle/anthropic.claude-opus-4-8": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "bedrock_mantle/anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
   "bedrock_mantle/anthropic.claude-opus-5-5": {
     "inputUSDPerMTok": 4.4,
     "outputUSDPerMTok": 22
+  },
+  "bedrock_mantle/anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "bedrock_mantle/anthropic.claude-sonnet-5-5": {
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 11
   },
+  "bedrock_mantle/ap-northeast-1/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.701666,
+    "outputUSDPerMTok": 2.032411
+  },
+  "bedrock_mantle/ap-northeast-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock_mantle/ap-northeast-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/ap-northeast-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.28,
+    "outputUSDPerMTok": 0.46
+  },
+  "bedrock_mantle/ap-northeast-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
+  },
+  "bedrock_mantle/ap-northeast-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.45
+  },
+  "bedrock_mantle/ap-northeast-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-northeast-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock_mantle/ap-northeast-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/ap-northeast-1/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.73,
+    "outputUSDPerMTok": 3.03
+  },
+  "bedrock_mantle/ap-northeast-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock_mantle/ap-northeast-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/ap-northeast-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.29
+  },
+  "bedrock_mantle/ap-northeast-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock_mantle/ap-northeast-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/ap-northeast-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/ap-northeast-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/ap-northeast-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/ap-northeast-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 1.06
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.54,
+    "outputUSDPerMTok": 2.18
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-northeast-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 3.22
+  },
+  "bedrock_mantle/ap-northeast-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/ap-northeast-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock_mantle/ap-northeast-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/ap-northeast-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock_mantle/ap-south-1/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.682424,
+    "outputUSDPerMTok": 1.976678
+  },
+  "bedrock_mantle/ap-south-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock_mantle/ap-south-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock_mantle/ap-south-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock_mantle/ap-south-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
+  },
+  "bedrock_mantle/ap-south-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
+  },
+  "bedrock_mantle/ap-south-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-south-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-south-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/ap-south-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock_mantle/ap-south-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-south-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/ap-south-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/ap-south-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock_mantle/ap-south-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock_mantle/ap-south-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/ap-south-1/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.71,
+    "outputUSDPerMTok": 2.94
+  },
+  "bedrock_mantle/ap-south-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock_mantle/ap-south-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock_mantle/ap-south-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock_mantle/ap-south-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock_mantle/ap-south-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/ap-south-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock_mantle/ap-south-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/ap-south-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock_mantle/ap-south-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 1.04
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.71
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.53,
+    "outputUSDPerMTok": 2.12
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-south-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.13
+  },
+  "bedrock_mantle/ap-south-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/ap-south-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock_mantle/ap-south-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/ap-south-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock_mantle/ap-southeast-2/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.5974,
+    "outputUSDPerMTok": 1.7304
+  },
+  "bedrock_mantle/ap-southeast-2/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 1.91
+  },
+  "bedrock_mantle/ap-southeast-2/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.0927,
+    "outputUSDPerMTok": 0.2987
+  },
+  "bedrock_mantle/ap-southeast-2/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.2369,
+    "outputUSDPerMTok": 0.3914
+  },
+  "bedrock_mantle/ap-southeast-2/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.0412,
+    "outputUSDPerMTok": 0.0824
+  },
+  "bedrock_mantle/ap-southeast-2/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.309,
+    "outputUSDPerMTok": 1.236
+  },
+  "bedrock_mantle/ap-southeast-2/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 1.24
+  },
+  "bedrock_mantle/ap-southeast-2/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 1.24
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.41,
+    "outputUSDPerMTok": 2.06
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.515,
+    "outputUSDPerMTok": 1.545
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.206,
+    "outputUSDPerMTok": 0.206
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.103,
+    "outputUSDPerMTok": 0.103
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.1545,
+    "outputUSDPerMTok": 0.1545
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.515,
+    "outputUSDPerMTok": 1.545
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.0412,
+    "outputUSDPerMTok": 0.0412
+  },
+  "bedrock_mantle/ap-southeast-2/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.103,
+    "outputUSDPerMTok": 0.309
+  },
+  "bedrock_mantle/ap-southeast-2/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.618,
+    "outputUSDPerMTok": 2.575
+  },
+  "bedrock_mantle/ap-southeast-2/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.09
+  },
+  "bedrock_mantle/ap-southeast-2/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.206,
+    "outputUSDPerMTok": 0.618
+  },
+  "bedrock_mantle/ap-southeast-2/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.0618,
+    "outputUSDPerMTok": 0.2472
+  },
+  "bedrock_mantle/ap-southeast-2/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.0618,
+    "outputUSDPerMTok": 0.2369
+  },
+  "bedrock_mantle/ap-southeast-2/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.67
+  },
+  "bedrock_mantle/ap-southeast-2/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.1545,
+    "outputUSDPerMTok": 0.618
+  },
+  "bedrock_mantle/ap-southeast-2/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.0721,
+    "outputUSDPerMTok": 0.309
+  },
+  "bedrock_mantle/ap-southeast-2/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.1545,
+    "outputUSDPerMTok": 0.618
+  },
+  "bedrock_mantle/ap-southeast-2/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.0721,
+    "outputUSDPerMTok": 0.206
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.2266,
+    "outputUSDPerMTok": 0.9064
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.1545,
+    "outputUSDPerMTok": 0.618
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.1545,
+    "outputUSDPerMTok": 0.618
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.4635,
+    "outputUSDPerMTok": 1.854
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.52,
+    "outputUSDPerMTok": 1.24
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.1442,
+    "outputUSDPerMTok": 1.236
+  },
+  "bedrock_mantle/ap-southeast-2/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.5459,
+    "outputUSDPerMTok": 2.7398
+  },
+  "bedrock_mantle/ap-southeast-2/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock_mantle/ap-southeast-2/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 2.27
+  },
+  "bedrock_mantle/ap-southeast-2/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.41
+  },
+  "bedrock_mantle/ap-southeast-2/zai.glm-5": {
+    "inputUSDPerMTok": 1.03,
+    "outputUSDPerMTok": 3.3
+  },
+  "bedrock_mantle/ap-southeast-3/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.74
+  },
+  "bedrock_mantle/ap-southeast-3/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock_mantle/ap-southeast-3/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.108,
+    "outputUSDPerMTok": 0.348
+  },
+  "bedrock_mantle/ap-southeast-3/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.276,
+    "outputUSDPerMTok": 0.456
+  },
+  "bedrock_mantle/ap-southeast-3/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.096
+  },
+  "bedrock_mantle/ap-southeast-3/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-southeast-3/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-southeast-3/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.8
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.048
+  },
+  "bedrock_mantle/ap-southeast-3/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/ap-southeast-3/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3
+  },
+  "bedrock_mantle/ap-southeast-3/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock_mantle/ap-southeast-3/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/ap-southeast-3/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock_mantle/ap-southeast-3/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.276
+  },
+  "bedrock_mantle/ap-southeast-3/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/ap-southeast-3/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock_mantle/ap-southeast-3/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock_mantle/ap-southeast-3/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/ap-southeast-3/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.084,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.91
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.87
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/ap-southeast-3/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.636,
+    "outputUSDPerMTok": 3.192
+  },
+  "bedrock_mantle/ap-southeast-3/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/ap-southeast-3/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock_mantle/ap-southeast-3/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/ap-southeast-3/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
   "bedrock_mantle/deepseek.v3.1": {
     "inputUSDPerMTok": 0.58,
     "outputUSDPerMTok": 1.68
+  },
+  "bedrock_mantle/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 1.85
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.108,
+    "outputUSDPerMTok": 0.348
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.276,
+    "outputUSDPerMTok": 0.456
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.096
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-4-26b-a4b": {
+    "inputUSDPerMTok": 0.156,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-4-31b": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-central-1/google.gemma-4-e2b": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.096
+  },
+  "bedrock_mantle/eu-central-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-central-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-central-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-central-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/eu-central-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.8
+  },
+  "bedrock_mantle/eu-central-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/eu-central-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/eu-central-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/eu-central-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.048
+  },
+  "bedrock_mantle/eu-central-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/eu-central-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-central-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock_mantle/eu-central-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.276
+  },
+  "bedrock_mantle/eu-central-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/eu-central-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-central-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.4
+  },
+  "bedrock_mantle/eu-central-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-central-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.084,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1.16
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-central-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.636,
+    "outputUSDPerMTok": 3.192
+  },
+  "bedrock_mantle/eu-central-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-central-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-north-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock_mantle/eu-north-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.108,
+    "outputUSDPerMTok": 0.348
+  },
+  "bedrock_mantle/eu-north-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.276,
+    "outputUSDPerMTok": 0.456
+  },
+  "bedrock_mantle/eu-north-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.096
+  },
+  "bedrock_mantle/eu-north-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-north-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-north-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-north-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/eu-north-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.8
+  },
+  "bedrock_mantle/eu-north-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/eu-north-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/eu-north-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/eu-north-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.048,
+    "outputUSDPerMTok": 0.048
+  },
+  "bedrock_mantle/eu-north-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/eu-north-1/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3
+  },
+  "bedrock_mantle/eu-north-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock_mantle/eu-north-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-north-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.288
+  },
+  "bedrock_mantle/eu-north-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.072,
+    "outputUSDPerMTok": 0.276
+  },
+  "bedrock_mantle/eu-north-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/eu-north-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-north-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.084,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/eu-north-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-north-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-north-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.636,
+    "outputUSDPerMTok": 3.192
+  },
+  "bedrock_mantle/eu-north-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-north-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock_mantle/eu-north-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-north-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
+  },
+  "bedrock_mantle/eu-south-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock_mantle/eu-south-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock_mantle/eu-south-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
+  },
+  "bedrock_mantle/eu-south-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
+  },
+  "bedrock_mantle/eu-south-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-south-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-south-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/eu-south-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock_mantle/eu-south-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/eu-south-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/eu-south-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/eu-south-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock_mantle/eu-south-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/eu-south-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-south-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock_mantle/eu-south-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock_mantle/eu-south-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/eu-south-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-south-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.4
+  },
+  "bedrock_mantle/eu-south-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-south-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.29,
+    "outputUSDPerMTok": 1.16
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.79
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-south-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.12
+  },
+  "bedrock_mantle/eu-south-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-south-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-west-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.34
+  },
+  "bedrock_mantle/eu-west-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock_mantle/eu-west-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.09
+  },
+  "bedrock_mantle/eu-west-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.41
+  },
+  "bedrock_mantle/eu-west-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-west-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-west-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/eu-west-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.59,
+    "outputUSDPerMTok": 1.76
+  },
+  "bedrock_mantle/eu-west-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/eu-west-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/eu-west-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/eu-west-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock_mantle/eu-west-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/eu-west-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-west-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock_mantle/eu-west-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.27
+  },
+  "bedrock_mantle/eu-west-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/eu-west-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-west-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/eu-west-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-west-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.264,
+    "outputUSDPerMTok": 1.056
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.7
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/eu-west-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.12
+  },
+  "bedrock_mantle/eu-west-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/eu-west-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/eu-west-2/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.899985,
+    "outputUSDPerMTok": 2.606853
+  },
+  "bedrock_mantle/eu-west-2/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.961,
+    "outputUSDPerMTok": 2.8675
+  },
+  "bedrock_mantle/eu-west-2/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.45
+  },
+  "bedrock_mantle/eu-west-2/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 0.59
+  },
+  "bedrock_mantle/eu-west-2/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/eu-west-2/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.86
+  },
+  "bedrock_mantle/eu-west-2/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.86
+  },
+  "bedrock_mantle/eu-west-2/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.47,
+    "outputUSDPerMTok": 1.86
+  },
+  "bedrock_mantle/eu-west-2/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 3.1
+  },
+  "bedrock_mantle/eu-west-2/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.78,
+    "outputUSDPerMTok": 2.33
+  },
+  "bedrock_mantle/eu-west-2/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock_mantle/eu-west-2/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.16
+  },
+  "bedrock_mantle/eu-west-2/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/eu-west-2/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.06
+  },
+  "bedrock_mantle/eu-west-2/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.16,
+    "outputUSDPerMTok": 0.47
+  },
+  "bedrock_mantle/eu-west-2/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.93,
+    "outputUSDPerMTok": 3.875
+  },
+  "bedrock_mantle/eu-west-2/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.93,
+    "outputUSDPerMTok": 4.65
+  },
+  "bedrock_mantle/eu-west-2/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.31,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.37
+  },
+  "bedrock_mantle/eu-west-2/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/eu-west-2/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 1.01
+  },
+  "bedrock_mantle/eu-west-2/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.47
+  },
+  "bedrock_mantle/eu-west-2/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.31
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.34,
+    "outputUSDPerMTok": 1.37
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.79
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.78,
+    "outputUSDPerMTok": 1.86
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.217,
+    "outputUSDPerMTok": 1.86
+  },
+  "bedrock_mantle/eu-west-2/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.82,
+    "outputUSDPerMTok": 4.12
+  },
+  "bedrock_mantle/eu-west-2/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.93
+  },
+  "bedrock_mantle/eu-west-2/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.93,
+    "outputUSDPerMTok": 3.41
+  },
+  "bedrock_mantle/eu-west-2/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.62
+  },
+  "bedrock_mantle/eu-west-2/zai.glm-5": {
+    "inputUSDPerMTok": 1.55,
+    "outputUSDPerMTok": 4.96
+  },
+  "bedrock_mantle/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.29
+  },
+  "bedrock_mantle/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.23,
+    "outputUSDPerMTok": 0.38
+  },
+  "bedrock_mantle/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.08
   },
   "bedrock_mantle/google.gemma-4-26b-a4b": {
     "inputUSDPerMTok": 0.13,
@@ -3207,9 +6127,73 @@
     "inputUSDPerMTok": 0.04,
     "outputUSDPerMTok": 0.08
   },
+  "bedrock_mantle/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "bedrock_mantle/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "bedrock_mantle/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "bedrock_mantle/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
+  },
+  "bedrock_mantle/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.5
+  },
+  "bedrock_mantle/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
+  },
+  "bedrock_mantle/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.1
+  },
+  "bedrock_mantle/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.15
+  },
+  "bedrock_mantle/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.5
+  },
+  "bedrock_mantle/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.04
+  },
+  "bedrock_mantle/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
   "bedrock_mantle/moonshotai.kimi-k2-thinking": {
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 2.5
+  },
+  "bedrock_mantle/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 3
+  },
+  "bedrock_mantle/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.6
+  },
+  "bedrock_mantle/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.23
+  },
+  "bedrock_mantle/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.65
   },
   "bedrock_mantle/openai.gpt-5.4": {
     "inputUSDPerMTok": 2.75,
@@ -3255,6 +6239,14 @@
     "inputUSDPerMTok": 1.1,
     "outputUSDPerMTok": 5.5
   },
+  "bedrock_mantle/openai.gpt-6.2-astra": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
+  },
+  "bedrock_mantle/openai.gpt-6.2-sol": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
+  },
   "bedrock_mantle/openai.gpt-daybreak-blue-5.6-sol": {
     "inputUSDPerMTok": 4.4,
     "outputUSDPerMTok": 22
@@ -3291,6 +6283,10 @@
     "inputUSDPerMTok": 0.45,
     "outputUSDPerMTok": 1.8
   },
+  "bedrock_mantle/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.2
+  },
   "bedrock_mantle/qwen.qwen3-next-80b-a3b-instruct": {
     "inputUSDPerMTok": 0.14,
     "outputUSDPerMTok": 1.2
@@ -3298,6 +6294,154 @@
   "bedrock_mantle/qwen.qwen3-vl-235b-a22b-instruct": {
     "inputUSDPerMTok": 0.53,
     "outputUSDPerMTok": 2.66
+  },
+  "bedrock_mantle/sa-east-1/deepseek.v3.1": {
+    "inputUSDPerMTok": 0.696,
+    "outputUSDPerMTok": 2.016
+  },
+  "bedrock_mantle/sa-east-1/deepseek.v3.2": {
+    "inputUSDPerMTok": 0.74,
+    "outputUSDPerMTok": 2.22
+  },
+  "bedrock_mantle/sa-east-1/google.gemma-3-12b-it": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.35
+  },
+  "bedrock_mantle/sa-east-1/google.gemma-3-27b-it": {
+    "inputUSDPerMTok": 0.28,
+    "outputUSDPerMTok": 0.46
+  },
+  "bedrock_mantle/sa-east-1/google.gemma-3-4b-it": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.1
+  },
+  "bedrock_mantle/sa-east-1/minimax.minimax-m2": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.45
+  },
+  "bedrock_mantle/sa-east-1/minimax.minimax-m2.1": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/sa-east-1/minimax.minimax-m2.5": {
+    "inputUSDPerMTok": 0.36,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/sa-east-1/mistral.devstral-2-123b": {
+    "inputUSDPerMTok": 0.48,
+    "outputUSDPerMTok": 2.4
+  },
+  "bedrock_mantle/sa-east-1/mistral.magistral-small-2509": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock_mantle/sa-east-1/mistral.ministral-3-14b-instruct": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/sa-east-1/mistral.ministral-3-3b-instruct": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.12
+  },
+  "bedrock_mantle/sa-east-1/mistral.ministral-3-8b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.18
+  },
+  "bedrock_mantle/sa-east-1/mistral.mistral-large-3-675b-instruct": {
+    "inputUSDPerMTok": 0.61,
+    "outputUSDPerMTok": 1.82
+  },
+  "bedrock_mantle/sa-east-1/mistral.voxtral-mini-3b-2507": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.05
+  },
+  "bedrock_mantle/sa-east-1/mistral.voxtral-small-24b-2507": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/sa-east-1/moonshotai.kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.73,
+    "outputUSDPerMTok": 3.03
+  },
+  "bedrock_mantle/sa-east-1/moonshotai.kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "bedrock_mantle/sa-east-1/nvidia.nemotron-nano-12b-v2": {
+    "inputUSDPerMTok": 0.24,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/sa-east-1/nvidia.nemotron-nano-3-30b": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.29
+  },
+  "bedrock_mantle/sa-east-1/nvidia.nemotron-nano-9b-v2": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
+  },
+  "bedrock_mantle/sa-east-1/nvidia.nemotron-super-3-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.78
+  },
+  "bedrock_mantle/sa-east-1/openai.gpt-oss-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/sa-east-1/openai.gpt-oss-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.36
+  },
+  "bedrock_mantle/sa-east-1/openai.gpt-oss-safeguard-120b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/sa-east-1/openai.gpt-oss-safeguard-20b": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.24
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-235b-a22b-2507": {
+    "inputUSDPerMTok": 0.264,
+    "outputUSDPerMTok": 1.056
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-32b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.73
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-coder-480b-a35b-instruct": {
+    "inputUSDPerMTok": 0.54,
+    "outputUSDPerMTok": 2.16
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-coder-next": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-next-80b-a3b-instruct": {
+    "inputUSDPerMTok": 0.168,
+    "outputUSDPerMTok": 1.44
+  },
+  "bedrock_mantle/sa-east-1/qwen.qwen3-vl-235b-a22b-instruct": {
+    "inputUSDPerMTok": 0.64,
+    "outputUSDPerMTok": 3.22
+  },
+  "bedrock_mantle/sa-east-1/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.18,
+    "outputUSDPerMTok": 0.72
+  },
+  "bedrock_mantle/sa-east-1/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 2.64
+  },
+  "bedrock_mantle/sa-east-1/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.08,
+    "outputUSDPerMTok": 0.48
+  },
+  "bedrock_mantle/sa-east-1/zai.glm-5": {
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 3.84
   },
   "bedrock_mantle/us-gov-east-1/nvidia.nemotron-nano-12b-v2": {
     "inputUSDPerMTok": 0.24,
@@ -3319,6 +6463,18 @@
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 19.8
   },
+  "bedrock_mantle/us-gov-east-1/openai.gpt-5.6-cyber": {
+    "inputUSDPerMTok": 16.875,
+    "outputUSDPerMTok": 101.25
+  },
+  "bedrock_mantle/us-gov-east-1/openai.gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.264,
+    "outputUSDPerMTok": 1.584
+  },
+  "bedrock_mantle/us-gov-east-1/openai.gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.64,
+    "outputUSDPerMTok": 15.84
+  },
   "bedrock_mantle/us-gov-east-1/openai.gpt-oss-120b": {
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 0.72
@@ -3335,13 +6491,29 @@
     "inputUSDPerMTok": 2.64,
     "outputUSDPerMTok": 7.92
   },
+  "bedrock_mantle/us-gov-west-1/anthropic.claude-fable-5-1": {
+    "inputUSDPerMTok": 12,
+    "outputUSDPerMTok": 60
+  },
   "bedrock_mantle/us-gov-west-1/anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0.6
   },
+  "bedrock_mantle/us-gov-west-1/anthropic.claude-opus-4-8": {
+    "inputUSDPerMTok": 6,
+    "outputUSDPerMTok": 30
+  },
+  "bedrock_mantle/us-gov-west-1/anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 6,
+    "outputUSDPerMTok": 30
+  },
   "bedrock_mantle/us-gov-west-1/anthropic.claude-opus-5-5": {
     "inputUSDPerMTok": 4.8,
     "outputUSDPerMTok": 24
+  },
+  "bedrock_mantle/us-gov-west-1/anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.4,
+    "outputUSDPerMTok": 12
   },
   "bedrock_mantle/us-gov-west-1/anthropic.claude-sonnet-5-5": {
     "inputUSDPerMTok": 2.4,
@@ -3407,6 +6579,10 @@
     "inputUSDPerMTok": 2.64,
     "outputUSDPerMTok": 7.92
   },
+  "bedrock_mantle/writer.palmyra-vision-7b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
   "bedrock_mantle/xai.grok-4.3": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 2.5
@@ -3418,6 +6594,18 @@
   "bedrock_mantle/xai.grok-4.7": {
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 6.6
+  },
+  "bedrock_mantle/zai.glm-4.7": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.2
+  },
+  "bedrock_mantle/zai.glm-4.7-flash": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.4
+  },
+  "bedrock_mantle/zai.glm-5": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 3.2
   },
   "bespoke/bespokelabs/Bespoke-Nimble-9B": {
     "inputUSDPerMTok": 0,
@@ -3446,6 +6634,18 @@
   "c4ai-aya-expanse-32b": {
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 1.5
+  },
+  "ca.amazon.nova-lite-v1:0": {
+    "inputUSDPerMTok": 0.064,
+    "outputUSDPerMTok": 0.256
+  },
+  "ca.anthropic.claude-haiku-5-5": {
+    "inputUSDPerMTok": 0.11,
+    "outputUSDPerMTok": 0.55
+  },
+  "ca.anthropic.claude-sonnet-5-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "cerebras/gemma-4-31b": {
     "inputUSDPerMTok": 0.99,
@@ -3499,6 +6699,10 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
   "claude-haiku-4-5": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -3518,6 +6722,10 @@
   "claude-mythos-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "claude-mythos-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "claude-mythos-preview": {
     "inputUSDPerMTok": 10,
@@ -3747,6 +6955,10 @@
     "inputUSDPerMTok": 0.66,
     "outputUSDPerMTok": 1
   },
+  "cloudflare/@cf/thinkingmachines/inkling-2-small": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1
+  },
   "cloudflare/@cf/zai-org/glm-4.7-flash": {
     "inputUSDPerMTok": 0.0605,
     "outputUSDPerMTok": 0.4
@@ -3836,6 +7048,18 @@
     "outputUSDPerMTok": 10
   },
   "command-a-plus-05-2026": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "command-a-reasoning-08-2025": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "command-a-translate-08-2025": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "command-a-vision-07-2025": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
@@ -4031,6 +7255,10 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.47
   },
+  "dashscope/qwen4-max": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 4.5
+  },
   "dashscope/qwq-plus": {
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 2.4
@@ -4050,6 +7278,10 @@
   "databricks/databricks-claude-fable-5-1": {
     "inputUSDPerMTok": 9.99999,
     "outputUSDPerMTok": 50.00002
+  },
+  "databricks/databricks-claude-fable-5-2": {
+    "inputUSDPerMTok": 8.00002,
+    "outputUSDPerMTok": 40.00003
   },
   "databricks/databricks-claude-haiku-4-5": {
     "inputUSDPerMTok": 1.00002,
@@ -4192,6 +7424,10 @@
     "outputUSDPerMTok": 15.00002
   },
   "databricks/databricks-gemini-4-argon": {
+    "inputUSDPerMTok": 2.49998,
+    "outputUSDPerMTok": 12.49997
+  },
+  "databricks/databricks-gemini-4-carbon": {
     "inputUSDPerMTok": 2.49998,
     "outputUSDPerMTok": 12.49997
   },
@@ -4362,6 +7598,26 @@
   "databricks/databricks-typesafeai-jev-1-14-0": {
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
+  },
+  "databricks/system.ai.claude-fable-5-2": {
+    "inputUSDPerMTok": 8.00002,
+    "outputUSDPerMTok": 40.00003
+  },
+  "databricks/system.ai.gemini-4-carbon": {
+    "inputUSDPerMTok": 2.49998,
+    "outputUSDPerMTok": 12.49997
+  },
+  "databricks/system.ai.gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.87502,
+    "outputUSDPerMTok": 9.37503
+  },
+  "databricks/system.ai.gpt-6-2-astra": {
+    "inputUSDPerMTok": 8.00002,
+    "outputUSDPerMTok": 40.00003
+  },
+  "databricks/system.ai.gpt-6-2-sol": {
+    "inputUSDPerMTok": 1.99997,
+    "outputUSDPerMTok": 9.99999
   },
   "davinci-002": {
     "inputUSDPerMTok": 2,
@@ -4555,6 +7811,10 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 3
   },
+  "deepinfra/XiaomiMiMo/MiMo-V2.6-Flash": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
   "deepinfra/allenai/olmOCR-7B-0725-FP8": {
     "inputUSDPerMTok": 0.27,
     "outputUSDPerMTok": 1.5
@@ -4596,8 +7856,8 @@
     "outputUSDPerMTok": 15
   },
   "deepinfra/anthropic/claude-sonnet-5": {
-    "inputUSDPerMTok": 2,
-    "outputUSDPerMTok": 10
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
   },
   "deepinfra/deepseek-ai/DeepSeek-R1": {
     "inputUSDPerMTok": 0.7,
@@ -4792,7 +8052,7 @@
     "outputUSDPerMTok": 0.14
   },
   "deepinfra/mistralai/Mistral-Nemo-Instruct-2407": {
-    "inputUSDPerMTok": 0.019,
+    "inputUSDPerMTok": 0.029,
     "outputUSDPerMTok": 0.03
   },
   "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501": {
@@ -4840,7 +8100,7 @@
     "outputUSDPerMTok": 0.4
   },
   "deepinfra/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": {
-    "inputUSDPerMTok": 0.085,
+    "inputUSDPerMTok": 0.075,
     "outputUSDPerMTok": 0.4
   },
   "deepinfra/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
@@ -4848,8 +8108,12 @@
     "outputUSDPerMTok": 2.2
   },
   "deepinfra/nvidia/NVIDIA-Nemotron-3.5-Lightning": {
-    "inputUSDPerMTok": 0.08,
-    "outputUSDPerMTok": 0.2
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.16
+  },
+  "deepinfra/nvidia/NVIDIA-Nemotron-3.5-Super-VL": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.5
   },
   "deepinfra/nvidia/NVIDIA-Nemotron-Nano-9B-v2": {
     "inputUSDPerMTok": 0.04,
@@ -4887,6 +8151,10 @@
     "inputUSDPerMTok": 0.14,
     "outputUSDPerMTok": 0.58
   },
+  "deepinfra/tencent/Hy4-preview": {
+    "inputUSDPerMTok": 0.834,
+    "outputUSDPerMTok": 2.501
+  },
   "deepinfra/thinkingmachines/Inkling": {
     "inputUSDPerMTok": 0.95,
     "outputUSDPerMTok": 4.05
@@ -4922,6 +8190,10 @@
   "deepinfra/zai-org/GLM-5.2": {
     "inputUSDPerMTok": 0.75,
     "outputUSDPerMTok": 2.4
+  },
+  "deepinfra/zai-org/GLM-5.3-Flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.5
   },
   "deepseek-chat": {
     "inputUSDPerMTok": 0.28,
@@ -5459,6 +8731,10 @@
     "inputUSDPerMTok": 11,
     "outputUSDPerMTok": 55
   },
+  "eu.anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
+  },
   "eu.anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1.1,
     "outputUSDPerMTok": 5.5
@@ -5466,6 +8742,10 @@
   "eu.anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.11,
     "outputUSDPerMTok": 0.55
+  },
+  "eu.anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
   },
   "eu.anthropic.claude-opus-4-1-20250805-v1:0": {
     "inputUSDPerMTok": 15,
@@ -5518,6 +8798,10 @@
   "eu.anthropic.claude-sonnet-5-5": {
     "inputUSDPerMTok": 2.2,
     "outputUSDPerMTok": 11
+  },
+  "eu.cohere.embed-v4:0": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0
   },
   "eu.deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
@@ -6727,17 +10011,29 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
   },
+  "fireworks_ai/accounts/fireworks/routers/deepseek-flash-latest": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
+  },
   "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
-    "inputUSDPerMTok": 0.21,
-    "outputUSDPerMTok": 0.84
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
   },
   "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": {
-    "inputUSDPerMTok": 2.4,
-    "outputUSDPerMTok": 9.6
+    "inputUSDPerMTok": 1.2,
+    "outputUSDPerMTok": 4.8
+  },
+  "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-us": {
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 1.8
   },
   "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
-    "inputUSDPerMTok": 0.21,
-    "outputUSDPerMTok": 0.84
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
   },
   "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-us": {
     "inputUSDPerMTok": 0.45,
@@ -6764,12 +10060,28 @@
     "outputUSDPerMTok": 0.75
   },
   "fireworks_ai/accounts/fireworks/routers/glm-5p3-spot": {
-    "inputUSDPerMTok": 0.98,
-    "outputUSDPerMTok": 3.08
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.2
   },
   "fireworks_ai/accounts/fireworks/routers/glm-5p3-us": {
     "inputUSDPerMTok": 2.1,
     "outputUSDPerMTok": 6.6
+  },
+  "fireworks_ai/accounts/fireworks/routers/glm-fast-latest": {
+    "inputUSDPerMTok": 2.1,
+    "outputUSDPerMTok": 6.6
+  },
+  "fireworks_ai/accounts/fireworks/routers/glm-flash-latest": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.5
+  },
+  "fireworks_ai/accounts/fireworks/routers/glm-latest": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
+  },
+  "fireworks_ai/accounts/fireworks/routers/kimi-fast-latest": {
+    "inputUSDPerMTok": 4.5,
+    "outputUSDPerMTok": 22.5
   },
   "fireworks_ai/accounts/fireworks/routers/kimi-k2p6-fast": {
     "inputUSDPerMTok": 2,
@@ -6791,13 +10103,29 @@
     "inputUSDPerMTok": 4.5,
     "outputUSDPerMTok": 22.5
   },
+  "fireworks_ai/accounts/fireworks/routers/kimi-k3p1-pro-us": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 12.5
+  },
+  "fireworks_ai/accounts/fireworks/routers/kimi-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "fireworks_ai/accounts/fireworks/routers/minimax-latest": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
+  "fireworks_ai/accounts/fireworks/routers/qwen-max-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
   "fireworks_ai/accounts/fireworks/routers/rune": {
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
   "fireworks_ai/accounts/fireworks/routers/spot-deepseek-v4-flash": {
-    "inputUSDPerMTok": 0.105,
-    "outputUSDPerMTok": 0.21
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.14
   },
   "fireworks_ai/deepseek-v4-flash": {
     "inputUSDPerMTok": 0.14,
@@ -6950,14 +10278,6 @@
   "fireworks_ai/thenlper/gte-large": {
     "inputUSDPerMTok": 0.016,
     "outputUSDPerMTok": 0
-  },
-  "friendliai/MiniMaxAI/MiniMax-M2.5": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
-  },
-  "friendliai/deepseek-ai/DeepSeek-V3.2": {
-    "inputUSDPerMTok": 0.5,
-    "outputUSDPerMTok": 1.5
   },
   "friendliai/google/gemma-4-31B-it": {
     "inputUSDPerMTok": 0.14,
@@ -7367,6 +10687,22 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "gemini/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "gemini/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "gemini/gemini-4-neon": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "gemini/gemini-decision-1": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "gemini/gemini-embedding-001": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0
@@ -7447,6 +10783,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "gemini/genie-4": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 9
+  },
   "gemini/learnlm-1.5-pro-experimental": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -7515,6 +10855,10 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "github_copilot/claude-fable-5.2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
   "github_copilot/claude-haiku-4.5": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -7562,6 +10906,18 @@
   "github_copilot/gemini-4-argon": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
+  },
+  "github_copilot/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "github_copilot/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "github_copilot/gemini-4-neon": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
   },
   "github_copilot/gpt-5-mini": {
     "inputUSDPerMTok": 0.25,
@@ -7619,6 +10975,14 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
+  "github_copilot/gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "github_copilot/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
   "github_copilot/grok-4.5": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
@@ -7639,6 +11003,14 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 1.2
   },
+  "github_copilot/mai-code-2": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
+  },
+  "github_copilot/mai-code-2-flash": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
   "glm-4-7-251222": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -7655,6 +11027,10 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "global.anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
   "global.anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
@@ -7666,6 +11042,10 @@
   "global.anthropic.claude-mythos-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "global.anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "global.anthropic.claude-opus-4-5-20251101-v1:0": {
     "inputUSDPerMTok": 5,
@@ -7731,6 +11111,10 @@
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 30
   },
+  "global.openai.gpt-5.6-cyber": {
+    "inputUSDPerMTok": 12.5,
+    "outputUSDPerMTok": 75
+  },
   "global.openai.gpt-5.6-luna": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 1.2
@@ -7762,6 +11146,18 @@
   "global.openai.gpt-6.1-terra": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
+  },
+  "global.openai.gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "global.openai.gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "global.openai.gpt-daybreak-blue-5.6-sol": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
   },
   "global.xai.grok-4.6": {
     "inputUSDPerMTok": 2,
@@ -8035,6 +11431,14 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "gmi/google/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "gmi/google/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
   "gmi/google/gemma-4-26b-a4b-it": {
     "inputUSDPerMTok": 0.13,
     "outputUSDPerMTok": 0.4
@@ -8208,6 +11612,10 @@
     "outputUSDPerMTok": 6
   },
   "gmi/xai/grok4.6": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "gmi/xai/grok4.7": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
   },
@@ -8620,8 +12028,8 @@
     "outputUSDPerMTok": 0.5
   },
   "gpt-6-rosalind": {
-    "inputUSDPerMTok": 15,
-    "outputUSDPerMTok": 75
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
   },
   "gpt-6-sol": {
     "inputUSDPerMTok": 2,
@@ -8634,6 +12042,18 @@
   "gpt-6.1-terra": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
+  },
+  "gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "gpt-6.2-astra-law": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "gpt-audio": {
     "inputUSDPerMTok": 2.5,
@@ -8859,6 +12279,14 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 2
   },
+  "in.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "in.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
+  },
   "in.moonshotai.kimi-k3": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
@@ -8866,6 +12294,14 @@
   "in.moonshotai.kimi-k3.1": {
     "inputUSDPerMTok": 4.4,
     "outputUSDPerMTok": 22
+  },
+  "in.openai.gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 1.32
+  },
+  "in.openai.gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 13.2
   },
   "inception/mercury-2": {
     "inputUSDPerMTok": 0.25,
@@ -8878,6 +12314,10 @@
   "inferenceapis/MiniMaxAI/MiniMax-M3": {
     "inputUSDPerMTok": 0.39,
     "outputUSDPerMTok": 1.56
+  },
+  "inferenceapis/MiniMaxAI/MiniMax-M3.1-Flash": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.78
   },
   "inferenceapis/Qwen/Qwen3-VL-235B-A22B-Instruct": {
     "inputUSDPerMTok": 0.26,
@@ -8987,9 +12427,21 @@
     "inputUSDPerMTok": 0.39,
     "outputUSDPerMTok": 1.56
   },
+  "inferenceapis/moonshotai/Kimi-K2.6": {
+    "inputUSDPerMTok": 0.98,
+    "outputUSDPerMTok": 4.55
+  },
   "inferenceapis/moonshotai/Kimi-K2.7-Code": {
     "inputUSDPerMTok": 0.89,
     "outputUSDPerMTok": 4.42
+  },
+  "inferenceapis/moonshotai/Kimi-K3.1-Pro": {
+    "inputUSDPerMTok": 2.6,
+    "outputUSDPerMTok": 13
+  },
+  "inferenceapis/nvidia/NVIDIA-Nemotron-3.5-Super-VL": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.65
   },
   "inferenceapis/openai/gpt-oss-120b": {
     "inputUSDPerMTok": 0.2,
@@ -9066,6 +12518,22 @@
   "jamba-mini-1.7": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.4
+  },
+  "jina-embeddings-v5-omni-nano": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "jina-embeddings-v5-omni-small": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0
+  },
+  "jina-embeddings-v5-text-nano": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "jina-embeddings-v5-text-small": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0
   },
   "jina-reranker-m0": {
     "inputUSDPerMTok": 0.05,
@@ -9739,6 +13207,10 @@
     "inputUSDPerMTok": 0.17,
     "outputUSDPerMTok": 0.66
   },
+  "meta/muse-ember-1.0": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
   "meta/muse-spark-1.1": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 4.25
@@ -9802,6 +13274,10 @@
   "minimax/MiniMax-M3": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
+  },
+  "minimax/MiniMax-M3.1-Flash": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.6
   },
   "mistral.devstral-2-123b": {
     "inputUSDPerMTok": 0.4,
@@ -9972,8 +13448,8 @@
     "outputUSDPerMTok": 2.1
   },
   "mistral/mistral-large-latest": {
-    "inputUSDPerMTok": 0.5,
-    "outputUSDPerMTok": 1.5
+    "inputUSDPerMTok": 0.7,
+    "outputUSDPerMTok": 2.1
   },
   "mistral/mistral-medium": {
     "inputUSDPerMTok": 1.5,
@@ -10184,19 +13660,27 @@
     "outputUSDPerMTok": 0
   },
   "nace/drex-latest": {
-    "inputUSDPerMTok": 0.06,
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0
+  },
+  "nace/drex-max": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0
+  },
+  "nace/drex-max-v1.1": {
+    "inputUSDPerMTok": 0.03,
     "outputUSDPerMTok": 0
   },
   "nace/drex-v1.0": {
-    "inputUSDPerMTok": 0.04,
+    "inputUSDPerMTok": 0.03,
     "outputUSDPerMTok": 0
   },
   "nace/drex-v1.5": {
-    "inputUSDPerMTok": 0.05,
+    "inputUSDPerMTok": 0.03,
     "outputUSDPerMTok": 0
   },
   "nace/drex-v2.0": {
-    "inputUSDPerMTok": 0.06,
+    "inputUSDPerMTok": 0.03,
     "outputUSDPerMTok": 0
   },
   "nebius/BAAI/bge-en-icl": {
@@ -10451,6 +13935,10 @@
     "inputUSDPerMTok": 0.25,
     "outputUSDPerMTok": 1
   },
+  "nebius/thinkingmachines/Inkling-2-Small": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1
+  },
   "nebius/zai-org/GLM-5.1": {
     "inputUSDPerMTok": 1.4,
     "outputUSDPerMTok": 4.4
@@ -10466,6 +13954,14 @@
   "nebius/zai-org/GLM-5.3-Flash": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.5
+  },
+  "north-mini-code-1.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "north-small-translate-1.0": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "novita/Sao10K/L3-8B-Stheno-v3.2": {
     "inputUSDPerMTok": 0.05,
@@ -11471,6 +14967,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "omni-moderation-csam-latest": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "omni-moderation-latest": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -11480,6 +14980,14 @@
     "outputUSDPerMTok": 0.5
   },
   "openai.gpt-6-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openai.gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "openai.gpt-6.2-sol": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
@@ -11663,14 +15171,6 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/alibaba/wan-2.6": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
-  "openrouter/alibaba/wan-2.7": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
   "openrouter/alibaba/wan-3.0": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -11726,6 +15226,14 @@
   "openrouter/anthropic/claude-fable-5.1:batch": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 25
+  },
+  "openrouter/anthropic/claude-fable-5.2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "openrouter/anthropic/claude-fable-5.2:batch": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
   },
   "openrouter/anthropic/claude-fable-5:batch": {
     "inputUSDPerMTok": 5,
@@ -11859,7 +15367,23 @@
     "inputUSDPerMTok": 0.01,
     "outputUSDPerMTok": 0
   },
+  "openrouter/baidu/ernie-5.5-flash-preview:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baidu/ernie-light-dt-1.0-intl": {
+    "inputUSDPerMTok": 1.13,
+    "outputUSDPerMTok": 3.94
+  },
+  "openrouter/baseten/bison-1": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/baseten/elephant-1": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/baseten/groundhog-1": {
     "inputUSDPerMTok": 0.035,
     "outputUSDPerMTok": 0
   },
@@ -11907,21 +15431,9 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/bytedance-seed/seed-1.6": {
-    "inputUSDPerMTok": 0.25,
-    "outputUSDPerMTok": 2
-  },
-  "openrouter/bytedance-seed/seed-1.6-flash": {
-    "inputUSDPerMTok": 0.075,
-    "outputUSDPerMTok": 0.3
-  },
   "openrouter/bytedance-seed/seed-2-1-turbo": {
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 2.5
-  },
-  "openrouter/bytedance-seed/seed-2.0-code": {
-    "inputUSDPerMTok": 0.5,
-    "outputUSDPerMTok": 3
   },
   "openrouter/bytedance-seed/seed-2.0-lite": {
     "inputUSDPerMTok": 0.25,
@@ -11951,7 +15463,7 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/bytedance/seedance-1-5-pro": {
+  "openrouter/bytedance-seed/seedream-5-5": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
@@ -11971,6 +15483,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/bytedance/seedance-2.5-flash": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/bytedance/ui-tars-1.5-7b": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.2
@@ -11984,11 +15500,11 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef": {
-    "inputUSDPerMTok": 0.24,
+    "inputUSDPerMTok": 0.192,
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef-flash": {
-    "inputUSDPerMTok": 0.038,
+    "inputUSDPerMTok": 0.019,
     "outputUSDPerMTok": 0
   },
   "openrouter/cloudflare/clef-omni": {
@@ -12027,10 +15543,6 @@
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0
   },
-  "openrouter/cohere/north-mini-code:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
   "openrouter/cohere/rerank-4-fast": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -12064,20 +15576,20 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/deepseek/deepseek-chat": {
-    "inputUSDPerMTok": 0.32,
-    "outputUSDPerMTok": 0.89
+    "inputUSDPerMTok": 0.2574,
+    "outputUSDPerMTok": 1.0287
   },
   "openrouter/deepseek/deepseek-chat-v3-0324": {
-    "inputUSDPerMTok": 0.29,
-    "outputUSDPerMTok": 1.14
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1
   },
   "openrouter/deepseek/deepseek-chat-v3.1": {
     "inputUSDPerMTok": 0.25,
     "outputUSDPerMTok": 0.95
   },
   "openrouter/deepseek/deepseek-r1-0528": {
-    "inputUSDPerMTok": 0.5,
-    "outputUSDPerMTok": 2.15
+    "inputUSDPerMTok": 0.571,
+    "outputUSDPerMTok": 2.286
   },
   "openrouter/deepseek/deepseek-v3.1-terminus": {
     "inputUSDPerMTok": 0.27,
@@ -12092,8 +15604,8 @@
     "outputUSDPerMTok": 0.41
   },
   "openrouter/deepseek/deepseek-v4-flash": {
-    "inputUSDPerMTok": 0.091,
-    "outputUSDPerMTok": 0.182
+    "inputUSDPerMTok": 0.09,
+    "outputUSDPerMTok": 0.18
   },
   "openrouter/deepseek/deepseek-v4-flash-0731": {
     "inputUSDPerMTok": 0.0434,
@@ -12104,32 +15616,32 @@
     "outputUSDPerMTok": 0.144
   },
   "openrouter/deepseek/deepseek-v4-flash-vision-exp": {
-    "inputUSDPerMTok": 0.44,
-    "outputUSDPerMTok": 1.32
+    "inputUSDPerMTok": 0.2156,
+    "outputUSDPerMTok": 0.6468
   },
   "openrouter/deepseek/deepseek-v4-pro": {
-    "inputUSDPerMTok": 0.95526,
-    "outputUSDPerMTok": 1.91052
+    "inputUSDPerMTok": 0.9,
+    "outputUSDPerMTok": 1.5
   },
   "openrouter/deepseek/deepseek-v4-pro-0813": {
-    "inputUSDPerMTok": 0.111,
-    "outputUSDPerMTok": 4.44
+    "inputUSDPerMTok": 1.32,
+    "outputUSDPerMTok": 3.96
   },
   "openrouter/deepseek/deepseek-v4.1-flash": {
-    "inputUSDPerMTok": 0.051,
-    "outputUSDPerMTok": 0.567
+    "inputUSDPerMTok": 0.0498,
+    "outputUSDPerMTok": 0.1992
   },
   "openrouter/deepseek/deepseek-v4.1-flash-1017": {
-    "inputUSDPerMTok": 0.006,
-    "outputUSDPerMTok": 0.5
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
   },
   "openrouter/deepseek/deepseek-v4.1-flash-1017:batch": {
-    "inputUSDPerMTok": 0.011,
-    "outputUSDPerMTok": 0.2
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.149
   },
   "openrouter/deepseek/deepseek-v4.1-flash:batch": {
-    "inputUSDPerMTok": 0.011,
-    "outputUSDPerMTok": 0.2
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.15
   },
   "openrouter/dots-studio/dots-3-note-preview:free": {
     "inputUSDPerMTok": 0,
@@ -12188,7 +15700,7 @@
     "outputUSDPerMTok": 15
   },
   "openrouter/fish-audio/drama-3": {
-    "inputUSDPerMTok": 2,
+    "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 0
   },
   "openrouter/fish-audio/s1": {
@@ -12231,6 +15743,10 @@
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.4
   },
+  "openrouter/google/gemini-2.5-flash-tts": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 10
+  },
   "openrouter/google/gemini-2.5-pro": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 10
@@ -12238,6 +15754,10 @@
   "openrouter/google/gemini-2.5-pro-preview": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 10
+  },
+  "openrouter/google/gemini-2.5-pro-tts": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 20
   },
   "openrouter/google/gemini-3-flash-preview": {
     "inputUSDPerMTok": 0.5,
@@ -12355,6 +15875,34 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
+  "openrouter/google/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/google/gemini-4-carbon:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/google/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/google/gemini-4-hydrogen:batch": {
+    "inputUSDPerMTok": 0.75,
+    "outputUSDPerMTok": 3.75
+  },
+  "openrouter/google/gemini-4-neon": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "openrouter/google/gemini-4-neon:batch": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "openrouter/google/gemini-decision-1": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/google/gemini-embedding-001": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0
@@ -12397,11 +15945,11 @@
   },
   "openrouter/google/gemma-3-27b-it": {
     "inputUSDPerMTok": 0.08,
-    "outputUSDPerMTok": 0.45
+    "outputUSDPerMTok": 0.16
   },
   "openrouter/google/gemma-3-4b-it": {
-    "inputUSDPerMTok": 0.05,
-    "outputUSDPerMTok": 0.1
+    "inputUSDPerMTok": 0.04,
+    "outputUSDPerMTok": 0.05
   },
   "openrouter/google/gemma-4-26b-a4b-it": {
     "inputUSDPerMTok": 0.09,
@@ -12440,15 +15988,31 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/gryphe/mythomax-l2-13b": {
-    "inputUSDPerMTok": 0.08,
-    "outputUSDPerMTok": 0.11
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.5
   },
   "openrouter/hexgrad/kokoro-82m": {
-    "inputUSDPerMTok": 0.62,
+    "inputUSDPerMTok": 0.99,
     "outputUSDPerMTok": 0
   },
   "openrouter/heygen/avatar-iv": {
     "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/heygen-avatar-6": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/heygen-avatar-6-turbo": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/heygen-decision-1": {
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/heygen/heygen-decision-1-turbo": {
+    "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
   "openrouter/heygen/heygen-video-1": {
@@ -12469,7 +16033,7 @@
   },
   "openrouter/ibm-granite/granite-4.2-8b": {
     "inputUSDPerMTok": 0.06,
-    "outputUSDPerMTok": 0.25
+    "outputUSDPerMTok": 0.15
   },
   "openrouter/inclusionai/ling-3.0-flash": {
     "inputUSDPerMTok": 0.021,
@@ -12484,8 +16048,12 @@
     "outputUSDPerMTok": 0.045
   },
   "openrouter/inclusionai/ling-3.1-flash": {
-    "inputUSDPerMTok": 0.045,
-    "outputUSDPerMTok": 0.135
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.18
+  },
+  "openrouter/inclusionai/ling-3.2-flash:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "openrouter/inference-net/schematron-v2-small": {
     "inputUSDPerMTok": 0.05,
@@ -12527,6 +16095,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/kt/midm-k-3.0-pro": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.8
+  },
   "openrouter/kwaivgi/kling-v3.0-pro": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -12539,10 +16111,6 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/liquid/d1": {
-    "inputUSDPerMTok": 0.02,
-    "outputUSDPerMTok": 0
-  },
   "openrouter/liquid/d1-ultra": {
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
@@ -12551,21 +16119,17 @@
     "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0
   },
-  "openrouter/liquid/lfm-2.5-2.6b": {
-    "inputUSDPerMTok": 0.35,
-    "outputUSDPerMTok": 0.5
+  "openrouter/liquid/d1.2": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
   },
-  "openrouter/liquid/lfm-2.5-2.6b:free": {
-    "inputUSDPerMTok": 0,
+  "openrouter/liquid/d1.2-ultra": {
+    "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
   "openrouter/liquid/lfm-2.5-24b-a2b": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.7
-  },
-  "openrouter/liquid/lfm-2.5-embedding-350m:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
   },
   "openrouter/liquid/lfm-3-1.7b": {
     "inputUSDPerMTok": 0.08,
@@ -12576,12 +16140,8 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/mancer/weaver": {
-    "inputUSDPerMTok": 0.4,
-    "outputUSDPerMTok": 0.75
-  },
-  "openrouter/meituan/longcat-2.0": {
     "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "outputUSDPerMTok": 0.5
   },
   "openrouter/meta-llama/llama-3.1-70b-instruct": {
     "inputUSDPerMTok": 0.72,
@@ -12591,17 +16151,13 @@
     "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0.04
   },
-  "openrouter/meta-llama/llama-3.2-1b-instruct": {
-    "inputUSDPerMTok": 0.027,
-    "outputUSDPerMTok": 0.201
-  },
   "openrouter/meta-llama/llama-3.2-3b-instruct": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.33
   },
   "openrouter/meta-llama/llama-3.3-70b-instruct": {
-    "inputUSDPerMTok": 0.59,
-    "outputUSDPerMTok": 0.79
+    "inputUSDPerMTok": 0.71,
+    "outputUSDPerMTok": 0.71
   },
   "openrouter/meta-llama/llama-4-maverick": {
     "inputUSDPerMTok": 0.35,
@@ -12615,9 +16171,13 @@
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 0.18
   },
+  "openrouter/meta/muse-ember": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
   "openrouter/meta/muse-glimmer-30b": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 1.5
   },
   "openrouter/meta/muse-glimmer-30b:batch": {
     "inputUSDPerMTok": 0.24,
@@ -12675,6 +16235,14 @@
     "inputUSDPerMTok": 1.75,
     "outputUSDPerMTok": 0
   },
+  "openrouter/microsoft/mai-image-2.7": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/microsoft/mai-image-2.7-flash": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/microsoft/mai-transcribe-1.5": {
     "inputUSDPerMTok": 360000,
     "outputUSDPerMTok": 0
@@ -12703,6 +16271,10 @@
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
+  "openrouter/microsoft/microsoft-decision-1.1": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/microsoft/phi-4": {
     "inputUSDPerMTok": 0.07,
     "outputUSDPerMTok": 0.14
@@ -12719,17 +16291,21 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/minimax/minimax-m1": {
-    "inputUSDPerMTok": 0.55,
-    "outputUSDPerMTok": 2.2
+  "openrouter/minimax/minimax-h3-image": {
+    "inputUSDPerMTok": 2.3,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/minimax/minimax-h3-image-highspeed": {
+    "inputUSDPerMTok": 2.3,
+    "outputUSDPerMTok": 0
   },
   "openrouter/minimax/minimax-m2.5": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.95
   },
   "openrouter/minimax/minimax-m2.7": {
-    "inputUSDPerMTok": 0.21,
-    "outputUSDPerMTok": 0.84
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 1.8
   },
   "openrouter/minimax/minimax-m3": {
     "inputUSDPerMTok": 0.3,
@@ -12796,8 +16372,8 @@
     "outputUSDPerMTok": 2.1
   },
   "openrouter/mistralai/mistral-medium-3": {
-    "inputUSDPerMTok": 0.4,
-    "outputUSDPerMTok": 2
+    "inputUSDPerMTok": 0.44,
+    "outputUSDPerMTok": 2.2
   },
   "openrouter/mistralai/mistral-medium-3-5": {
     "inputUSDPerMTok": 1.5,
@@ -12808,8 +16384,8 @@
     "outputUSDPerMTok": 3.75
   },
   "openrouter/mistralai/mistral-medium-3.1": {
-    "inputUSDPerMTok": 0.4,
-    "outputUSDPerMTok": 2
+    "inputUSDPerMTok": 0.44,
+    "outputUSDPerMTok": 2.2
   },
   "openrouter/mistralai/mistral-nemo": {
     "inputUSDPerMTok": 0.029,
@@ -12836,6 +16412,10 @@
     "outputUSDPerMTok": 0.2
   },
   "openrouter/mistralai/mixtral-8x22b-instruct": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "openrouter/mistralai/pixtral-large-2502": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
   },
@@ -12932,8 +16512,8 @@
     "outputUSDPerMTok": 2.5
   },
   "openrouter/moonshotai/kimi-k2.5": {
-    "inputUSDPerMTok": 0.532,
-    "outputUSDPerMTok": 3.325
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.5
   },
   "openrouter/moonshotai/kimi-k2.6": {
     "inputUSDPerMTok": 0.65,
@@ -12941,19 +16521,23 @@
   },
   "openrouter/moonshotai/kimi-k2.7-code": {
     "inputUSDPerMTok": 0.6,
-    "outputUSDPerMTok": 3.5
+    "outputUSDPerMTok": 3
   },
   "openrouter/moonshotai/kimi-k3": {
     "inputUSDPerMTok": 0.192,
     "outputUSDPerMTok": 16
   },
   "openrouter/moonshotai/kimi-k3.1-pro": {
-    "inputUSDPerMTok": 2,
-    "outputUSDPerMTok": 10
+    "inputUSDPerMTok": 0.2403,
+    "outputUSDPerMTok": 8.4023
+  },
+  "openrouter/moonshotai/kimi-k3.1-pro:batch": {
+    "inputUSDPerMTok": 0.372,
+    "outputUSDPerMTok": 5.583
   },
   "openrouter/moonshotai/kimi-k3:batch": {
-    "inputUSDPerMTok": 0.917,
-    "outputUSDPerMTok": 6
+    "inputUSDPerMTok": 2.28,
+    "outputUSDPerMTok": 11.4
   },
   "openrouter/morph/morph-v3-fast": {
     "inputUSDPerMTok": 0.8,
@@ -12975,7 +16559,15 @@
     "inputUSDPerMTok": 0.042,
     "outputUSDPerMTok": 0
   },
+  "openrouter/motif-technologies/motif-3": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
+  },
   "openrouter/nace-ai/drex-max": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/nace-ai/drex-max-finance": {
     "inputUSDPerMTok": 0.06,
     "outputUSDPerMTok": 0
   },
@@ -12995,17 +16587,13 @@
     "inputUSDPerMTok": 0.075,
     "outputUSDPerMTok": 0.25
   },
+  "openrouter/nex-agi/nex-n2.6": {
+    "inputUSDPerMTok": 0.12,
+    "outputUSDPerMTok": 0.4
+  },
   "openrouter/nousresearch/hermes-4-405b": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 3
-  },
-  "openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
-  "openrouter/nvidia/llama-nemotron-rerank-vl-1b-v2:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
   },
   "openrouter/nvidia/nemotron-3-embed-1b:free": {
     "inputUSDPerMTok": 0,
@@ -13024,8 +16612,8 @@
     "outputUSDPerMTok": 0.4
   },
   "openrouter/nvidia/nemotron-3-ultra-550b-a55b": {
-    "inputUSDPerMTok": 0.6,
-    "outputUSDPerMTok": 2.4
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 2.2
   },
   "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {
     "inputUSDPerMTok": 0,
@@ -13061,7 +16649,7 @@
   },
   "openrouter/nvidia/nemotron-3.5-super-vl": {
     "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.5
+    "outputUSDPerMTok": 0.47
   },
   "openrouter/nvidia/nemotron-3.5-super-vl:free": {
     "inputUSDPerMTok": 0,
@@ -13427,6 +17015,38 @@
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 2.5
   },
+  "openrouter/openai/gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "openrouter/openai/gpt-6.2-astra-pro": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "openrouter/openai/gpt-6.2-astra-pro:batch": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "openrouter/openai/gpt-6.2-astra:batch": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "openrouter/openai/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6.2-sol-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "openrouter/openai/gpt-6.2-sol-pro:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "openrouter/openai/gpt-6.2-sol:batch": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
   "openrouter/openai/gpt-audio": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -13468,16 +17088,16 @@
     "outputUSDPerMTok": 8
   },
   "openrouter/openai/gpt-oss-120b": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.6
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
   },
   "openrouter/openai/gpt-oss-120b:batch": {
     "inputUSDPerMTok": 0.0296,
     "outputUSDPerMTok": 0.136
   },
   "openrouter/openai/gpt-oss-20b": {
-    "inputUSDPerMTok": 0.018,
-    "outputUSDPerMTok": 0.09
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.13
   },
   "openrouter/openai/gpt-oss-20b:batch": {
     "inputUSDPerMTok": 0.024,
@@ -13551,13 +17171,17 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/parallel/decisions-fast:free": {
+  "openrouter/parallel/decisions-fast": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
   "openrouter/particle-ai/particle-1": {
-    "inputUSDPerMTok": 0.05,
+    "inputUSDPerMTok": 0.07,
     "outputUSDPerMTok": 0.5
+  },
+  "openrouter/particle-ai/particle-1:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "openrouter/perceptron/perceptron-mk1": {
     "inputUSDPerMTok": 0.15,
@@ -13571,8 +17195,16 @@
     "inputUSDPerMTok": 0.01,
     "outputUSDPerMTok": 0
   },
+  "openrouter/perplexity/pplx-decider-flash-v1.3:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/perplexity/pplx-decider-v1.2": {
     "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/pplx-decider-v1.3:free": {
+    "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
   "openrouter/perplexity/pplx-embed-v1-0.6b": {
@@ -13581,6 +17213,14 @@
   },
   "openrouter/perplexity/pplx-embed-v1-4b": {
     "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/pplx-embed-v2-context-0.6b": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/perplexity/pplx-embed-v2-context-9b": {
+    "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0
   },
   "openrouter/perplexity/sonar": {
@@ -13614,10 +17254,6 @@
   "openrouter/qwen/qwen-2.5-72b-instruct": {
     "inputUSDPerMTok": 0.36,
     "outputUSDPerMTok": 0.4
-  },
-  "openrouter/qwen/qwen-2.5-7b-instruct": {
-    "inputUSDPerMTok": 0.1,
-    "outputUSDPerMTok": 0.2
   },
   "openrouter/qwen/qwen-2.5-coder-32b-instruct": {
     "inputUSDPerMTok": 0.66,
@@ -13692,8 +17328,8 @@
     "outputUSDPerMTok": 1
   },
   "openrouter/qwen/qwen3-coder-30b-a3b-instruct": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.6
+    "inputUSDPerMTok": 0.07,
+    "outputUSDPerMTok": 0.28
   },
   "openrouter/qwen/qwen3-coder-flash": {
     "inputUSDPerMTok": 0.195,
@@ -13712,11 +17348,19 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/qwen/qwen3-next-80b-a3b-instruct": {
-    "inputUSDPerMTok": 0.09,
+    "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 1.1
+  },
+  "openrouter/qwen/qwen3-reranker-0.6b": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "openrouter/qwen/qwen3-reranker-8b": {
     "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/qwen/qwen3-tts-1.7b": {
+    "inputUSDPerMTok": 20,
     "outputUSDPerMTok": 0
   },
   "openrouter/qwen/qwen3-vl-235b-a22b-instruct": {
@@ -13726,10 +17370,6 @@
   "openrouter/qwen/qwen3-vl-30b-a3b-instruct": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.6
-  },
-  "openrouter/qwen/qwen3-vl-30b-a3b-thinking": {
-    "inputUSDPerMTok": 0.29,
-    "outputUSDPerMTok": 1
   },
   "openrouter/qwen/qwen3-vl-8b-instruct": {
     "inputUSDPerMTok": 0.25,
@@ -13748,8 +17388,8 @@
     "outputUSDPerMTok": 1
   },
   "openrouter/qwen/qwen3.5-397b-a17b": {
-    "inputUSDPerMTok": 0.6,
-    "outputUSDPerMTok": 3.6
+    "inputUSDPerMTok": 0.45,
+    "outputUSDPerMTok": 3
   },
   "openrouter/qwen/qwen3.5-9b": {
     "inputUSDPerMTok": 0.17,
@@ -13772,8 +17412,8 @@
     "outputUSDPerMTok": 3.2
   },
   "openrouter/qwen/qwen3.6-35b-a3b": {
-    "inputUSDPerMTok": 0.1,
-    "outputUSDPerMTok": 0.9
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.7
   },
   "openrouter/qwen/qwen3.6-flash": {
     "inputUSDPerMTok": 0.1875,
@@ -13804,8 +17444,8 @@
     "outputUSDPerMTok": 6
   },
   "openrouter/qwen/qwen3.8-27b": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 1.875
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 1.5
   },
   "openrouter/qwen/qwen3.8-27b:batch": {
     "inputUSDPerMTok": 0.16,
@@ -13819,6 +17459,10 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 6
   },
+  "openrouter/qwen/qwen3.8-max-0902:batch": {
+    "inputUSDPerMTok": 1.15,
+    "outputUSDPerMTok": 3.45
+  },
   "openrouter/qwen/qwen3.8-max-prime": {
     "inputUSDPerMTok": 4,
     "outputUSDPerMTok": 12
@@ -13826,6 +17470,14 @@
   "openrouter/qwen/qwen3.8-omni-flash": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.47
+  },
+  "openrouter/qwen/qwen4-max": {
+    "inputUSDPerMTok": 1.425,
+    "outputUSDPerMTok": 4.275
+  },
+  "openrouter/radixark/daisyrose-27b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 1.875
   },
   "openrouter/recraft/recraft-v3": {
     "inputUSDPerMTok": 0,
@@ -13871,6 +17523,14 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "openrouter/recraft/recraft-v4.1-flash-v2": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "openrouter/recraft/recraft-v4.1-flash-v2:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "openrouter/recraft/recraft-v4.1-pro": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -13896,7 +17556,7 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/reflection/beam-1.0-501b-a23b": {
-    "inputUSDPerMTok": 0.3,
+    "inputUSDPerMTok": 0.25,
     "outputUSDPerMTok": 1
   },
   "openrouter/rekaai/reka-edge": {
@@ -13932,8 +17592,8 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/ricursiveai/ripple-65b-preview": {
-    "inputUSDPerMTok": 0.2,
-    "outputUSDPerMTok": 0.6
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
   },
   "openrouter/runway/aleph-2": {
     "inputUSDPerMTok": 0,
@@ -14023,13 +17683,9 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/stealth/crouton-alpha": {
-    "inputUSDPerMTok": 0,
+  "openrouter/speechify/simba-3.5": {
+    "inputUSDPerMTok": 11.25,
     "outputUSDPerMTok": 0
-  },
-  "openrouter/stepfun/step-3.5-flash": {
-    "inputUSDPerMTok": 0.1,
-    "outputUSDPerMTok": 0.3
   },
   "openrouter/stepfun/step-3.7-flash": {
     "inputUSDPerMTok": 0.2,
@@ -14042,10 +17698,6 @@
   "openrouter/tbc/mischief-1": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
-  },
-  "openrouter/tencent/hunyuan-a13b-instruct": {
-    "inputUSDPerMTok": 0.14,
-    "outputUSDPerMTok": 0.57
   },
   "openrouter/tencent/hy-image-v3.5-preview": {
     "inputUSDPerMTok": 0,
@@ -14063,17 +17715,21 @@
     "inputUSDPerMTok": 0.074,
     "outputUSDPerMTok": 0.295
   },
-  "openrouter/tencent/hy3": {
-    "inputUSDPerMTok": 0.132,
-    "outputUSDPerMTok": 0.528
+  "openrouter/tencent/hy-world-2.1-panorama": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
-  "openrouter/tencent/hy3-preview": {
-    "inputUSDPerMTok": 0.18,
-    "outputUSDPerMTok": 0.6
+  "openrouter/tencent/hy3": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.58
   },
   "openrouter/tencent/hy4": {
     "inputUSDPerMTok": 0.417,
     "outputUSDPerMTok": 1.2505
+  },
+  "openrouter/tencent/hy4-flash": {
+    "inputUSDPerMTok": 0.035,
+    "outputUSDPerMTok": 0.1405
   },
   "openrouter/tencent/hy4-preview": {
     "inputUSDPerMTok": 0.834,
@@ -14103,6 +17759,14 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 4.05
   },
+  "openrouter/thinkingmachines/inkling-2-mini": {
+    "inputUSDPerMTok": 0.075,
+    "outputUSDPerMTok": 0.3
+  },
+  "openrouter/thinkingmachines/inkling-2-small": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1
+  },
   "openrouter/thinkingmachines/inkling-small": {
     "inputUSDPerMTok": 0.45,
     "outputUSDPerMTok": 1.2
@@ -14127,13 +17791,17 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 3.2
   },
+  "openrouter/unbiased/pareto-26.10-preview": {
+    "inputUSDPerMTok": 0.8,
+    "outputUSDPerMTok": 3.2
+  },
   "openrouter/unbiased/pareto-26.9": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 7.5
   },
   "openrouter/undi95/remm-slerp-l2-13b": {
-    "inputUSDPerMTok": 0.35,
-    "outputUSDPerMTok": 0.65
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 0.5
   },
   "openrouter/upstage/solar-decide": {
     "inputUSDPerMTok": 0.05,
@@ -14191,10 +17859,6 @@
     "inputUSDPerMTok": 1.6,
     "outputUSDPerMTok": 4.8
   },
-  "openrouter/x-ai/grok-build-0.1": {
-    "inputUSDPerMTok": 1,
-    "outputUSDPerMTok": 2
-  },
   "openrouter/x-ai/grok-imagine-image-2.0": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
@@ -14211,7 +17875,7 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
-  "openrouter/x-ai/grok-stt-1.0": {
+  "openrouter/x-ai/grok-stt-2.0": {
     "inputUSDPerMTok": 27.777778,
     "outputUSDPerMTok": 0
   },
@@ -14238,10 +17902,6 @@
   "openrouter/xiaomi/mimo-v2.6-pro-ultraspeed": {
     "inputUSDPerMTok": 4.35,
     "outputUSDPerMTok": 8.7
-  },
-  "openrouter/xingchen-agi/xing4.0-29b-a4b:free": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
   },
   "openrouter/z-ai/glm-4.5": {
     "inputUSDPerMTok": 0.6,
@@ -14284,24 +17944,24 @@
     "outputUSDPerMTok": 4.4
   },
   "openrouter/z-ai/glm-5.2": {
-    "inputUSDPerMTok": 0.006,
-    "outputUSDPerMTok": 6.8
+    "inputUSDPerMTok": 0.62,
+    "outputUSDPerMTok": 2.42
   },
   "openrouter/z-ai/glm-5.2:batch": {
-    "inputUSDPerMTok": 0.623,
-    "outputUSDPerMTok": 1.271
+    "inputUSDPerMTok": 0.322,
+    "outputUSDPerMTok": 0.989
   },
   "openrouter/z-ai/glm-5.3": {
     "inputUSDPerMTok": 0.0699,
     "outputUSDPerMTok": 1.4
   },
   "openrouter/z-ai/glm-5.3-flash": {
-    "inputUSDPerMTok": 0.0335,
-    "outputUSDPerMTok": 0.083
+    "inputUSDPerMTok": 0.0399,
+    "outputUSDPerMTok": 0.0784
   },
   "openrouter/z-ai/glm-5.3-flash:batch": {
-    "inputUSDPerMTok": 0.05,
-    "outputUSDPerMTok": 0.18
+    "inputUSDPerMTok": 0.023,
+    "outputUSDPerMTok": 0.068
   },
   "openrouter/z-ai/glm-5.3-flashx": {
     "inputUSDPerMTok": 0.37,
@@ -14312,20 +17972,20 @@
     "outputUSDPerMTok": 1.25
   },
   "openrouter/z-ai/glm-5.3-prime": {
-    "inputUSDPerMTok": 2.8,
-    "outputUSDPerMTok": 8.8
+    "inputUSDPerMTok": 1.68,
+    "outputUSDPerMTok": 5.28
   },
   "openrouter/z-ai/glm-5.3:batch": {
-    "inputUSDPerMTok": 0.45,
-    "outputUSDPerMTok": 2
+    "inputUSDPerMTok": 0.28,
+    "outputUSDPerMTok": 1.249
   },
   "openrouter/z-ai/glm-5v-turbo": {
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 4
   },
   "openrouter/~anthropic/claude-fable-latest": {
-    "inputUSDPerMTok": 10,
-    "outputUSDPerMTok": 50
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "openrouter/~anthropic/claude-haiku-latest": {
     "inputUSDPerMTok": 0.1,
@@ -14340,20 +18000,20 @@
     "outputUSDPerMTok": 10
   },
   "openrouter/~deepseek/deepseek-flash-latest": {
-    "inputUSDPerMTok": 0.006,
+    "inputUSDPerMTok": 0.036,
     "outputUSDPerMTok": 0.5
   },
   "openrouter/~deepseek/deepseek-pro-latest": {
-    "inputUSDPerMTok": 0.0999,
-    "outputUSDPerMTok": 8
+    "inputUSDPerMTok": 0.1188,
+    "outputUSDPerMTok": 5
   },
   "openrouter/~deepseek/deepseek-v4-flash-latest": {
     "inputUSDPerMTok": 0.0434,
     "outputUSDPerMTok": 0.3
   },
   "openrouter/~google/gemini-flash-latest": {
-    "inputUSDPerMTok": 0.75,
-    "outputUSDPerMTok": 3.75
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
   },
   "openrouter/~google/gemini-pro-latest": {
     "inputUSDPerMTok": 2,
@@ -14368,12 +18028,12 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/~moonshotai/kimi-latest": {
-    "inputUSDPerMTok": 0.1539,
-    "outputUSDPerMTok": 10.1489
+    "inputUSDPerMTok": 0.1824,
+    "outputUSDPerMTok": 11.0055
   },
   "openrouter/~openai/gpt-astra-latest": {
-    "inputUSDPerMTok": 10,
-    "outputUSDPerMTok": 50
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "openrouter/~openai/gpt-luna-latest": {
     "inputUSDPerMTok": 0.1,
@@ -14396,7 +18056,7 @@
     "outputUSDPerMTok": 0
   },
   "openrouter/~perplexity/pplx-decider-latest": {
-    "inputUSDPerMTok": 0.019,
+    "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0
   },
   "openrouter/~typesafe/jev-latest": {
@@ -14412,8 +18072,8 @@
     "outputUSDPerMTok": 6
   },
   "openrouter/~z-ai/glm-flash-latest": {
-    "inputUSDPerMTok": 0.0335,
-    "outputUSDPerMTok": 0.083
+    "inputUSDPerMTok": 0.0399,
+    "outputUSDPerMTok": 0.0784
   },
   "openrouter/~z-ai/glm-latest": {
     "inputUSDPerMTok": 0.0699,
@@ -14490,6 +18150,10 @@
   "perplexity/anthropic/claude-fable-5-1": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
+  },
+  "perplexity/anthropic/claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "perplexity/anthropic/claude-haiku-4-5": {
     "inputUSDPerMTok": 1,
@@ -14583,6 +18247,14 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "perplexity/google/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "perplexity/google/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
   "perplexity/llama-2-70b-chat": {
     "inputUSDPerMTok": 0.7,
     "outputUSDPerMTok": 2.8
@@ -14671,6 +18343,18 @@
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 10
   },
+  "perplexity/openai/gpt-6.1-terra": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "perplexity/openai/gpt-6.2-astra": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "perplexity/openai/gpt-6.2-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
   "perplexity/perplexity/deepseek-v4-flash-0731": {
     "inputUSDPerMTok": 0.13,
     "outputUSDPerMTok": 0.26
@@ -14739,6 +18423,10 @@
     "inputUSDPerMTok": 0.01,
     "outputUSDPerMTok": 0
   },
+  "perplexity/pplx-decider-flash-v1.3": {
+    "inputUSDPerMTok": 0.01,
+    "outputUSDPerMTok": 0
+  },
   "perplexity/pplx-decider-latest": {
     "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0
@@ -14752,6 +18440,10 @@
     "outputUSDPerMTok": 0
   },
   "perplexity/pplx-decider-v1.2": {
+    "inputUSDPerMTok": 0.02,
+    "outputUSDPerMTok": 0
+  },
+  "perplexity/pplx-decider-v1.3": {
     "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0
   },
@@ -15183,6 +18875,34 @@
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
   },
+  "replicate/anthropic/claude-fable-5": {
+    "inputUSDPerMTok": 10,
+    "outputUSDPerMTok": 50
+  },
+  "replicate/anthropic/claude-fable-5.2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "replicate/anthropic/claude-opus-4.6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "replicate/anthropic/claude-opus-4.7": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "replicate/anthropic/claude-opus-5.5": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "replicate/anthropic/claude-sonnet-4.6": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
+  "replicate/anthropic/claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
   "replicate/deepseek-ai/deepseek-r1": {
     "inputUSDPerMTok": 3.75,
     "outputUSDPerMTok": 10
@@ -15199,12 +18919,92 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 2.5
   },
+  "replicate/google/gemini-3-flash": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
+  },
   "replicate/google/gemini-3-pro": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
   },
+  "replicate/google/gemini-3.1-flash-tts": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 40
+  },
+  "replicate/google/gemini-3.1-pro": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
+  "replicate/google/gemini-3.5-flash": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 9
+  },
+  "replicate/google/gemini-3.8-flash-lite-tts": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 6
+  },
+  "replicate/google/gemini-3.8-flash-tts": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 9
+  },
+  "replicate/google/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "replicate/ibm-granite/granite-20b-code-instruct-8k": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "replicate/ibm-granite/granite-3.0-2b-instruct": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-3.0-8b-instruct": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-3.1-2b-instruct": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-3.1-8b-instruct": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-3.2-8b-instruct": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
   "replicate/ibm-granite/granite-3.3-8b-instruct": {
     "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-4.0-h-small": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-4.1-8b": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-4.2-8b": {
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-8b-code-instruct-128k": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-speech-4.1-2b": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-vision-3.3-2b": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/ibm-granite/granite-vision-4.1-4b": {
+    "inputUSDPerMTok": 0.06,
     "outputUSDPerMTok": 0.25
   },
   "replicate/meta/llama-2-13b": {
@@ -15247,6 +19047,34 @@
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.25
   },
+  "replicate/meta/llama-4-maverick-instruct": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 0.95
+  },
+  "replicate/meta/llama-4-scout-instruct": {
+    "inputUSDPerMTok": 0.17,
+    "outputUSDPerMTok": 0.65
+  },
+  "replicate/meta/llama-guard-4-12b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.2
+  },
+  "replicate/meta/meta-llama-3-70b": {
+    "inputUSDPerMTok": 0.65,
+    "outputUSDPerMTok": 2.75
+  },
+  "replicate/meta/meta-llama-3-70b-instruct": {
+    "inputUSDPerMTok": 0.65,
+    "outputUSDPerMTok": 2.75
+  },
+  "replicate/meta/meta-llama-3-8b": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
+  "replicate/meta/meta-llama-3-8b-instruct": {
+    "inputUSDPerMTok": 0.05,
+    "outputUSDPerMTok": 0.25
+  },
   "replicate/mistralai/mistral-7b-instruct-v0.2": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.25
@@ -15258,6 +19086,18 @@
   "replicate/mistralai/mixtral-8x7b-instruct-v0.1": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1
+  },
+  "replicate/moonshotai/kimi-k2-thinking": {
+    "inputUSDPerMTok": 0.66,
+    "outputUSDPerMTok": 2.7
+  },
+  "replicate/moonshotai/kimi-k2.5": {
+    "inputUSDPerMTok": 0.72,
+    "outputUSDPerMTok": 3.6
+  },
+  "replicate/moonshotai/kimi-k2.6": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
   },
   "replicate/openai/gpt-4.1": {
     "inputUSDPerMTok": 2,
@@ -15279,6 +19119,14 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.6
   },
+  "replicate/openai/gpt-4o-mini-transcribe": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 5
+  },
+  "replicate/openai/gpt-4o-transcribe": {
+    "inputUSDPerMTok": 6,
+    "outputUSDPerMTok": 10
+  },
   "replicate/openai/gpt-5": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 10
@@ -15290,6 +19138,34 @@
   "replicate/openai/gpt-5-nano": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0.4
+  },
+  "replicate/openai/gpt-5-pro": {
+    "inputUSDPerMTok": 15,
+    "outputUSDPerMTok": 120
+  },
+  "replicate/openai/gpt-5.1": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 10
+  },
+  "replicate/openai/gpt-5.2": {
+    "inputUSDPerMTok": 1.75,
+    "outputUSDPerMTok": 14
+  },
+  "replicate/openai/gpt-5.4": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 15
+  },
+  "replicate/openai/gpt-5.6-luna": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 6
+  },
+  "replicate/openai/gpt-5.6-sol": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "replicate/openai/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 15
   },
   "replicate/openai/gpt-oss-120b": {
     "inputUSDPerMTok": 0.18,
@@ -15311,9 +19187,21 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 4
   },
+  "replicate/perceptron-ai-inc/isaac-0.1": {
+    "inputUSDPerMTok": 0.26,
+    "outputUSDPerMTok": 2.17
+  },
   "replicate/qwen/qwen3-235b-a22b-instruct-2507": {
     "inputUSDPerMTok": 0.264,
     "outputUSDPerMTok": 1.06
+  },
+  "replicate/qwen/qwen3-7-plus": {
+    "inputUSDPerMTok": 0.276,
+    "outputUSDPerMTok": 1.101
+  },
+  "replicate/snowflake/snowflake-arctic-instruct": {
+    "inputUSDPerMTok": 20,
+    "outputUSDPerMTok": 20
   },
   "replicate/xai/grok-4": {
     "inputUSDPerMTok": 7.2,
@@ -15346,6 +19234,26 @@
   "rerank-v5.0-pro": {
     "inputUSDPerMTok": 0.05,
     "outputUSDPerMTok": 0
+  },
+  "resetdata/deepseek/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.07432,
+    "outputUSDPerMTok": 0.1486
+  },
+  "resetdata/google/gemma-4-26b-a4b-it": {
+    "inputUSDPerMTok": 0.06054,
+    "outputUSDPerMTok": 0.3328
+  },
+  "resetdata/qwen/qwen3-coder-30b-a3b-instruct": {
+    "inputUSDPerMTok": 0.07061,
+    "outputUSDPerMTok": 0.2723
+  },
+  "resetdata/qwen/qwen3.8-27b": {
+    "inputUSDPerMTok": 0.2905,
+    "outputUSDPerMTok": 2.453
+  },
+  "resetdata/zai/glm-5.3": {
+    "inputUSDPerMTok": 1.189,
+    "outputUSDPerMTok": 3.736
   },
   "sagemaker/meta-textgeneration-llama-2-13b": {
     "inputUSDPerMTok": 0,
@@ -15450,6 +19358,34 @@
   "sambanova/gpt-oss-120b": {
     "inputUSDPerMTok": 0.22,
     "outputUSDPerMTok": 0.59
+  },
+  "sarvam/deepseekv4.1-flash-1017": {
+    "inputUSDPerMTok": 0.148936,
+    "outputUSDPerMTok": 0.585106
+  },
+  "sarvam/deepseekv4.1-flash-1017-interactive": {
+    "inputUSDPerMTok": 0.265957,
+    "outputUSDPerMTok": 1.117021
+  },
+  "sarvam/gemma4": {
+    "inputUSDPerMTok": 0.37234,
+    "outputUSDPerMTok": 0.957447
+  },
+  "sarvam/glm5.3": {
+    "inputUSDPerMTok": 1.340426,
+    "outputUSDPerMTok": 4.148936
+  },
+  "sarvam/glm5.3-flash": {
+    "inputUSDPerMTok": 0.143617,
+    "outputUSDPerMTok": 0.478723
+  },
+  "sarvam/sarvam-105b": {
+    "inputUSDPerMTok": 0.106383,
+    "outputUSDPerMTok": 0.265957
+  },
+  "sarvam/sarvam-105b-conversations": {
+    "inputUSDPerMTok": 0.106383,
+    "outputUSDPerMTok": 0.265957
   },
   "sarvam/sarvam-m": {
     "inputUSDPerMTok": 0,
@@ -15571,6 +19507,34 @@
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 5
   },
+  "snowflake/claude-haiku-5-5": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "snowflake/claude-opus-4-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "snowflake/claude-opus-4-6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "snowflake/claude-opus-4-7": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "snowflake/claude-opus-4-8": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "snowflake/claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "snowflake/claude-opus-5-5": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
   "snowflake/claude-sonnet-4-5": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -15578,6 +19542,14 @@
   "snowflake/claude-sonnet-4-6": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "snowflake/claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "snowflake/claude-sonnet-5-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "snowflake/deepseek-r1": {
     "inputUSDPerMTok": 1.35,
@@ -15592,8 +19564,16 @@
     "outputUSDPerMTok": 0.72
   },
   "snowflake/llama3.1-8b": {
-    "inputUSDPerMTok": 0.24,
-    "outputUSDPerMTok": 0.24
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 0.22
+  },
+  "snowflake/llama3.2-1b": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.1
+  },
+  "snowflake/llama3.2-3b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.15
   },
   "snowflake/llama3.3-70b": {
     "inputUSDPerMTok": 0.72,
@@ -15602,6 +19582,10 @@
   "snowflake/llama4-maverick": {
     "inputUSDPerMTok": 0.24,
     "outputUSDPerMTok": 0.97
+  },
+  "snowflake/mistral-7b": {
+    "inputUSDPerMTok": 0.15,
+    "outputUSDPerMTok": 0.2
   },
   "snowflake/mistral-large2": {
     "inputUSDPerMTok": 2,
@@ -15616,12 +19600,12 @@
     "outputUSDPerMTok": 10
   },
   "snowflake/openai-gpt-5-mini": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 2
   },
   "snowflake/openai-gpt-5-nano": {
-    "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.6
+    "inputUSDPerMTok": 0.06,
+    "outputUSDPerMTok": 0.44
   },
   "snowflake/snowflake-arctic-embed-l-v2.0": {
     "inputUSDPerMTok": 0.07,
@@ -15776,12 +19760,12 @@
     "outputUSDPerMTok": 1.25
   },
   "tencent/hy4": {
-    "inputUSDPerMTok": 0.834,
-    "outputUSDPerMTok": 2.501
+    "inputUSDPerMTok": 0.417,
+    "outputUSDPerMTok": 1.2505
   },
   "tencent/hy4-preview": {
-    "inputUSDPerMTok": 0.834,
-    "outputUSDPerMTok": 2.501
+    "inputUSDPerMTok": 0.417,
+    "outputUSDPerMTok": 1.2505
   },
   "tencent/kimi-k2.7-code": {
     "inputUSDPerMTok": 0.95,
@@ -16027,6 +20011,10 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.47
   },
+  "together_ai/Qwen/Qwen4-Max": {
+    "inputUSDPerMTok": 1.05,
+    "outputUSDPerMTok": 3.15
+  },
   "together_ai/Salesforce/Llama-Rank-V1": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0
@@ -16066,6 +20054,10 @@
   "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
+  },
+  "together_ai/elorian-labs/glimpse-1.0": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 3
   },
   "together_ai/essentialai/rnj-1-instruct": {
     "inputUSDPerMTok": 0.15,
@@ -16183,7 +20175,19 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.6
   },
+  "together_ai/tencent/Hy4": {
+    "inputUSDPerMTok": 0.834,
+    "outputUSDPerMTok": 2.501
+  },
   "together_ai/thinkingmachines/Inkling": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 4.05
+  },
+  "together_ai/thinkingmachines/Inkling-2-Small": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1
+  },
+  "together_ai/thinkingmachines/inkling": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 4.05
   },
@@ -16243,9 +20247,17 @@
     "inputUSDPerMTok": 12,
     "outputUSDPerMTok": 60
   },
+  "us-gov.anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
+  },
   "us-gov.anthropic.claude-haiku-5-5": {
     "inputUSDPerMTok": 0.12,
     "outputUSDPerMTok": 0.6
+  },
+  "us-gov.anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 9.6,
+    "outputUSDPerMTok": 48
   },
   "us-gov.anthropic.claude-opus-4-8": {
     "inputUSDPerMTok": 6,
@@ -16286,6 +20298,18 @@
   "us-gov.nvidia.nemotron-super-3-120b": {
     "inputUSDPerMTok": 0.18,
     "outputUSDPerMTok": 0.78
+  },
+  "us-gov.openai.gpt-5.4": {
+    "inputUSDPerMTok": 3.3,
+    "outputUSDPerMTok": 19.8
+  },
+  "us-gov.openai.gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.264,
+    "outputUSDPerMTok": 1.584
+  },
+  "us-gov.openai.gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.64,
+    "outputUSDPerMTok": 15.84
   },
   "us-gov.openai.gpt-oss-120b-1:0": {
     "inputUSDPerMTok": 0.18,
@@ -16351,6 +20375,10 @@
     "inputUSDPerMTok": 11,
     "outputUSDPerMTok": 55
   },
+  "us.anthropic.claude-fable-5-2": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
+  },
   "us.anthropic.claude-haiku-4-5-20251001-v1:0": {
     "inputUSDPerMTok": 1.1,
     "outputUSDPerMTok": 5.5
@@ -16366,6 +20394,10 @@
   "us.anthropic.claude-mythos-5-1": {
     "inputUSDPerMTok": 11,
     "outputUSDPerMTok": 55
+  },
+  "us.anthropic.claude-mythos-5-2": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
   },
   "us.anthropic.claude-mythos-preview": {
     "inputUSDPerMTok": 27.5,
@@ -16495,6 +20527,10 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 33
   },
+  "us.openai.gpt-5.6-cyber": {
+    "inputUSDPerMTok": 13.75,
+    "outputUSDPerMTok": 82.5
+  },
   "us.openai.gpt-5.6-luna": {
     "inputUSDPerMTok": 0.22,
     "outputUSDPerMTok": 1.32
@@ -16526,6 +20562,18 @@
   "us.openai.gpt-6.1-terra": {
     "inputUSDPerMTok": 1.1,
     "outputUSDPerMTok": 5.5
+  },
+  "us.openai.gpt-6.2-astra": {
+    "inputUSDPerMTok": 8.8,
+    "outputUSDPerMTok": 44
+  },
+  "us.openai.gpt-6.2-sol": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
+  },
+  "us.openai.gpt-daybreak-blue-5.6-sol": {
+    "inputUSDPerMTok": 4.4,
+    "outputUSDPerMTok": 22
   },
   "us.writer.palmyra-x4-v1:0": {
     "inputUSDPerMTok": 2.5,
@@ -16863,6 +20911,10 @@
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.6
   },
+  "vercel_ai_gateway/openai/gpt-6-luna-decisions": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "vercel_ai_gateway/openai/o1": {
     "inputUSDPerMTok": 15,
     "outputUSDPerMTok": 60
@@ -16906,6 +20958,18 @@
   "vercel_ai_gateway/perplexity/sonar-reasoning-pro": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 8
+  },
+  "vercel_ai_gateway/typesafe-ai/jev": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "vercel_ai_gateway/typesafe-ai/jev-1.13.0": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
+  },
+  "vercel_ai_gateway/typesafe-ai/jev-1.14.0": {
+    "inputUSDPerMTok": 0.042,
+    "outputUSDPerMTok": 0
   },
   "vercel_ai_gateway/vercel/v0-1.0-md": {
     "inputUSDPerMTok": 3,
@@ -16999,6 +21063,14 @@
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
   },
+  "vertex_ai/claude-fable-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "vertex_ai/claude-fable-5-2@default": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
   "vertex_ai/claude-fable-5@default": {
     "inputUSDPerMTok": 10,
     "outputUSDPerMTok": 50
@@ -17018,6 +21090,14 @@
   "vertex_ai/claude-haiku-5-5@default": {
     "inputUSDPerMTok": 0.1,
     "outputUSDPerMTok": 0.5
+  },
+  "vertex_ai/claude-mythos-5-2": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
+  },
+  "vertex_ai/claude-mythos-5-2@default": {
+    "inputUSDPerMTok": 8,
+    "outputUSDPerMTok": 40
   },
   "vertex_ai/claude-opus-4-5": {
     "inputUSDPerMTok": 5,
@@ -17118,6 +21198,10 @@
   "vertex_ai/codestral@latest": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.6
+  },
+  "vertex_ai/deep-research-preview-04-2026": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
   },
   "vertex_ai/deep-research-pro-preview-12-2025": {
     "inputUSDPerMTok": 2,
@@ -17275,6 +21359,22 @@
     "inputUSDPerMTok": 4,
     "outputUSDPerMTok": 20
   },
+  "vertex_ai/gemini-4-carbon": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "vertex_ai/gemini-4-carbon-cyber-permissive": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
+  },
+  "vertex_ai/gemini-4-hydrogen": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
+  "vertex_ai/gemini-4-neon": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 15
+  },
   "vertex_ai/gemini-embedding-2": {
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0
@@ -17386,6 +21486,18 @@
   "vertex_ai/meta/llama3-8b-instruct-maas": {
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
+  },
+  "vertex_ai/meta/muse-ember-1.0": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.5
+  },
+  "vertex_ai/meta/muse-spark-1.3": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
+  "vertex_ai/meta/muse-wonder-1.0": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 20
   },
   "vertex_ai/minimaxai/minimax-m2-maas": {
     "inputUSDPerMTok": 0.3,
@@ -17546,6 +21658,18 @@
   "vertex_ai/zai-org/glm-5.2-maas": {
     "inputUSDPerMTok": 1.4,
     "outputUSDPerMTok": 4.4
+  },
+  "vispark/vision-large": {
+    "inputUSDPerMTok": 7.37,
+    "outputUSDPerMTok": 22.11
+  },
+  "vispark/vision-medium": {
+    "inputUSDPerMTok": 4.21,
+    "outputUSDPerMTok": 12.63
+  },
+  "vispark/vision-small": {
+    "inputUSDPerMTok": 1.05,
+    "outputUSDPerMTok": 3.16
   },
   "volcengine/doubao-seed-2-1-lite-260915": {
     "inputUSDPerMTok": 0.115,
@@ -17784,8 +21908,8 @@
     "outputUSDPerMTok": 0.65
   },
   "wandb/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
-    "inputUSDPerMTok": 0.13,
-    "outputUSDPerMTok": 0.65
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 1.2
   },
   "wandb/google/gemma-4-26B-A4B-it": {
     "inputUSDPerMTok": 0.1,
@@ -17837,7 +21961,7 @@
   },
   "wandb/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": {
     "inputUSDPerMTok": 0.15,
-    "outputUSDPerMTok": 0.5
+    "outputUSDPerMTok": 0.47
   },
   "wandb/openai/gpt-oss-120b": {
     "inputUSDPerMTok": 0.03,
