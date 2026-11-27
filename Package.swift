@@ -16,7 +16,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
     .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
-    .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.0"),
+    .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.2"),
     .package(url: "https://github.com/apple/swift-system.git", from: "1.7.4"),
   ],
   targets: [
