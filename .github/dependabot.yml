@@ -7,6 +7,11 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    ignore:
+      # These SwiftFormat releases indent `else` to the condition column when a single guard/if
+      # condition spans several lines. Newer releases still arrive, so CI shows whether it is fixed.
+      - dependency-name: "github.com/nicklockwood/swiftformat"
+        versions: ["0.64.1", "0.64.2", "0.64.3", "0.64.4", "0.64.5", "0.64.6", "0.64.7"]
     groups:
       swift-dependencies:
         patterns: ["*"]
